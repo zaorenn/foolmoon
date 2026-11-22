@@ -8,6 +8,7 @@
   "protected_paths": [
     "foolmoon-manifest.json",
     "README.md",
+    "assets/foolmoon",
     "Start-Foolmoon.cmd",
     "installer",
     ".github/workflows/release-foolmoon.yml",
