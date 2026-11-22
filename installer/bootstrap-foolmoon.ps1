@@ -177,10 +177,21 @@ try {
         pnpm install --filter "{./apps/desktop}..." | Out-Host
         if ($LASTEXITCODE -ne 0) { throw 'Failed to install desktop Node packages.' }
     }
+    $vcDll = Get-ChildItem -LiteralPath $toolsStore -Directory -Filter 'python-*' -ErrorAction SilentlyContinue |
+        ForEach-Object { Join-Path $_.FullName 'vcruntime140.dll' } |
+        Where-Object { Test-Path -LiteralPath $_ } |
+        Select-Object -First 1
+    if ($vcDll) { $env:HERMES_VC_RUNTIME = $vcDll }
+    $electronRuntimeScript = Join-Path $installDir 'scripts\build\electron-runtime.mjs'
+    if (Test-Path -LiteralPath $electronRuntimeScript) {
+        node $electronRuntimeScript --source $installDir | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw 'Failed to unpack Electron desktop runtime.' }
+    }
     Set-Location (Join-Path $installDir 'apps\desktop')
     pnpm run build | Out-Host
     if ($LASTEXITCODE -ne 0) { throw 'Foolmoon Desktop build failed.' }
 } finally {
+    Remove-Item Env:HERMES_VC_RUNTIME -ErrorAction SilentlyContinue
     Pop-Location
 }
 
@@ -367,20 +378,256 @@ New-Item -ItemType Directory -Force -Path $trayPrefDir | Out-Null
 Emit-Stage -StageId 'personalize' -Status 'done' -Percent 94 -Message 'Model endpoint, USER.md memory, MCP servers, and system tray ready.'
 
 # ----------------------------------------------------------------------------
-# Stage 6: Desktop / Start Menu shortcuts + Windows Uninstall registration
+# Stage 6: Native Windowless EXE Launcher + Shortcuts + Windows Uninstall
 # ----------------------------------------------------------------------------
-Emit-Stage -StageId 'shortcuts' -Status 'running' -Percent 96 -Message 'Creating shortcuts and Windows uninstall registration...'
+Emit-Stage -StageId 'shortcuts' -Status 'running' -Percent 96 -Message 'Building native Foolmoon launcher and creating shortcuts...'
 
 $launcherCmd = Join-Path $installDir 'Start-Foolmoon.cmd'
+$launcherExe = Join-Path $installDir 'Foolmoon.exe'
 $iconPath = Join-Path $installDir 'apps\desktop\assets\icon.ico'
+
+$launcherSource = @'
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Text;
+using System.Web.Script.Serialization;
+using System.Windows.Forms;
+
+namespace FoolmoonLauncher
+{
+    public static class Program
+    {
+        [STAThread]
+        public static int Main()
+        {
+            try
+            {
+                string root = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\', '/');
+                string desktopDir = Path.Combine(root, @"apps\desktop");
+                string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                string hermesHome = Path.Combine(localAppData, "hermes");
+                string toolsDir = Path.Combine(hermesHome, "tools");
+
+                string electronExe = ResolveElectronExe(desktopDir);
+                string mainEntry = Path.Combine(desktopDir, @"dist\electron-main.mjs");
+
+                if (string.IsNullOrEmpty(electronExe) || !File.Exists(electronExe) || !File.Exists(mainEntry))
+                {
+                    if (!RunHiddenSetupRepair(root))
+                    {
+                        MessageBox.Show(
+                            "Foolmoon Desktop runtime could not be prepared. Re-run Foolmoon Setup to repair.",
+                            "Foolmoon",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Error);
+                        return 1;
+                    }
+                    electronExe = ResolveElectronExe(desktopDir);
+                }
+
+                if (string.IsNullOrEmpty(electronExe) || !File.Exists(electronExe))
+                {
+                    MessageBox.Show(
+                        "Electron desktop binary was not found at:\n" + Path.Combine(desktopDir, @"node_modules\electron\dist\electron.exe"),
+                        "Foolmoon",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+                    return 1;
+                }
+
+                var psi = new ProcessStartInfo
+                {
+                    FileName = electronExe,
+                    Arguments = ".",
+                    WorkingDirectory = desktopDir,
+                    UseShellExecute = false,
+                    CreateNoWindow = false
+                };
+
+                ApplyActivationEnvironment(psi, root, hermesHome, toolsDir);
+
+                Process.Start(psi);
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Failed to launch Foolmoon:\n" + ex.Message, "Foolmoon", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return 1;
+            }
+        }
+
+        private static string ResolveElectronExe(string desktopDir)
+        {
+            string electronPkg = Path.Combine(desktopDir, @"node_modules\electron");
+            string direct = Path.Combine(electronPkg, @"dist\electron.exe");
+            if (File.Exists(direct)) return direct;
+
+            string pathTxt = Path.Combine(electronPkg, "path.txt");
+            if (File.Exists(pathTxt))
+            {
+                string rel = File.ReadAllText(pathTxt, Encoding.UTF8).Trim();
+                if (!string.IsNullOrEmpty(rel))
+                {
+                    string candidate = Path.Combine(Path.Combine(electronPkg, "dist"), rel);
+                    if (File.Exists(candidate)) return candidate;
+                }
+            }
+            return direct;
+        }
+
+        private static bool RunHiddenSetupRepair(string root)
+        {
+            string cmd = Path.Combine(root, "Start-Foolmoon.cmd");
+            if (!File.Exists(cmd)) return false;
+            var psi = new ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                Arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -Command \"$ErrorActionPreference='Stop'; $fmRoot='" + root.Replace("'", "''") + "'; $env:HERMES_SKIP_ACTIVATE_SETUP='1'; . (Join-Path $fmRoot 'activate.ps1') | Out-Null; Set-Location (Join-Path $fmRoot 'apps\\desktop'); if (-not (Test-Path 'dist\\electron-main.mjs')) { pnpm run build }; if (-not (Test-Path 'node_modules\\electron\\dist\\electron.exe')) { node (Join-Path $fmRoot 'scripts\\build\\electron-runtime.mjs') --source $fmRoot }\"",
+                WorkingDirectory = root,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using (var proc = Process.Start(psi))
+            {
+                proc.WaitForExit(300000);
+                return proc.ExitCode == 0;
+            }
+        }
+
+        private static void ApplyActivationEnvironment(ProcessStartInfo psi, string root, string hermesHome, string toolsDir)
+        {
+            foreach (string k in new[] { "PYTHONHOME", "VIRTUAL_ENV", "__HERMES_TEST_PYTHON", "HERMES_SKIP_ACTIVATE_SETUP" })
+            {
+                psi.EnvironmentVariables.Remove(k);
+            }
+
+            string storePy = FindStorePython(toolsDir);
+            if (!string.IsNullOrEmpty(storePy))
+            {
+                try
+                {
+                    var probe = new ProcessStartInfo
+                    {
+                        FileName = storePy,
+                        Arguments = "-c \"import json, sys; from pathlib import Path; r = Path(sys.argv[1]); sys.path.insert(0, str(r)); from pm.environments import activation_environment, project_python; d = activation_environment(r); d['HERMES_DESKTOP_PYTHON'] = str(project_python(r)); print(json.dumps(d))\" \"" + root + "\"",
+                        WorkingDirectory = root,
+                        RedirectStandardOutput = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+                    probe.EnvironmentVariables["PYTHONPATH"] = root;
+                    probe.EnvironmentVariables["HERMES_HOME"] = hermesHome;
+                    probe.EnvironmentVariables["HERMES_RUNTIME_DIR"] = toolsDir;
+                    probe.EnvironmentVariables.Remove("PYTHONHOME");
+                    probe.EnvironmentVariables.Remove("VIRTUAL_ENV");
+
+                    using (var proc = Process.Start(probe))
+                    {
+                        string json = proc.StandardOutput.ReadToEnd();
+                        proc.WaitForExit(10000);
+                        if (proc.ExitCode == 0 && !string.IsNullOrWhiteSpace(json))
+                        {
+                            var ser = new JavaScriptSerializer();
+                            var map = ser.DeserializeObject(json) as Dictionary<string, object>;
+                            if (map != null)
+                            {
+                                foreach (KeyValuePair<string, object> kv in map)
+                                {
+                                    if (kv.Value != null)
+                                    {
+                                        psi.EnvironmentVariables[kv.Key] = kv.Value.ToString();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            psi.EnvironmentVariables["HERMES_HOME"] = hermesHome;
+            psi.EnvironmentVariables["HERMES_RUNTIME_DIR"] = toolsDir;
+            psi.EnvironmentVariables["HERMES_DESKTOP_HERMES_ROOT"] = root;
+            psi.EnvironmentVariables["HERMES_DESKTOP_IGNORE_EXISTING"] = "1";
+            psi.EnvironmentVariables["PYTHONUTF8"] = "1";
+
+            // Ensure tool store folders are on PATH even if pm.environments probe did not run
+            var extraPath = new List<string>();
+            string binDir = Path.Combine(root, @".hermes\bin");
+            if (Directory.Exists(binDir)) extraPath.Add(binDir);
+            if (Directory.Exists(toolsDir))
+            {
+                foreach (string dir in Directory.GetDirectories(toolsDir))
+                {
+                    string cmdDir = Path.Combine(dir, "cmd");
+                    if (Directory.Exists(cmdDir)) extraPath.Add(cmdDir);
+                    extraPath.Add(dir);
+                }
+            }
+            if (extraPath.Count > 0)
+            {
+                string existingPath = psi.EnvironmentVariables["PATH"] ?? Environment.GetEnvironmentVariable("PATH") ?? "";
+                psi.EnvironmentVariables["PATH"] = string.Join(";", extraPath.ToArray()) + ";" + existingPath;
+            }
+        }
+
+        private static string FindStorePython(string toolsDir)
+        {
+            if (!Directory.Exists(toolsDir)) return null;
+            foreach (string dir in Directory.GetDirectories(toolsDir, "python-*"))
+            {
+                string py = Path.Combine(dir, "python.exe");
+                if (File.Exists(py)) return py;
+            }
+            return null;
+        }
+    }
+}
+'@
+
+$fxDir = [System.Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory()
+$cscExe = Join-Path $fxDir 'csc.exe'
+if (-not (Test-Path -LiteralPath $cscExe)) {
+    $cscExe = 'C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+}
+if (Test-Path -LiteralPath $cscExe) {
+    $tmpLauncherCs = Join-Path ([System.IO.Path]::GetTempPath()) ("foolmoon-launcher-" + [guid]::NewGuid().ToString('n') + ".cs")
+    [System.IO.File]::WriteAllText($tmpLauncherCs, $launcherSource, (New-Object System.Text.UTF8Encoding($false)))
+    try {
+        $cscArgs = @(
+            '/nologo'
+            '/optimize+'
+            '/target:winexe'
+            '/platform:anycpu'
+            "/out:$launcherExe"
+            "/r:$fxDir\System.Web.Extensions.dll"
+            "/r:$fxDir\System.Windows.Forms.dll"
+        )
+        if (Test-Path -LiteralPath $iconPath) {
+            $cscArgs += "/win32icon:$iconPath"
+        }
+        $cscArgs += $tmpLauncherCs
+        & $cscExe @cscArgs | Out-Host
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "csc.exe could not compile Foolmoon.exe (exit $LASTEXITCODE); falling back to Start-Foolmoon.cmd."
+        }
+    } finally {
+        Remove-Item -LiteralPath $tmpLauncherCs -Force -ErrorAction SilentlyContinue
+    }
+}
+
+$shortcutTarget = if (Test-Path -LiteralPath $launcherExe) { $launcherExe } else { $launcherCmd }
+$shortcutWindowStyle = if (Test-Path -LiteralPath $launcherExe) { 1 } else { 7 }
 $wsh = New-Object -ComObject WScript.Shell
 
 if ($cfg.createDesktopShortcut) {
     $desktopDir = [Environment]::GetFolderPath('Desktop')
     $sc = $wsh.CreateShortcut((Join-Path $desktopDir 'Foolmoon.lnk'))
-    $sc.TargetPath = $launcherCmd
+    $sc.TargetPath = $shortcutTarget
     $sc.WorkingDirectory = $installDir
-    $sc.WindowStyle = 7
+    $sc.WindowStyle = $shortcutWindowStyle
     if (Test-Path -LiteralPath $iconPath) { $sc.IconLocation = $iconPath }
     $sc.Description = 'Foolmoon — Hermes Agent Desktop'
     $sc.Save()
@@ -389,9 +636,9 @@ if ($cfg.createDesktopShortcut) {
 if ($cfg.createStartMenuShortcut) {
     $programsDir = [Environment]::GetFolderPath('Programs')
     $scStart = $wsh.CreateShortcut((Join-Path $programsDir 'Foolmoon.lnk'))
-    $scStart.TargetPath = $launcherCmd
+    $scStart.TargetPath = $shortcutTarget
     $scStart.WorkingDirectory = $installDir
-    $scStart.WindowStyle = 7
+    $scStart.WindowStyle = $shortcutWindowStyle
     if (Test-Path -LiteralPath $iconPath) { $scStart.IconLocation = $iconPath }
     $scStart.Description = 'Foolmoon — Hermes Agent Desktop'
     $scStart.Save()

@@ -34,12 +34,12 @@ foreach ($candidate in @("$repo\.venv\Scripts\python.exe", "$repo\venv\Scripts\p
     if (Test-Path -LiteralPath $candidate) { $py = $candidate; break }
 }
 if (-not $py) {
-    $roots = @($env:HERMES_RUNTIME_DIR, "$repo\..\tools")
+    $_probeRoots = @($env:HERMES_RUNTIME_DIR, "$repo\..\tools")
     $homeRoot = if ($env:HERMES_HOME) { $env:HERMES_HOME } else { "$env:LOCALAPPDATA\hermes" }
-    $roots += (Join-Path $homeRoot 'tools')
-    foreach ($root in $roots) {
-        if (-not $root) { continue }
-        foreach ($entry in @(Get-ChildItem -LiteralPath $root -Directory -Filter 'python-*' -ErrorAction SilentlyContinue)) {
+    $_probeRoots += (Join-Path $homeRoot 'tools')
+    foreach ($_probeRoot in $_probeRoots) {
+        if (-not $_probeRoot) { continue }
+        foreach ($entry in @(Get-ChildItem -LiteralPath $_probeRoot -Directory -Filter 'python-*' -ErrorAction SilentlyContinue)) {
             $candidate = Join-Path $entry.FullName 'python.exe'
             if (Test-Path -LiteralPath $candidate) { $py = $candidate; break }
         }

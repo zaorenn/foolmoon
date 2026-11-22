@@ -1205,13 +1205,24 @@ namespace FoolmoonSetup
         {
             if (_installDone)
             {
-                string cmd = System.IO.Path.Combine(_tbInstallDir.Text.Trim(), "Start-Foolmoon.cmd");
-                if (File.Exists(cmd))
+                string dir = _tbInstallDir.Text.Trim();
+                string exe = System.IO.Path.Combine(dir, "Foolmoon.exe");
+                string cmd = System.IO.Path.Combine(dir, "Start-Foolmoon.cmd");
+                if (File.Exists(exe))
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = exe,
+                        WorkingDirectory = dir,
+                        UseShellExecute = true
+                    });
+                }
+                else if (File.Exists(cmd))
                 {
                     Process.Start(new ProcessStartInfo
                     {
                         FileName = cmd,
-                        WorkingDirectory = _tbInstallDir.Text.Trim(),
+                        WorkingDirectory = dir,
                         WindowStyle = ProcessWindowStyle.Hidden,
                         UseShellExecute = true
                     });
