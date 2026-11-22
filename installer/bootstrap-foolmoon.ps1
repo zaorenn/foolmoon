@@ -389,9 +389,12 @@ $iconPath = Join-Path $installDir 'apps\desktop\assets\icon.ico'
 $launcherSource = @'
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
 
@@ -399,12 +402,120 @@ namespace FoolmoonLauncher
 {
     public static class Program
     {
+        private const int UOI_NAME = 2;
+        private const uint DESKTOP_READOBJECTS = 0x0001;
+        private const uint DESKTOP_ENUMERATE = 0x0040;
+        private const uint CREATE_UNICODE_ENVIRONMENT = 0x00000400;
+        private const uint CREATE_NEW_PROCESS_GROUP = 0x00000200;
+        private const uint CREATE_BREAKAWAY_FROM_JOB = 0x01000000;
+
+        private delegate bool EnumDesktopWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private struct STARTUPINFOW
+        {
+            public int cb;
+            public string lpReserved;
+            public string lpDesktop;
+            public string lpTitle;
+            public int dwX;
+            public int dwY;
+            public int dwXSize;
+            public int dwYSize;
+            public int dwXCountChars;
+            public int dwYCountChars;
+            public int dwFillAttribute;
+            public int dwFlags;
+            public short wShowWindow;
+            public short cbReserved2;
+            public IntPtr lpReserved2;
+            public IntPtr hStdInput;
+            public IntPtr hStdOutput;
+            public IntPtr hStdError;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct PROCESS_INFORMATION
+        {
+            public IntPtr hProcess;
+            public IntPtr hThread;
+            public int dwProcessId;
+            public int dwThreadId;
+        }
+
+        [DllImport("kernel32.dll")]
+        private static extern uint GetCurrentThreadId();
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetThreadDesktop(uint dwThreadId);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern bool GetUserObjectInformationW(
+            IntPtr hObj,
+            int nIndex,
+            StringBuilder pvInfo,
+            int nLength,
+            out int lpnLengthNeeded);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern IntPtr OpenDesktopW(
+            string lpszDesktop,
+            uint dwFlags,
+            bool fInherit,
+            uint dwDesiredAccess);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool EnumDesktopWindows(
+            IntPtr hDesktop,
+            EnumDesktopWindowsProc lpfn,
+            IntPtr lParam);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool CloseDesktop(IntPtr hDesktop);
+
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern bool CreateProcessW(
+            string lpApplicationName,
+            string lpCommandLine,
+            IntPtr lpProcessAttributes,
+            IntPtr lpThreadAttributes,
+            bool bInheritHandles,
+            uint dwCreationFlags,
+            IntPtr lpEnvironment,
+            string lpCurrentDirectory,
+            ref STARTUPINFOW lpStartupInfo,
+            out PROCESS_INFORMATION lpProcessInformation);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool CloseHandle(IntPtr hObject);
+
         [STAThread]
-        public static int Main()
+        public static int Main(string[] args)
         {
             try
             {
+                bool alreadyRelaunched = false;
+                if (args != null)
+                {
+                    foreach (string a in args)
+                    {
+                        if (string.Equals(a, "--on-default-desktop", StringComparison.OrdinalIgnoreCase))
+                        {
+                            alreadyRelaunched = true;
+                            break;
+                        }
+                    }
+                }
+
                 string root = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\', '/');
+                if (!alreadyRelaunched && EnsureInteractiveDefaultDesktop(root))
+                {
+                    return 0;
+                }
+
                 string desktopDir = Path.Combine(root, @"apps\desktop");
                 string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
                 string hermesHome = Path.Combine(localAppData, "hermes");
@@ -437,6 +548,8 @@ namespace FoolmoonLauncher
                     return 1;
                 }
 
+                CleanupHeadlessElectronHolders(electronExe);
+
                 var psi = new ProcessStartInfo
                 {
                     FileName = electronExe,
@@ -455,6 +568,185 @@ namespace FoolmoonLauncher
             {
                 MessageBox.Show("Failed to launch Foolmoon:\n" + ex.Message, "Foolmoon", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return 1;
+            }
+        }
+
+        private static string GetCurrentDesktopName()
+        {
+            try
+            {
+                IntPtr hDesk = GetThreadDesktop(GetCurrentThreadId());
+                if (hDesk == IntPtr.Zero) return null;
+                var sb = new StringBuilder(256);
+                int needed = 0;
+                if (GetUserObjectInformationW(hDesk, UOI_NAME, sb, sb.Capacity * 2, out needed))
+                {
+                    return sb.ToString();
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        private static bool EnsureInteractiveDefaultDesktop(string root)
+        {
+            string currentDesktop = GetCurrentDesktopName();
+            if (string.IsNullOrEmpty(currentDesktop) ||
+                string.Equals(currentDesktop, "Default", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            IntPtr hDefault = OpenDesktopW("Default", 0, false, DESKTOP_READOBJECTS | DESKTOP_ENUMERATE);
+            if (hDefault == IntPtr.Zero)
+            {
+                return false;
+            }
+            CloseDesktop(hDefault);
+
+            string selfExe = Process.GetCurrentProcess().MainModule.FileName;
+            string cmdLine = "\"" + selfExe + "\" --on-default-desktop";
+
+            var si = new STARTUPINFOW();
+            si.cb = Marshal.SizeOf(typeof(STARTUPINFOW));
+            si.lpDesktop = @"Winsta0\Default";
+
+            uint[] flagAttempts = new uint[]
+            {
+                CREATE_UNICODE_ENVIRONMENT | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB,
+                CREATE_UNICODE_ENVIRONMENT | CREATE_NEW_PROCESS_GROUP
+            };
+
+            foreach (uint flags in flagAttempts)
+            {
+                PROCESS_INFORMATION pi;
+                if (CreateProcessW(selfExe, cmdLine, IntPtr.Zero, IntPtr.Zero, false, flags, IntPtr.Zero, root, ref si, out pi))
+                {
+                    if (pi.hThread != IntPtr.Zero) CloseHandle(pi.hThread);
+                    if (pi.hProcess != IntPtr.Zero) CloseHandle(pi.hProcess);
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static void CleanupHeadlessElectronHolders(string electronExe)
+        {
+            try
+            {
+                string fullElectronExe = Path.GetFullPath(electronExe);
+                var matching = new List<Process>();
+                var matchingPids = new HashSet<uint>();
+                DateTime cutoffUtc = DateTime.UtcNow.AddSeconds(-4);
+
+                foreach (Process p in Process.GetProcessesByName("electron"))
+                {
+                    bool keep = false;
+                    try
+                    {
+                        string pPath = p.MainModule.FileName;
+                        if (!string.IsNullOrEmpty(pPath) &&
+                            string.Equals(Path.GetFullPath(pPath), fullElectronExe, StringComparison.OrdinalIgnoreCase) &&
+                            p.StartTime.ToUniversalTime() <= cutoffUtc)
+                        {
+                            matching.Add(p);
+                            matchingPids.Add((uint)p.Id);
+                            keep = true;
+                        }
+                    }
+                    catch { }
+
+                    if (!keep)
+                    {
+                        p.Dispose();
+                    }
+                }
+
+                if (matching.Count == 0)
+                {
+                    return;
+                }
+
+                IntPtr hDefault = OpenDesktopW("Default", 0, false, DESKTOP_READOBJECTS | DESKTOP_ENUMERATE);
+                if (hDefault == IntPtr.Zero)
+                {
+                    foreach (Process p in matching) p.Dispose();
+                    return;
+                }
+
+                bool hasDefaultDesktopWindow = false;
+                try
+                {
+                    EnumDesktopWindowsProc cb = delegate(IntPtr hWnd, IntPtr lParam)
+                    {
+                        uint ownerPid = 0;
+                        GetWindowThreadProcessId(hWnd, out ownerPid);
+                        if (matchingPids.Contains(ownerPid))
+                        {
+                            hasDefaultDesktopWindow = true;
+                            return false;
+                        }
+                        return true;
+                    };
+                    EnumDesktopWindows(hDefault, cb, IntPtr.Zero);
+                }
+                finally
+                {
+                    CloseDesktop(hDefault);
+                }
+
+                if (!hasDefaultDesktopWindow)
+                {
+                    foreach (Process p in matching)
+                    {
+                        try
+                        {
+                            if (!p.HasExited)
+                            {
+                                p.Kill();
+                            }
+                        }
+                        catch { }
+                    }
+                    foreach (Process p in matching)
+                    {
+                        try
+                        {
+                            p.WaitForExit(1500);
+                        }
+                        catch { }
+                    }
+                    WaitForHermesLockRelease();
+                }
+
+                foreach (Process p in matching)
+                {
+                    p.Dispose();
+                }
+            }
+            catch { }
+        }
+
+        private static void WaitForHermesLockRelease()
+        {
+            string roaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            string lockFile = Path.Combine(roaming, @"Hermes\lockfile");
+            if (!File.Exists(lockFile)) return;
+
+            for (int i = 0; i < 15; i++)
+            {
+                try
+                {
+                    using (new FileStream(lockFile, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                    {
+                        return;
+                    }
+                }
+                catch
+                {
+                    Thread.Sleep(100);
+                }
             }
         }
 
