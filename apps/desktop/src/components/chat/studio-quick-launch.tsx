@@ -11,7 +11,7 @@ function openStudioHash(hashPath: string): void {
 
 /**
  * Compact quick-launch strip shown directly under the Foolmoon wordmark on
- * fresh empty chats so Jarvis voice, Hardware Notch, 1-Image Studio, and
+ * fresh empty chats so Hands-Free Voice, Hardware Notch, 1-Image Studio, and
  * CUDA Voice Cloning are 1 click away without cluttering active transcripts.
  */
 export function StudioQuickLaunch() {
@@ -37,7 +37,7 @@ export function StudioQuickLaunch() {
         type="button"
       >
         {jarvisOn ? <Mic className="h-3.5 w-3.5 text-emerald-500" /> : <MicOff className="h-3.5 w-3.5 text-primary" />}
-        {jarvisOn ? 'Jarvis Live' : 'Hands-Free Jarvis'}
+        {jarvisOn ? 'Voice Live' : 'Hands-Free Voice'}
       </button>
 
       <button

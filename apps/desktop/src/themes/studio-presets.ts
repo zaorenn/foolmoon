@@ -6,6 +6,7 @@ import {
 import { $bbotConfig, $bbotFxPreset, fxKnobsForPreset } from '@/store/notch'
 import { $backendThemes, $pendingSkinApply } from '@/themes/backend-sync'
 import { skinPref } from '@/themes/context'
+import { hydrateImportedThemes } from '@/themes/foolmoon-theme-bundle'
 import { DEFAULT_TYPOGRAPHY } from '@/themes/presets'
 import { $pendingModeApply } from '@/themes/request'
 import type { DesktopTheme } from '@/themes/types'
@@ -32,13 +33,13 @@ export const STUDIO_UNIVERSE_PRESETS: StudioUniversePreset[] = [
     studio: {
       activeUniverse: 'foolmoon-warm',
       bbotFxPreset: 'minimal',
-      chatLayout: 'claude-centered',
+      chatLayout: 'editorial-centered',
       cornerRadius: 18,
       customAccent: '',
       customCss: '',
       material: 'warm-matte',
       motionLevel: 'fluid',
-      notchStyle: 'orbital-pulse',
+      notchStyle: 'macos-minimal',
       paneFloating: true,
       pattern: 'none',
       patternOpacity: 0.08,
@@ -154,16 +155,16 @@ export const STUDIO_UNIVERSE_PRESETS: StudioUniversePreset[] = [
     }
   },
   {
-    badge: 'Character Studio',
-    description: 'Strawberry cloud velvet, cat-ears vector tiles, and non-blocking Hello Kitty + bow stickers.',
-    id: 'hello-kitty',
-    label: 'Hello Kitty Ribbon',
+    badge: 'Editorial Studio',
+    description: 'Soft rose-ivory velvet, geometric cat-ear tiles, and minimalist studio ribbon charms.',
+    id: 'velvet-ribbon',
+    label: 'Velvet Ribbon',
     preferredMode: 'light',
     previewSwatches: ['#FFF4F7', '#FBE3EB', '#E11D62'],
     studio: {
-      activeUniverse: 'hello-kitty',
+      activeUniverse: 'velvet-ribbon',
       bbotFxPreset: 'mirror-chrome',
-      chatLayout: 'claude-centered',
+      chatLayout: 'editorial-centered',
       cornerRadius: 24,
       customAccent: '',
       customCss: '',
@@ -177,9 +178,9 @@ export const STUDIO_UNIVERSE_PRESETS: StudioUniversePreset[] = [
       stickers: [
         {
           accentColor: '#E11D62',
-          id: 'kitty-preset-br',
-          kind: 'kitty-kawaii',
-          label: 'Hello Kitty',
+          id: 'velvet-cat-br',
+          kind: 'velvet-cat',
+          label: 'Velvet Cat',
           opacity: 0.95,
           scale: 1.08,
           slot: 'bottom-right'
@@ -273,9 +274,9 @@ export const STUDIO_UNIVERSE_PRESETS: StudioUniversePreset[] = [
         white: '#FFEFF5',
         yellow: '#FFB86C'
       },
-      description: 'Pastel strawberry velvet, repeating cat-ear motifs, and kawaii bow stickers.',
-      label: 'Hello Kitty Ribbon',
-      name: 'fm-hello-kitty',
+      description: 'Rose-ivory velvet palette, geometric cat-ear motifs, and satin ribbon charms.',
+      label: 'Velvet Ribbon',
+      name: 'fm-velvet-ribbon',
       terminal: {
         black: '#301420',
         blue: '#A81349',
@@ -313,13 +314,13 @@ export const STUDIO_UNIVERSE_PRESETS: StudioUniversePreset[] = [
     studio: {
       activeUniverse: 'pixel-quest',
       bbotFxPreset: 'crt-retro',
-      chatLayout: 'claude-centered',
+      chatLayout: 'editorial-centered',
       cornerRadius: 14,
       customAccent: '',
       customCss: '',
       material: 'brushed-metal',
       motionLevel: 'fluid',
-      notchStyle: 'scifi-hologram',
+      notchStyle: 'macos-minimal',
       paneFloating: true,
       pattern: 'pixel-quest',
       patternOpacity: 0.1,
@@ -454,22 +455,22 @@ export const STUDIO_UNIVERSE_PRESETS: StudioUniversePreset[] = [
     }
   },
   {
-    badge: 'Neon HUD',
-    description: 'Machined obsidian glass, electric cyan circuit grid, and holographic edge rims.',
-    id: 'night-city',
-    label: 'Cyberpunk Night City',
+    badge: 'Matte HUD',
+    description: 'Matte graphite obsidian, cyan circuit traces, and architectural card borders.',
+    id: 'obsidian-circuit',
+    label: 'Obsidian Circuit',
     preferredMode: 'dark',
     previewSwatches: ['#0B0D14', '#141927', '#22D3EE'],
     studio: {
-      activeUniverse: 'night-city',
-      bbotFxPreset: 'cyber-glow',
-      chatLayout: 'claude-centered',
+      activeUniverse: 'obsidian-circuit',
+      bbotFxPreset: 'minimal',
+      chatLayout: 'editorial-centered',
       cornerRadius: 16,
       customAccent: '',
       customCss: '',
       material: 'cyber-grid',
-      motionLevel: 'fluid',
-      notchStyle: 'scifi-hologram',
+      motionLevel: 'gentle',
+      notchStyle: 'macos-minimal',
       paneFloating: true,
       pattern: 'cyber-circuit',
       patternOpacity: 0.11,
@@ -564,9 +565,9 @@ export const STUDIO_UNIVERSE_PRESETS: StudioUniversePreset[] = [
         white: '#E8F6FF',
         yellow: '#FACC15'
       },
-      description: 'Cybernetic obsidian glass with glowing circuit geometry.',
-      label: 'Cyberpunk Night City',
-      name: 'fm-night-city',
+      description: 'Matte graphite obsidian glass with architectural circuit geometry.',
+      label: 'Obsidian Circuit',
+      name: 'fm-obsidian-circuit',
       terminal: {
         black: '#0D1E26',
         blue: '#0284C7',
@@ -595,16 +596,16 @@ export const STUDIO_UNIVERSE_PRESETS: StudioUniversePreset[] = [
     }
   },
   {
-    badge: 'Liquid Glass',
-    description: 'Pearlescent lunar frost translucency with luminous crescent moon art.',
-    id: 'macos-frost',
+    badge: 'Frosted Glass',
+    description: 'Pearlescent lunar frost translucency with minimalist crescent art.',
+    id: 'lunar-frost',
     label: 'Lunar Frost Glass',
     preferredMode: 'light',
     previewSwatches: ['#EEF3F9', '#E3EBF5', '#0A66E8'],
     studio: {
-      activeUniverse: 'macos-frost',
+      activeUniverse: 'lunar-frost',
       bbotFxPreset: 'mirror-chrome',
-      chatLayout: 'claude-centered',
+      chatLayout: 'editorial-centered',
       cornerRadius: 22,
       customAccent: '',
       customCss: '',
@@ -705,9 +706,9 @@ export const STUDIO_UNIVERSE_PRESETS: StudioUniversePreset[] = [
         white: '#EEF5FF',
         yellow: '#FBBF24'
       },
-      description: 'Pearlescent frost translucent glass with sapphire focus rings.',
+      description: 'Soft slate frosted glass with crescent moon accent.',
       label: 'Lunar Frost Glass',
-      name: 'fm-macos-frost',
+      name: 'fm-lunar-frost',
       terminal: {
         black: '#17202E',
         blue: '#0A66E8',
@@ -773,6 +774,7 @@ export function applyStudioUniverse(universeId: string): StudioUniversePreset | 
 
 export function bootstrapFoolmoonStudio(): void {
   ensureShowcaseThemesRegistered()
+  hydrateImportedThemes()
 
   if (typeof window === 'undefined') {
     return

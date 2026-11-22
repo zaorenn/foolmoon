@@ -108,7 +108,7 @@ def test_post_theme_studio_config_and_voice_clone_activation_routes(monkeypatch,
     (hermes_home / "config.yaml").write_text("display:\n  skin: default\n", encoding="utf-8")
     voice_root = tmp_path / "voice"
     voice_root.mkdir()
-    img_path = tmp_path / "kitty.png"
+    img_path = tmp_path / "ribbon.png"
     Image.new("RGB", (64, 64), (255, 210, 226)).save(img_path, format="PNG")
 
     monkeypatch.setenv("HERMES_HOME", str(hermes_home))
@@ -119,12 +119,12 @@ def test_post_theme_studio_config_and_voice_clone_activation_routes(monkeypatch,
         "/api/themes/from-image",
         json={
             "image_base64": b64_img,
-            "name": "Kitty Route Test",
+            "name": "Ribbon Route Test",
             "preset": "pastel-glass",
             "material": "plush-pastel",
             "corner_radius": 24,
             "pattern": "cat-ears-whiskers",
-            "stickers": [{"slot": "bottom-right", "kind": "kitty-kawaii", "label": "Hello Kitty"}],
+            "stickers": [{"slot": "bottom-right", "kind": "velvet-cat", "label": "Velvet Cat"}],
             "apply_now": True,
         },
     )
@@ -203,7 +203,7 @@ def test_post_studio_tui_skin_route_creates_and_activates_skin(monkeypatch, tmp_
     resp = client.post(
         "/api/themes/studio-skin",
         json={
-            "name": "Foolmoon Kitty Studio",
+            "name": "Foolmoon Ribbon Studio",
             "background": "#fff4f7",
             "accent": "#e11d62",
             "material": "plush-pastel",
@@ -215,10 +215,10 @@ def test_post_studio_tui_skin_route_creates_and_activates_skin(monkeypatch, tmp_
     assert resp.status_code == 200
     body = resp.json()
     assert body["ok"] is True
-    assert body["skin"] == "foolmoon-kitty-studio"
+    assert body["skin"] == "foolmoon-ribbon-studio"
     assert body["applied"] is True
-    assert (hermes_home / "skins" / "foolmoon-kitty-studio.yaml").is_file()
-    assert "foolmoon-kitty-studio" in (hermes_home / "config.yaml").read_text(encoding="utf-8")
+    assert (hermes_home / "skins" / "foolmoon-ribbon-studio.yaml").is_file()
+    assert "foolmoon-ribbon-studio" in (hermes_home / "config.yaml").read_text(encoding="utf-8")
     assert body["skin_payload"]["banner_logo"]
     assert body["skin_payload"]["banner_hero"]
     assert body["skin_payload"]["tool_prefix"] == "⋈"

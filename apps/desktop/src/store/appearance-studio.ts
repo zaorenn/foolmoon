@@ -4,7 +4,7 @@ import type { BbotFxPreset } from '@/store/notch'
 export type StudioMaterial = 'warm-matte' | 'liquid-glass' | 'brushed-metal' | 'plush-pastel' | 'cyber-grid'
 export type StudioMotionLevel = 'fluid' | 'gentle' | 'reduced'
 export type StudioNotchStyle = 'macos-minimal' | 'orbital-pulse' | 'scifi-hologram'
-export type StudioChatLayout = 'claude-centered' | 'full-studio'
+export type StudioChatLayout = 'editorial-centered' | 'full-studio'
 export type StudioPatternKind =
   | 'none'
   | 'dot-matrix'
@@ -26,7 +26,7 @@ export type StudioPatternKind =
 export type StudioStickerSlot = 'bottom-right' | 'top-right' | 'bottom-left'
 
 export type BuiltinStickerKind =
-  | 'kitty-kawaii'
+  | 'velvet-cat'
   | 'satin-bow'
   | 'pixel-hero'
   | 'game-cartridge'
@@ -66,13 +66,13 @@ export interface StudioAppearanceState {
 export const DEFAULT_STUDIO_APPEARANCE: StudioAppearanceState = {
   activeUniverse: 'foolmoon-warm',
   bbotFxPreset: 'minimal',
-  chatLayout: 'claude-centered',
+  chatLayout: 'editorial-centered',
   cornerRadius: 18,
   customAccent: '',
   customCss: '',
   material: 'warm-matte',
   motionLevel: 'fluid',
-  notchStyle: 'scifi-hologram',
+  notchStyle: 'macos-minimal',
   paneFloating: true,
   pattern: 'none',
   patternOpacity: 0.09,
@@ -90,7 +90,7 @@ const VALID_MATERIALS = new Set<StudioMaterial>([
 
 const VALID_MOTIONS = new Set<StudioMotionLevel>(['fluid', 'gentle', 'reduced'])
 const VALID_NOTCH_STYLES = new Set<StudioNotchStyle>(['macos-minimal', 'orbital-pulse', 'scifi-hologram'])
-const VALID_CHAT_LAYOUTS = new Set<StudioChatLayout>(['claude-centered', 'full-studio'])
+const VALID_CHAT_LAYOUTS = new Set<StudioChatLayout>(['editorial-centered', 'full-studio'])
 
 const VALID_PATTERNS = new Set<StudioPatternKind>([
   'none',
@@ -114,7 +114,7 @@ const VALID_PATTERNS = new Set<StudioPatternKind>([
 const VALID_SLOTS = new Set<StudioStickerSlot>(['bottom-right', 'top-right', 'bottom-left'])
 
 const VALID_STICKER_KINDS = new Set<BuiltinStickerKind>([
-  'kitty-kawaii',
+  'velvet-cat',
   'satin-bow',
   'pixel-hero',
   'game-cartridge',

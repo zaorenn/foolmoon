@@ -121,11 +121,11 @@ export function ComposerArchitectBar({ onPickImages, target = 'main' }: Composer
             <button
               className="rounded-full border border-border/70 bg-card px-2 py-0.5 font-medium text-foreground hover:border-primary/60"
               onClick={() => {
-                applyStudioUniverse('hello-kitty')
+                applyStudioUniverse('velvet-ribbon')
               }}
               type="button"
             >
-              Hello Kitty Theme
+              Velvet Ribbon
             </button>
             <button
               className="rounded-full border border-border/70 bg-card px-2 py-0.5 font-medium text-foreground hover:border-primary/60"

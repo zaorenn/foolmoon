@@ -37,8 +37,8 @@ function formatCountdown(totalSec: number): string {
 const MINI_WAVE_WEIGHTS = [0.35, 0.65, 0.95, 1.0, 0.95, 0.65, 0.35]
 
 /**
- * Unified Foolmoon Jarvis HUD & Live Lyrics bar:
- * - In Simple Focus Mode: sleek macOS + Claude floating voice & karaoke lyrics capsule with sci-fi bbot + mini spectrum
+ * Unified Foolmoon Voice HUD & Live Captions bar:
+ * - In Simple Focus Mode: sleek minimal floating voice & captions capsule with bbot + mini level bars
  * - In Power Mode (when voice turn active): detailed HUD adding RTX VRAM telemetry, Quick Notes & Focus Timer pills
  */
 export function SimpleJarvisBar() {
@@ -224,7 +224,7 @@ export function SimpleJarvisBar() {
           </button>
         )}
         <button
-          aria-label="Toggle Jarvis Hands-Free"
+          aria-label="Toggle Hands-Free Voice"
           className={`inline-flex h-6 items-center gap-1 rounded-full px-2 text-[11px] font-medium transition ${
             jarvisOn
               ? 'border border-emerald-500/40 bg-emerald-500/20 text-emerald-500'

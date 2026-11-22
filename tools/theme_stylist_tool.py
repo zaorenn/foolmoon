@@ -4,7 +4,7 @@ Extracts a cohesive, WCAG-verified color palette (both dark and light polarities
 custom @bwnd/bbot face CSS tokens (--face-skin, --face-ink, --face-ring, --face-pupil),
 subtle SVG atmospheric pattern, optional translucent wallpaper backdrop, and optional
 stylized corner badge from a single source image. Writes ``~/.hermes/skins/<slug>.yaml``
-and optionally updates ``display.skin`` so CLI, Desktop, and Jarvis Notch repaint together.
+and optionally updates ``display.skin`` so CLI, Desktop, and Hardware Notch repaint together.
 """
 
 from __future__ import annotations
@@ -150,7 +150,7 @@ _BUILTIN_SKIN_NAMES = frozenset({
     "sakura",
     "nord",
     "foolmoon",
-    "foolmoon-kitty",
+    "foolmoon-ribbon",
     "foolmoon-quest",
     "daylight",
     "warm-lightmode",
@@ -172,7 +172,7 @@ def _build_foolmoon_tui_assets(
     if pattern in ("cat-ears-whiskers", "ribbon-bows"):
         sym, prefix = "⋈", "⋈"
         faces = ["(⋈)", "(♡)", "(✿)", "(◠)", "(☆)"]
-        verbs = ["tying satin bows", "polishing kawaii glass", "weaving pastel shaders", "syncing notch telemetry"]
+        verbs = ["tying satin bows", "polishing velvet glass", "weaving pastel shaders", "syncing notch telemetry"]
         hero = "\n".join([
             f"[{title}]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣴⣆⠀⠀⠀⠀⠀⣰⣦⠀⠀⠀⋈⠀⠀⠀⠀[/]",
             f"[{accent}]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿⣷⣤⣤⣶⣾⣿⣿⠀⠀⠀⠀♡⠀⠀⠀⠀[/]",
@@ -515,7 +515,7 @@ def _normalize_studio_config(
             slot = "bottom-right"
         kind = item.get("kind", "crescent-moon")
         if kind not in (
-            "kitty-kawaii",
+            "velvet-cat",
             "satin-bow",
             "pixel-hero",
             "game-cartridge",
@@ -1051,7 +1051,7 @@ _STUDIO_PARAM_PROPERTIES: Dict[str, Any] = {
                 "kind": {
                     "type": "string",
                     "enum": [
-                        "kitty-kawaii",
+                        "velvet-cat",
                         "satin-bow",
                         "pixel-hero",
                         "game-cartridge",
@@ -1241,7 +1241,7 @@ CUSTOMIZE_STUDIO_SCHEMA = {
     "parameters": {
         "type": "object",
         "properties": {
-            "name": {"type": "string", "description": "Theme slug/title (e.g. 'hello-kitty-ribbon')."},
+            "name": {"type": "string", "description": "Theme slug/title (e.g. 'velvet-ribbon')."},
             "background": {"type": "string", "description": "Primary hex background (e.g. '#FFF4F7')."},
             "sidebar_background": {"type": "string", "description": "Optional sidebar hex background."},
             "foreground": {"type": "string", "description": "Optional foreground text hex."},

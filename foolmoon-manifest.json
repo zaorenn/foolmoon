@@ -24,6 +24,8 @@
     "apps/desktop/src/app/contrib/foolmoon-palette.ts",
     "apps/desktop/src/app/contrib/foolmoon-palette.test.ts",
     "apps/desktop/src/app/contrib/hooks/use-notch-bridge.ts",
+    "apps/desktop/src/themes/foolmoon-theme-bundle.ts",
+    "apps/desktop/src/themes/foolmoon-theme-bundle.test.ts",
     "apps/desktop/src/app/settings/image-theme-studio.tsx",
     "apps/desktop/src/app/settings/voice-cloning-studio.tsx",
     "apps/desktop/src/app/settings/voice-cloning-studio.test.tsx",

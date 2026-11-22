@@ -32,11 +32,11 @@ type MemoryTab = 'memory' | 'user' | 'wizard'
 const INITIAL_WIZARD: MemoryProfileSeedPayload = {
   address_as: '',
   apply_personality: false,
-  language: 'Türkçe',
+  language: 'English',
   name: '',
   role: '',
   rules: '',
-  style: 'Samimi, doğrudan ve pratik'
+  style: 'Concise, direct, and practical'
 }
 
 export function MemoryEditorPanel({
@@ -65,7 +65,7 @@ export function MemoryEditorPanel({
       setMemoryDraft(next.memory.content)
       setUserDraft(next.user.content)
     } catch (error) {
-      notifyError(error, 'Hafıza dosyaları yüklenemedi')
+      notifyError(error, 'Failed to load memory files')
     } finally {
       setLoading(false)
     }
@@ -97,7 +97,7 @@ export function MemoryEditorPanel({
       refreshMemoryStatus()
       notify({ kind: 'success', message })
     } catch (error) {
-      notifyError(error, 'Hafıza kaydedilemedi')
+      notifyError(error, 'Could not save memory store')
     } finally {
       setSaving(false)
     }
@@ -112,22 +112,22 @@ export function MemoryEditorPanel({
 
     const entries = [...(activeState?.entries ?? []), trimmed]
     setNewEntry('')
-    await persistTarget(activeTarget, entries.join(delimiter), `${activeTarget === 'user' ? 'USER.md' : 'MEMORY.md'} güncellendi`)
+    await persistTarget(activeTarget, entries.join(delimiter), `Updated ${activeTarget === 'user' ? 'USER.md' : 'MEMORY.md'}`)
   }
 
   const handleRemoveEntry = async (index: number) => {
     const entries = (activeState?.entries ?? []).filter((_, idx) => idx !== index)
-    await persistTarget(activeTarget, entries.join(delimiter), 'Kayıt hafızadan silindi')
+    await persistTarget(activeTarget, entries.join(delimiter), 'Entry removed from memory')
   }
 
   const handleReset = async (target: 'memory' | 'user') => {
     const label = target === 'user' ? 'USER.md' : 'MEMORY.md'
 
     const ok = await confirm({
-      confirmLabel: 'Sıfırla',
-      description: `${label} içeriği kalıcı olarak temizlenecek. Devam edilsin mi?`,
+      confirmLabel: 'Reset',
+      description: `All entries in ${label} will be permanently cleared. Continue?`,
       destructive: true,
-      title: `${label} Sıfırlansın mı?`
+      title: `Reset ${label}?`
     })
 
     if (!ok) {
@@ -140,9 +140,9 @@ export function MemoryEditorPanel({
       await resetMemory(target, profile)
       await load()
       refreshMemoryStatus()
-      notify({ kind: 'info', message: `${label} sıfırlandı` })
+      notify({ kind: 'info', message: `${label} cleared` })
     } catch (error) {
-      notifyError(error, `${label} sıfırlanamadı`)
+      notifyError(error, `Could not reset ${label}`)
     } finally {
       setSaving(false)
     }
@@ -150,7 +150,7 @@ export function MemoryEditorPanel({
 
   const handleApplyWizard = async () => {
     if (!wizard.name.trim() && !wizard.address_as.trim() && !wizard.rules.trim() && !wizard.role.trim()) {
-      notify({ kind: 'warning', message: 'Lütfen en az bir profil veya hitap alanı doldurun' })
+      notify({ kind: 'warning', message: 'Please enter at least one name, address, role, or rule field' })
 
       return
     }
@@ -162,15 +162,16 @@ export function MemoryEditorPanel({
       await load()
       refreshMemoryStatus()
       setTab('user')
-      notify({ kind: 'success', message: 'Hitap ve profil tercihleri USER.md içine işlendi' })
+      notify({ kind: 'success', message: 'Profile and address preferences saved to USER.md' })
     } catch (error) {
-      notifyError(error, 'Profil hafızaya yazılamadı')
+      notifyError(error, 'Could not write profile to USER.md')
     } finally {
       setSaving(false)
     }
   }
 
-  const usageRatio = activeState && activeState.limit > 0 ? Math.min(100, Math.round((activeState.chars / activeState.limit) * 100)) : 0
+  const usageRatio =
+    activeState && activeState.limit > 0 ? Math.min(100, Math.round((activeState.chars / activeState.limit) * 100)) : 0
 
   return (
     <div
@@ -182,30 +183,30 @@ export function MemoryEditorPanel({
           <Brain className="size-4 text-(--ui-accent)" />
           <div>
             <h3 className="text-[length:var(--conversation-title-font-size)] font-semibold text-(--ui-text-primary)">
-              Hafıza Kontrol Merkezi
+              Memory Control Center
             </h3>
             <p className="text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)">
-              Ajanın kalıcı notlarını (MEMORY.md), hitap/profil bilgini (USER.md) ve hızlı kuralları buradan doğrudan yönetin.
+              Manage persistent agent notes (MEMORY.md), user profile preferences (USER.md), and standing instructions directly.
             </p>
           </div>
         </div>
         <Button disabled={loading || saving} onClick={() => void load()} size="xs" type="button" variant="outline">
           <RefreshCw className={cn('size-3.5', loading && 'animate-spin')} />
-          Yenile
+          Refresh
         </Button>
       </div>
 
       <div className="mb-3 grid gap-1 rounded-lg border border-(--ui-border-subtle) bg-(--ui-surface-base)/50 px-3 py-1">
         <ToggleRow
           checked={memoryEnabled}
-          description="Ajanın oturumlar arası teknik notlarını (MEMORY.md) sistem istemine dahil et"
-          label="Kalıcı Ajan Hafızası (MEMORY.md)"
+          description="Include cross-session technical notes from MEMORY.md in the system context"
+          label="Persistent Agent Memory (MEMORY.md)"
           onChange={onToggleMemoryEnabled}
         />
         <ToggleRow
           checked={userProfileEnabled}
-          description="Hitap şekli, dil ve kişisel tercihlerini (USER.md) her yanıtta uygula"
-          label="Kullanıcı Profili (USER.md)"
+          description="Apply preferred name, address, language, and workflow preferences from USER.md"
+          label="User Profile (USER.md)"
           onChange={onToggleUserProfileEnabled}
         />
       </div>
@@ -236,7 +237,7 @@ export function MemoryEditorPanel({
           variant={tab === 'wizard' ? 'default' : 'ghost'}
         >
           <CheckCircle2 className="size-3.5" />
-          Hitap &amp; Profil Sihirbazı
+          Profile &amp; Address Wizard
         </Button>
       </div>
 
@@ -244,69 +245,67 @@ export function MemoryEditorPanel({
         <div className="grid gap-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-xs font-medium text-(--ui-text-secondary)">Adın</label>
+              <label className="mb-1 block text-xs font-medium text-(--ui-text-secondary)">Your Name</label>
               <Input
                 onChange={e => setWizard(prev => ({ ...prev, name: e.target.value }))}
-                placeholder="Örn. Deniz"
+                placeholder="e.g. Alex"
                 value={wizard.name}
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-(--ui-text-secondary)">
-                Sana Nasıl Hitap Etsin?
-              </label>
+              <label className="mb-1 block text-xs font-medium text-(--ui-text-secondary)">Preferred Address</label>
               <Input
                 onChange={e => setWizard(prev => ({ ...prev, address_as: e.target.value }))}
-                placeholder="Örn. Adımla / Dostum / Bey"
+                placeholder="e.g. First name / Formal"
                 value={wizard.address_as}
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-(--ui-text-secondary)">Tercih Edilen Dil</label>
+              <label className="mb-1 block text-xs font-medium text-(--ui-text-secondary)">Preferred Language</label>
               <Input
                 onChange={e => setWizard(prev => ({ ...prev, language: e.target.value }))}
-                placeholder="Türkçe / English"
+                placeholder="English / Deutsch / Español"
                 value={wizard.language}
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-(--ui-text-secondary)">Çalışma Alanı / Rol</label>
+              <label className="mb-1 block text-xs font-medium text-(--ui-text-secondary)">Role / Domain</label>
               <Input
                 onChange={e => setWizard(prev => ({ ...prev, role: e.target.value }))}
-                placeholder="Örn. Yazılım, Tasarım, Araştırma"
+                placeholder="e.g. Systems Engineer, Researcher"
                 value={wizard.role}
               />
             </div>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-(--ui-text-secondary)">Yanıt &amp; İletişim Tarzı</label>
+            <label className="mb-1 block text-xs font-medium text-(--ui-text-secondary)">Response &amp; Tone Style</label>
             <Input
               onChange={e => setWizard(prev => ({ ...prev, style: e.target.value }))}
-              placeholder="Örn. Kısa, net, soru sormadan çözüm odaklı"
+              placeholder="e.g. Concise, direct, and technical"
               value={wizard.style}
             />
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-(--ui-text-secondary)">
-              Kalıcı Kurallar (her satır ayrı hafıza kaydı olur)
+              Persistent Rules (one entry per line)
             </label>
             <Textarea
               onChange={e => setWizard(prev => ({ ...prev, rules: e.target.value }))}
-              placeholder={'Örn.\nKod örneklerini TypeScript ile ver\nWeb sitesi istersem soru sormadan doğrudan oluştur'}
+              placeholder={'e.g.\nUse TypeScript for web code examples\nBuild requested web artifacts directly without asking extra clarifying questions'}
               rows={3}
               value={wizard.rules}
             />
           </div>
           <ToggleRow
             checked={Boolean(wizard.apply_personality)}
-            description="İletişim tarzını aynı zamanda config.yaml içindeki display.personality ayarına uygular"
-            label="Ajan Kişiliğine de Uygula"
+            description="Also sync communication tone to display.personality inside config.yaml"
+            label="Apply Tone to Agent Personality"
             onChange={checked => setWizard(prev => ({ ...prev, apply_personality: checked }))}
           />
           <div className="flex justify-end">
             <Button disabled={saving} onClick={() => void handleApplyWizard()} size="sm" type="button">
               {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
-              USER.md İçine Uygula
+              Apply to USER.md
             </Button>
           </div>
         </div>
@@ -316,7 +315,7 @@ export function MemoryEditorPanel({
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-(--ui-text-tertiary)">
               <div className="flex items-center gap-2">
                 <span>
-                  Doluluk: {activeState.chars.toLocaleString()} / {activeState.limit.toLocaleString()} karakter ({usageRatio}%)
+                  Usage: {activeState.chars.toLocaleString()} / {activeState.limit.toLocaleString()} chars ({usageRatio}%)
                 </span>
                 <div className="h-1.5 w-24 overflow-hidden rounded-full bg-(--ui-surface-muted)">
                   <div
@@ -330,7 +329,7 @@ export function MemoryEditorPanel({
               </div>
               <div className="flex items-center gap-1.5">
                 <Button onClick={() => setRawMode(v => !v)} size="xs" type="button" variant="ghost">
-                  {rawMode ? 'Kart Görünümü' : 'Ham Markdown'}
+                  {rawMode ? 'Card View' : 'Raw Markdown'}
                 </Button>
                 <Button
                   disabled={saving || activeState.chars === 0}
@@ -340,7 +339,7 @@ export function MemoryEditorPanel({
                   variant="outline"
                 >
                   <Trash2 className="size-3.5" />
-                  Sıfırla
+                  Reset
                 </Button>
               </div>
             </div>
@@ -361,14 +360,14 @@ export function MemoryEditorPanel({
                     void persistTarget(
                       activeTarget,
                       activeDraft,
-                      `${activeTarget === 'user' ? 'USER.md' : 'MEMORY.md'} kaydedildi`
+                      `Saved ${activeTarget === 'user' ? 'USER.md' : 'MEMORY.md'}`
                     )
                   }
                   size="sm"
                   type="button"
                 >
                   {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
-                  Kaydet
+                  Save
                 </Button>
               </div>
             </div>
@@ -385,25 +384,25 @@ export function MemoryEditorPanel({
                   }}
                   placeholder={
                     activeTarget === 'user'
-                      ? 'Yeni kullanıcı tercihi / hitap ekle...'
-                      : 'Ajanın aklında tutması gereken yeni bilgi ekle...'
+                      ? 'Add user preference or address rule...'
+                      : 'Add persistent project note to remember...'
                   }
                   value={newEntry}
                 />
                 <Button disabled={saving || !newEntry.trim()} onClick={() => void handleAddEntry()} size="sm" type="button">
                   <Plus className="size-3.5" />
-                  Ekle
+                  Add
                 </Button>
               </div>
 
               {loading && !data ? (
                 <div className="flex items-center gap-2 py-4 text-xs text-(--ui-text-tertiary)">
                   <Loader2 className="size-3.5 animate-spin" />
-                  Hafıza kayıtları yükleniyor...
+                  Loading memory entries...
                 </div>
               ) : (activeState?.entries.length ?? 0) === 0 ? (
                 <p className="rounded-lg border border-dashed border-(--ui-border-subtle) px-3 py-4 text-center text-xs text-(--ui-text-tertiary)">
-                  Henüz kayıt yok. Yukarıdan yeni bir bilgi ekleyin veya Sihirbaz sekmesini kullanın.
+                  No entries yet. Add a note above or open the Profile &amp; Address Wizard tab.
                 </p>
               ) : (
                 <div className="grid max-h-64 gap-1.5 overflow-y-auto pr-1">
@@ -414,7 +413,7 @@ export function MemoryEditorPanel({
                     >
                       <span className="whitespace-pre-wrap break-words">{entry}</span>
                       <button
-                        aria-label="Hafıza kaydını sil"
+                        aria-label="Delete memory entry"
                         className="shrink-0 rounded p-0.5 text-(--ui-text-tertiary) hover:bg-(--ui-surface-muted) hover:text-destructive"
                         disabled={saving}
                         onClick={() => void handleRemoveEntry(idx)}

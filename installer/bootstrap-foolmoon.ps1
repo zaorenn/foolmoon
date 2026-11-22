@@ -55,7 +55,7 @@ New-Item -ItemType Directory -Force -Path $toolsStore | Out-Null
 # ----------------------------------------------------------------------------
 # Stage 1: Verify / stage PortableGit + pinned uv (zero prerequisites required)
 # ----------------------------------------------------------------------------
-Emit-Stage -StageId 'tools' -Status 'running' -Percent 8 -Message 'Git ve uv kurulum araçları hazırlanıyor...'
+Emit-Stage -StageId 'tools' -Status 'running' -Percent 8 -Message 'Preparing Git and uv runtime tools...'
 
 $gitExe = $null
 $sysGit = Get-Command git -ErrorAction SilentlyContinue
@@ -93,12 +93,12 @@ if (-not $gitExe) {
             }
             $gotHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $exeArchive).Hash.ToLowerInvariant()
             if ($gotHash -ne $pin.Sha256) {
-                throw "PortableGit SHA-256 dogrulamasi basarisiz (beklenen $($pin.Sha256), alinan $gotHash)."
+                throw "PortableGit SHA-256 verification failed (expected $($pin.Sha256), got $gotHash)."
             }
             New-Item -ItemType Directory -Force -Path $gitDir | Out-Null
             & $exeArchive -y "-o$gitDir" | Out-Null
             if (-not (Test-Path -LiteralPath $gitCandidate)) {
-                throw 'PortableGit arsivi acilamadi.'
+                throw 'Could not extract PortableGit archive.'
             }
         } finally {
             Remove-Item -Recurse -Force -LiteralPath $tmpDir -ErrorAction SilentlyContinue
@@ -109,12 +109,12 @@ if (-not $gitExe) {
 
 $gitCmdDir = Split-Path -Parent $gitExe
 $env:PATH = "$gitCmdDir;$env:PATH"
-Emit-Stage -StageId 'tools' -Status 'done' -Percent 18 -Message "Git hazır: $(& $gitExe --version)"
+Emit-Stage -StageId 'tools' -Status 'done' -Percent 18 -Message "Git ready: $(& $gitExe --version)"
 
 # ----------------------------------------------------------------------------
 # Stage 2: Clone / update Foolmoon & connect upstream Hermes Core remote
 # ----------------------------------------------------------------------------
-Emit-Stage -StageId 'repo' -Status 'running' -Percent 22 -Message 'Foolmoon ve Hermes deposu indiriliyor...'
+Emit-Stage -StageId 'repo' -Status 'running' -Percent 22 -Message 'Downloading Foolmoon and Hermes Core repositories...'
 
 if ((Test-Path -LiteralPath (Join-Path $installDir '.git'))) {
     & $gitExe -C $installDir remote set-url origin $foolmoonRepoUrl 2>$null
@@ -132,28 +132,28 @@ if ((Test-Path -LiteralPath (Join-Path $installDir '.git'))) {
     $parentDir = Split-Path -Parent $installDir
     if ($parentDir) { New-Item -ItemType Directory -Force -Path $parentDir | Out-Null }
     & $gitExe clone --branch main $foolmoonRepoUrl $installDir | Out-Host
-    if ($LASTEXITCODE -ne 0) { throw "Depo klonlanamadi: $foolmoonRepoUrl" }
+    if ($LASTEXITCODE -ne 0) { throw "Failed to clone repository: $foolmoonRepoUrl" }
     & $gitExe -C $installDir remote add upstream $upstreamRepoUrl | Out-Null
 }
 
-Emit-Stage -StageId 'repo' -Status 'done' -Percent 36 -Message 'Foolmoon + Hermes Core kaynakları hazırlandı.'
+Emit-Stage -StageId 'repo' -Status 'done' -Percent 36 -Message 'Foolmoon and upstream Hermes Core sources ready.'
 
 # ----------------------------------------------------------------------------
 # Stage 3: Install Hermes Python + Node + pnpm + Dependencies via setup-hermes.ps1
 # ----------------------------------------------------------------------------
-Emit-Stage -StageId 'runtime' -Status 'running' -Percent 40 -Message 'Hermes çekirdeği, Python ve Node çalışma ortamı kuruluyor (birkaç dakika sürebilir)...'
+Emit-Stage -StageId 'runtime' -Status 'running' -Percent 40 -Message 'Installing Hermes Core, Python, and Node runtimes (this may take a few minutes)...'
 
 $env:HERMES_HOME = $hermesHome
 $env:HERMES_RUNTIME_DIR = $toolsStore
 & (Join-Path $installDir 'setup-hermes.ps1') -RuntimeOnly | Out-Host
-if ($LASTEXITCODE -ne 0) { throw 'Hermes çalışma ortamı kurulumu başarısız oldu.' }
+if ($LASTEXITCODE -ne 0) { throw 'Hermes runtime environment setup failed.' }
 
-Emit-Stage -StageId 'runtime' -Status 'done' -Percent 66 -Message 'Python, uv, Node ve Hermes çekirdek bağımlılıkları doğrulandı.'
+Emit-Stage -StageId 'runtime' -Status 'done' -Percent 66 -Message 'Python, uv, Node, and Hermes Core dependencies verified.'
 
 # ----------------------------------------------------------------------------
 # Stage 4: Build Desktop Client (Notch, bbot, Studio Architect, Memory Studio)
 # ----------------------------------------------------------------------------
-Emit-Stage -StageId 'desktop' -Status 'running' -Percent 68 -Message 'Foolmoon masaüstü arayüzü derleniyor...'
+Emit-Stage -StageId 'desktop' -Status 'running' -Percent 68 -Message 'Building Foolmoon Desktop workspace...'
 
 foreach ($v in @('PYTHONPATH', 'PYTHONHOME', 'VIRTUAL_ENV', '__HERMES_ACTIVATED', '__HERMES_TEST_PYTHON')) {
     Remove-Item "Env:$v" -ErrorAction SilentlyContinue
@@ -169,28 +169,28 @@ try {
     pnpm install --frozen-lockfile | Out-Host
     if ($LASTEXITCODE -ne 0) {
         pnpm install | Out-Host
-        if ($LASTEXITCODE -ne 0) { throw 'Masaüstü Node paketleri kurulamadı.' }
+        if ($LASTEXITCODE -ne 0) { throw 'Failed to install desktop Node packages.' }
     }
     Set-Location (Join-Path $installDir 'apps\desktop')
     pnpm run build | Out-Host
-    if ($LASTEXITCODE -ne 0) { throw 'Foolmoon Desktop derlemesi başarısız oldu.' }
+    if ($LASTEXITCODE -ne 0) { throw 'Foolmoon Desktop build failed.' }
 } finally {
     Pop-Location
 }
 
-Emit-Stage -StageId 'desktop' -Status 'done' -Percent 84 -Message 'Foolmoon arayüzü başarıyla derlendi.'
+Emit-Stage -StageId 'desktop' -Status 'done' -Percent 84 -Message 'Foolmoon Desktop UI compiled.'
 
 # ----------------------------------------------------------------------------
 # Stage 5: Personalize Config, LM Studio, Memory (USER.md / MEMORY.md), MCPs, Tray
 # ----------------------------------------------------------------------------
-Emit-Stage -StageId 'personalize' -Status 'running' -Percent 87 -Message 'LM Studio bağlantısı, kişisel hafıza, beceriler ve MCP araçları yapılandırılıyor...'
+Emit-Stage -StageId 'personalize' -Status 'running' -Percent 87 -Message 'Configuring LM Studio endpoint, profile memory, skills, and MCP servers...'
 
 $venvPy = Join-Path $installDir '.venv\Scripts\python.exe'
 if (-not (Test-Path -LiteralPath $venvPy)) {
     $venvPy = Join-Path $installDir 'venv\Scripts\python.exe'
 }
 if (-not (Test-Path -LiteralPath $venvPy)) {
-    throw 'Kurulu Hermes Python sanal ortamı bulunamadı.'
+    throw 'Installed Hermes Python virtual environment not found.'
 }
 
 $pySetupScript = @'
@@ -241,7 +241,7 @@ elif model_mode == "custom_api":
         save_env_value("OPENAI_API_KEY", custom_key)
 
 display_cfg = cfg.get("display") if isinstance(cfg.get("display"), dict) else {}
-skin_choice = (payload.get("skin") or "night-city").strip()
+skin_choice = (payload.get("skin") or "foolmoon").strip()
 if skin_choice:
     display_cfg["skin"] = skin_choice
 style_choice = (payload.get("style") or "").strip()
@@ -268,24 +268,24 @@ from utils import atomic_write_text
 entries = []
 name = (payload.get("userName") or "").strip()
 address_as = (payload.get("addressAs") or "").strip()
-lang = (payload.get("language") or "Türkçe").strip()
+lang = (payload.get("language") or "English").strip()
 role = (payload.get("userRole") or "").strip()
 rules = (payload.get("userRules") or "").strip()
 
 if name or address_as:
     if name and address_as and name.lower() != address_as.lower():
-        entries.append(f"Kullanici adi: {name} | Hitap sekli: {address_as}")
+        entries.append(f"User name: {name} | Address user as: {address_as}")
     else:
-        entries.append(f"Kullanici hitap sekli: {address_as or name}")
+        entries.append(f"Address user as: {address_as or name}")
 if lang:
-    entries.append(f"Tercih edilen dil: {lang}")
+    entries.append(f"Preferred language: {lang}")
 if style_choice:
-    entries.append(f"Iletisim ve yanit tarzi: {style_choice}")
+    entries.append(f"Communication style: {style_choice}")
 if role:
-    entries.append(f"Calisma alani ve rol: {role}")
+    entries.append(f"Role / domain: {role}")
 if rules:
     for ln in [r.strip("-* \t") for r in rules.splitlines() if r.strip()]:
-        entries.append(f"Ozel kural: {ln}")
+        entries.append(f"Rule: {ln}")
 
 safe_entries = [e for e in entries if not _scan_memory_content(e)]
 store = load_on_disk_store()
@@ -304,7 +304,7 @@ $env:PYTHONPATH = $installDir
 $env:FM_SETUP_JSON = ($cfg | ConvertTo-Json -Compress)
 try {
     & $venvPy -c $pySetupScript | Out-Host
-    if ($LASTEXITCODE -ne 0) { throw 'Kişiselleştirme ve hafıza kurulumu başarısız oldu.' }
+    if ($LASTEXITCODE -ne 0) { throw 'Personalization and memory setup failed.' }
 } finally {
     Remove-Item Env:FM_SETUP_JSON -ErrorAction SilentlyContinue
 }
@@ -320,12 +320,12 @@ $trayPrefDir = Join-Path $env:APPDATA 'Hermes'
 New-Item -ItemType Directory -Force -Path $trayPrefDir | Out-Null
 [System.IO.File]::WriteAllText((Join-Path $trayPrefDir 'minimize-to-tray.json'), '{"enabled":true}', (New-Object System.Text.UTF8Encoding($false)))
 
-Emit-Stage -StageId 'personalize' -Status 'done' -Percent 94 -Message 'Model, hafıza (USER.md), MCP sunucuları ve sistem tepsisi hazır.'
+Emit-Stage -StageId 'personalize' -Status 'done' -Percent 94 -Message 'Model endpoint, USER.md memory, MCP servers, and system tray ready.'
 
 # ----------------------------------------------------------------------------
 # Stage 6: Desktop / Start Menu shortcuts + Windows Uninstall registration
 # ----------------------------------------------------------------------------
-Emit-Stage -StageId 'shortcuts' -Status 'running' -Percent 96 -Message 'Kısayollar ve kaldırma kaydı oluşturuluyor...'
+Emit-Stage -StageId 'shortcuts' -Status 'running' -Percent 96 -Message 'Creating shortcuts and Windows uninstall registration...'
 
 $launcherCmd = Join-Path $installDir 'Start-Foolmoon.cmd'
 $iconPath = Join-Path $installDir 'apps\desktop\assets\icon.ico'
@@ -360,7 +360,7 @@ param()
 Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('Desktop')) 'Foolmoon.lnk') -Force
 Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('Programs')) 'Foolmoon.lnk') -Force
 Remove-Item -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Foolmoon' -Recurse -Force
-Write-Host 'Foolmoon kisayollari kaldirildi. Verileriniz (%LOCALAPPDATA%\hermes) korundu.'
+Write-Host 'Foolmoon shortcuts removed. Your local workspace data (%LOCALAPPDATA%\hermes) was preserved.'
 "@
 [System.IO.File]::WriteAllText($uninstallPs1, $uninstallBody, (New-Object System.Text.UTF8Encoding($false)))
 
@@ -377,4 +377,4 @@ Set-ItemProperty -Path $regKey -Name 'UninstallString' -Value "powershell.exe -N
 Set-ItemProperty -Path $regKey -Name 'NoModify' -Value 1 -Type DWord
 Set-ItemProperty -Path $regKey -Name 'NoRepair' -Value 1 -Type DWord
 
-Emit-Stage -StageId 'shortcuts' -Status 'done' -Percent 100 -Message 'Kurulum eksiksiz tamamlandı! Foolmoon başlatılmaya hazır.'
+Emit-Stage -StageId 'shortcuts' -Status 'done' -Percent 100 -Message 'Installation complete. Foolmoon is ready to launch.'

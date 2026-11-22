@@ -218,50 +218,37 @@ function StickerSvg({ kind, accent }: { accent?: string; kind: BuiltinStickerKin
   const cyberColor = accent || '#22D3EE'
 
   switch (kind) {
-    case 'kitty-kawaii':
+    case 'velvet-cat':
       return (
-        <svg className="size-full drop-shadow-[0_10px_18px_rgba(225,29,98,0.22)]" viewBox="0 0 128 128">
-          {/* Crisp outline ears + cloud head */}
+        <svg className="size-full drop-shadow-[0_8px_16px_rgba(42,23,36,0.16)]" viewBox="0 0 128 128">
+          {/* Original geometric architectural studio cat & crescent emblem */}
+          <circle cx="64" cy="64" fill="#FFF8FA" r="52" stroke="#3B1825" strokeWidth="2.2" />
+          <circle cx="64" cy="64" fill="none" opacity="0.28" r="46" stroke={bowColor} strokeWidth="1.2" />
+          {/* Seated geometric feline silhouette */}
           <path
-            d="M27 52 L22 21 C21 16 27 14 31 18 L48 33 C58 30 70 30 80 33 L97 18 C101 14 107 16 106 21 L101 52 C110 61 112 78 102 90 C91 104 37 104 26 90 C16 78 18 61 27 52Z"
-            fill="#FFFFFF"
-            stroke="#2B1620"
-            strokeLinejoin="round"
-            strokeWidth="3.6"
+            d="M44 46 L42 29 L55 39 C60 37.5 68 37.5 73 39 L86 29 L84 46 C89 51 90 59 87 65 C84 71 78 75 77 82 L82 99 L46 99 L51 82 C50 75 44 71 41 65 C38 59 39 51 44 46Z"
+            fill="#3B1825"
           />
-          {/* Subtle rosy blush ovals */}
-          <ellipse cx="38" cy="74" fill="#FDA4AF" opacity="0.65" rx="7" ry="4" />
-          <ellipse cx="90" cy="74" fill="#FDA4AF" opacity="0.65" rx="7" ry="4" />
-          {/* Expressive glossy black eyes */}
-          <ellipse cx="44" cy="65" fill="#2B1620" rx="4.2" ry="5.6" />
-          <circle cx="42.5" cy="62.8" fill="#FFFFFF" r="1.4" />
-          <ellipse cx="84" cy="65" fill="#2B1620" rx="4.2" ry="5.6" />
-          <circle cx="82.5" cy="62.8" fill="#FFFFFF" r="1.4" />
-          {/* Iconic golden button nose */}
-          <ellipse cx="64" cy="73" fill="#FBBF24" rx="5.2" ry="3.7" stroke="#2B1620" strokeWidth="2.4" />
-          {/* Left & Right whisker trio */}
+          {/* Minimalist tail curve */}
           <path
-            d="M10 63 L27 65 M8 73 L26 73 M12 83 L28 80 M118 63 L101 65 M120 73 L102 73 M116 83 L100 80"
-            stroke="#2B1620"
+            d="M80 96 C95 96 101 84 96 74 C93 69 89 69 88 73 C90 79 86 88 78 88"
+            fill="none"
+            stroke="#3B1825"
             strokeLinecap="round"
-            strokeWidth="3"
+            strokeWidth="4.2"
           />
-          {/* Signature asymmetrical right-ear satin bow */}
-          <g transform="translate(88 33) rotate(18)">
-            <path
-              d="M-4 0 C-15 -13 -24 -8 -21 4 C-18 14 -6 10 -3 3 Z"
-              fill={bowColor}
-              stroke="#2B1620"
-              strokeWidth="2.8"
-            />
-            <path
-              d="M4 0 C15 -13 24 -8 21 4 C18 14 6 10 3 3 Z"
-              fill={bowColor}
-              stroke="#2B1620"
-              strokeWidth="2.8"
-            />
-            <circle cx="0" cy="1" fill="#FB7185" r="6" stroke="#2B1620" strokeWidth="2.8" />
-            <circle cx="-1.5" cy="-1" fill="#FFFFFF" opacity="0.85" r="1.8" />
+          {/* Tiny lunar crescent on brow */}
+          <path
+            d="M67 45 C63 45 60 48 60 52 C60 56 63 59 67 59 C64.5 57.6 63.5 55 63.5 52 C63.5 49 64.5 46.4 67 45Z"
+            fill="#FFF8FA"
+          />
+          {/* Calm slitted studio eyes */}
+          <ellipse cx="55" cy="58" fill="#FFF8FA" rx="2.6" ry="3.2" />
+          <ellipse cx="73" cy="58" fill="#FFF8FA" rx="2.6" ry="3.2" />
+          {/* Centered velvet collar ribbon */}
+          <g transform="translate(64 78)">
+            <path d="M-2 0 L-12 -6 L-12 6 Z M2 0 L12 -6 L12 6 Z" fill={bowColor} />
+            <circle cx="0" cy="0" fill="#FDA4AF" r="3.4" />
           </g>
         </svg>
       )

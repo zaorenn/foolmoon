@@ -101,13 +101,13 @@ const FX_PRESETS: Array<{ id: BbotFxPreset; label: string }> = [
 
 const UNIVERSE_QUICK_PICKS: Array<{ id: string; label: string }> = [
   { id: 'foolmoon-warm', label: 'Warm Cream' },
-  { id: 'hello-kitty', label: 'Hello Kitty' },
+  { id: 'velvet-ribbon', label: 'Velvet Ribbon' },
   { id: 'pixel-quest', label: 'Pixel Quest' },
-  { id: 'night-city', label: 'Cyberpunk' },
-  { id: 'macos-frost', label: 'Lunar Frost' }
+  { id: 'obsidian-circuit', label: 'Obsidian' },
+  { id: 'lunar-frost', label: 'Lunar Frost' }
 ]
 
-const NOTCH_ACCENT_SOFT = 'color-mix(in srgb, var(--dt-primary, #38bdf8) 70%, white)'
+const NOTCH_ACCENT_SOFT = '#E8E4DC'
 
 function ActivityKindIcon({ kind }: { kind: NotchActivityKind }) {
   switch (kind) {
@@ -148,9 +148,9 @@ function activeNotchPillStyle(active: boolean) {
   }
 
   return {
-    backgroundColor: 'color-mix(in srgb, var(--dt-primary, #38bdf8) 26%, transparent)',
-    borderColor: 'color-mix(in srgb, var(--dt-primary, #38bdf8) 72%, white)',
-    color: 'color-mix(in srgb, var(--dt-primary, #38bdf8) 65%, white)'
+    backgroundColor: 'rgba(255, 255, 255, 0.13)',
+    borderColor: 'rgba(255, 255, 255, 0.28)',
+    color: '#F4F1EA'
   }
 }
 
@@ -215,24 +215,23 @@ function renderSciFiSpectrum({
 
     const barStyle = isSpeaking
       ? {
-          backgroundImage: 'linear-gradient(180deg, #fb923c, #a78bfa, #38bdf8)',
-          boxShadow: '0 0 10px rgba(167,139,250,0.55)',
-          height: `${pct}%`
+          backgroundColor: '#F2EFE9',
+          height: `${pct}%`,
+          opacity: 0.92
         }
       : isListening || jarvisOn
         ? {
-            backgroundColor: isListening ? '#34d399' : NOTCH_ACCENT_SOFT,
-            boxShadow: isListening ? '0 0 10px rgba(52,211,153,0.72)' : '0 0 8px rgba(56,189,248,0.52)',
+            backgroundColor: isListening ? '#86B39E' : '#C8C5BE',
             height: `${pct}%`,
-            opacity: isListening ? 1 : 0.9
+            opacity: isListening ? 0.95 : 0.8
           }
         : {
-            backgroundImage: 'linear-gradient(180deg, #fb923c, #a78bfa, #38bdf8)',
+            backgroundColor: '#9CA3AF',
             height: `${pct}%`,
-            opacity: 0.65
+            opacity: 0.55
           }
 
-    return <span className="w-[2.5px] rounded-full transition-all duration-75" key={i} style={barStyle} />
+    return <span className="w-[2px] rounded-full transition-all duration-100" key={i} style={barStyle} />
   })
 }
 
@@ -252,38 +251,33 @@ function SciFiOrbitalHalo({
   }
 
   const ringStroke = listening
-    ? '#34d399'
+    ? '#86B39E'
     : active
-      ? 'var(--dt-primary, #a78bfa)'
-      : 'color-mix(in srgb, var(--dt-primary, #38bdf8) 72%, white)'
+      ? 'rgba(232, 228, 220, 0.52)'
+      : 'rgba(255, 255, 255, 0.2)'
 
   return (
     <span
       aria-hidden="true"
-      className="pointer-events-none absolute inset-[-5px] flex items-center justify-center"
+      className="pointer-events-none absolute inset-[-4px] flex items-center justify-center"
       data-testid="notch-scifi-halo"
     >
       <svg
-        className={active ? 'fm-scifi-orbit h-full w-full' : 'fm-scifi-orbit h-full w-full opacity-75'}
-        height={size + 10}
-        style={{
-          filter: listening
-            ? 'drop-shadow(0 0 6px rgba(52,211,153,0.6))'
-            : 'drop-shadow(0 0 5px color-mix(in srgb, var(--dt-primary, #a78bfa) 40%, transparent))'
-        }}
+        className={active ? 'fm-scifi-orbit h-full w-full' : 'fm-scifi-orbit h-full w-full opacity-70'}
+        height={size + 8}
         viewBox="0 0 48 48"
-        width={size + 10}
+        width={size + 8}
       >
         <circle
           cx="24"
           cy="24"
           fill="none"
-          opacity={active ? 0.92 : 0.65}
+          opacity={active ? 0.85 : 0.55}
           r="22"
           stroke={ringStroke}
-          strokeDasharray={notchStyle === 'scifi-hologram' ? '9 5 3 5' : '22 10'}
+          strokeDasharray={notchStyle === 'scifi-hologram' ? '8 6' : '24 10'}
           strokeLinecap="round"
-          strokeWidth="1.35"
+          strokeWidth="1.15"
         />
       </svg>
     </span>
@@ -761,8 +755,8 @@ export function NotchShell({ inAppPreview = false }: NotchShellProps) {
       className={
         activeSpotlight
           ? 'pointer-events-auto fixed z-50 flex flex-col items-center gap-2 transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]'
-          : `pointer-events-auto relative mt-1 flex shrink-0 items-center justify-center rounded-full bg-[#04060a]/[0.92] p-0.5 shadow-[0_10px_28px_rgba(0,0,0,0.68)] ring-1 ring-white/14 backdrop-blur-2xl transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-              isDynamicActive ? 'translate-y-[2px] scale-[1.04]' : ''
+          : `pointer-events-auto relative mt-1 flex shrink-0 items-center justify-center rounded-full bg-[#141518]/[0.96] p-0.5 shadow-[0_8px_20px_rgba(0,0,0,0.55)] ring-1 ring-white/[0.12] transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+              isDynamicActive ? 'translate-y-[1px] scale-[1.03]' : ''
             }`
       }
       data-side={resolvedBbotConfig.side}
@@ -784,11 +778,11 @@ export function NotchShell({ inAppPreview = false }: NotchShellProps) {
           : companionSpacingStyle
       }
     >
-      <div className="relative flex items-center justify-center rounded-full bg-[#04060a]/[0.94] p-0.5 shadow-[0_12px_32px_rgba(0,0,0,0.75)] ring-1 ring-white/20">
+      <div className="relative flex items-center justify-center rounded-full bg-[#141518] p-0.5 shadow-[0_8px_22px_rgba(0,0,0,0.58)] ring-1 ring-white/[0.16]">
         {activeSpotlight && (
           <span
             aria-hidden="true"
-            className="fm-scifi-pulse pointer-events-none absolute -inset-3 rounded-full border-2 border-sky-400/75 shadow-[0_0_24px_rgba(56,189,248,0.65)]"
+            className="pointer-events-none absolute -inset-2.5 rounded-full border border-[#E8E4DC]/65"
             data-testid="bbot-spotlight-beacon"
           />
         )}
@@ -827,19 +821,19 @@ export function NotchShell({ inAppPreview = false }: NotchShellProps) {
           status={effectiveStatus}
         />
         {jarvisOn && (
-          <span className="absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#0b0f17] bg-emerald-400 shadow-[0_0_8px_#34d399]" />
+          <span className="absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#141518] bg-[#86B39E]" />
         )}
         {pendingApproval && (
-          <span className="fm-scifi-pulse absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#0b0f17] bg-amber-400 shadow-[0_0_8px_#fbbf24]" />
+          <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#141518] bg-[#D4A55D]" />
         )}
       </div>
 
       {activeSpotlight && (
         <div
-          className="inline-flex items-center gap-1.5 rounded-full border border-white/18 bg-[#0b101b]/90 px-3 py-1 text-[11px] font-medium text-white shadow-xl backdrop-blur-2xl"
+          className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-[#16171A]/95 px-3 py-1 text-[11px] font-medium text-[#F2EFE9] shadow-lg"
           data-testid="bbot-spotlight-label"
         >
-          <span className="h-1.5 w-1.5 rounded-full bg-sky-400 shadow-[0_0_8px_#38bdf8]" />
+          <span className="h-1.5 w-1.5 rounded-full bg-[#E8E4DC]" />
           <span>{activeSpotlight.label}</span>
           <button
             aria-label="Return bbot to Notch"
@@ -860,7 +854,7 @@ export function NotchShell({ inAppPreview = false }: NotchShellProps) {
       ? pendingClarify.question
       : notch.activityDetail || simpleVoiceLabel(effectiveStatus, jarvisOn, notch.lastTranscript, notch.activityDetail)
 
-  const obsidianBg = `rgba(5, 6, 11, ${showFrostedTray ? resolvedNotchConfig.glassOpacity : 0.98})`
+  const obsidianBg = `rgba(17, 18, 20, ${showFrostedTray ? resolvedNotchConfig.glassOpacity : 0.98})`
 
   return (
     <div
@@ -915,44 +909,40 @@ export function NotchShell({ inAppPreview = false }: NotchShellProps) {
 
           {/* SINGLE SEAMLESS MORPHING NOTCH SHELL */}
           <div
-            className={`relative flex flex-col overflow-hidden rounded-t-none text-slate-100 backdrop-blur-2xl transition-[width,padding,border-radius,box-shadow,background-color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-              showFrostedTray ? `${trayWidthClass} px-3 pt-1 pb-2` : `${idleNotchWidth} px-2 py-0.5`
+            className={`relative flex flex-col overflow-hidden rounded-t-none text-[#EFECE6] backdrop-blur-xl transition-[width,padding,border-radius,box-shadow,background-color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+              showFrostedTray ? `${trayWidthClass} px-3.5 pt-1 pb-2.5` : `${idleNotchWidth} px-2.5 py-0.5`
             } ${
               dragOver
-                ? 'ring-1 ring-inset ring-sky-400/75'
+                ? 'ring-1 ring-inset ring-white/35'
                 : pendingApproval
-                  ? 'ring-1 ring-inset ring-amber-400/55'
-                  : 'ring-1 ring-inset ring-white/[0.08]'
+                  ? 'ring-1 ring-inset ring-[#D4A55D]/45'
+                  : 'ring-1 ring-inset ring-white/[0.09]'
             }`}
             data-testid="notch-unified-shell"
             style={{
               backgroundColor: obsidianBg,
-              borderBottomLeftRadius: `${showFrostedTray ? resolvedNotchConfig.cornerRadius : 16}px`,
-              borderBottomRightRadius: `${showFrostedTray ? resolvedNotchConfig.cornerRadius : 16}px`,
+              borderBottomLeftRadius: `${showFrostedTray ? resolvedNotchConfig.cornerRadius : 14}px`,
+              borderBottomRightRadius: `${showFrostedTray ? resolvedNotchConfig.cornerRadius : 14}px`,
               boxShadow:
                 resolvedNotchConfig.rimGlow > 0.02
-                  ? `0 14px 40px -8px rgba(0,0,0,0.82), 0 2px ${Math.round(18 * resolvedNotchConfig.rimGlow)}px -3px ${auroraColors.mid}${Math.round(
-                      resolvedNotchConfig.rimGlow * (isDynamicActive || hovered ? 140 : 65)
-                    )
-                      .toString(16)
-                      .padStart(2, '0')}`
-                  : '0 14px 36px -8px rgba(0,0,0,0.82)'
+                  ? `0 12px 30px -8px rgba(0,0,0,0.72), inset 0 -1px 0 rgba(255,255,255,${(0.06 + resolvedNotchConfig.rimGlow * 0.1).toFixed(2)})`
+                  : '0 12px 28px -8px rgba(0,0,0,0.7)'
             }}
           >
-            {/* Magnetic cursor-tracking Aurora specular sheen */}
+            {/* Subtle brushed ceramic specular highlight */}
             {resolvedNotchConfig.magneticGlow && (hovered || isDynamicActive) && (
               <div
                 aria-hidden="true"
                 className="pointer-events-none absolute inset-0 transition-opacity duration-300"
                 data-testid="notch-magnetic-sheen"
                 style={{
-                  background: `radial-gradient(140px circle at ${hoverX}% 0%, ${auroraColors.mid}26, transparent 70%), radial-gradient(120px circle at ${hoverX}% 100%, ${auroraColors.start}1c, transparent 72%)`,
-                  opacity: hovered ? 1 : 0.72
+                  background: `radial-gradient(150px circle at ${hoverX}% 0%, rgba(255,255,255,0.055), transparent 72%)`,
+                  opacity: hovered ? 1 : 0.65
                 }}
               />
             )}
 
-            {/* Top Aurora Bar inside the single unified Notch body */}
+            {/* Top Matte Telemetry Bar inside the single unified Notch body */}
             <div className={`flex items-center justify-between gap-1.5 transition-[height] duration-200 ${showFrostedTray ? 'h-[22px]' : 'h-[20px]'}`}>
               <div
                 className="flex min-w-0 flex-1 cursor-pointer items-center justify-center px-1"
@@ -984,11 +974,11 @@ export function NotchShell({ inAppPreview = false }: NotchShellProps) {
                 }`}
               >
                 <button
-                  aria-label={jarvisOn ? 'Disable Jarvis hands-free' : 'Enable Jarvis hands-free'}
+                  aria-label={jarvisOn ? 'Disable hands-free voice' : 'Enable hands-free voice'}
                   className={`inline-flex h-5 w-5 items-center justify-center rounded-full transition ${
                     jarvisOn
-                      ? 'bg-emerald-500/25 text-emerald-300'
-                      : 'text-slate-400 hover:bg-white/10 hover:text-white'
+                      ? 'bg-white/14 text-[#86B39E]'
+                      : 'text-neutral-400 hover:bg-white/10 hover:text-white'
                   }`}
                   onClick={() => toggleJarvisHandsFree()}
                   type="button"
@@ -997,7 +987,7 @@ export function NotchShell({ inAppPreview = false }: NotchShellProps) {
                 </button>
                 <button
                   aria-label={expanded ? 'Collapse notch drawer' : 'Expand notch drawer'}
-                  className="inline-flex h-5 w-5 items-center justify-center rounded-full text-slate-400 transition hover:bg-white/10 hover:text-white"
+                  className="inline-flex h-5 w-5 items-center justify-center rounded-full text-neutral-400 transition hover:bg-white/10 hover:text-white"
                   onClick={() => {
                     const next = !expanded
                     setExpanded(next)
@@ -1016,41 +1006,38 @@ export function NotchShell({ inAppPreview = false }: NotchShellProps) {
             {/* Hover Micro-Peek hint when cursor touches the collapsed Notch */}
             {isHoverPeeking && !showFrostedTray && (
               <div
-                className="mt-1 flex items-center justify-between gap-2 border-t border-white/[0.06] pt-1 text-[10px] text-slate-300/90"
+                className="mt-1 flex items-center justify-between gap-2 border-t border-white/[0.06] pt-1 text-[10px] text-neutral-300/90"
                 data-testid="notch-hover-peek"
               >
                 <span className="inline-flex min-w-0 items-center gap-1.5 truncate">
                   <span
                     className="h-1.5 w-1.5 shrink-0 rounded-full"
-                    style={{
-                      backgroundColor: auroraColors.mid,
-                      boxShadow: `0 0 8px ${auroraColors.mid}`
-                    }}
+                    style={{ backgroundColor: auroraColors.mid }}
                   />
                   <span className="truncate font-medium text-white/90">{notch.model || 'Foolmoon Ready'}</span>
                 </span>
-                <span className="shrink-0 text-[9px] text-slate-400">Click or drop files</span>
+                <span className="shrink-0 text-[9px] text-neutral-400">Click or drop files</span>
               </div>
             )}
 
-            {/* Unified Inner Content Chamber (Zero seam, zero mismatched box!) */}
+            {/* Unified Inner Content Chamber */}
             {showFrostedTray && (
               <div className="mt-1.5 flex flex-col border-t border-white/[0.08] pt-2" data-testid="notch-glass-tray">
-                {/* Instant AirDrop-style file drop banner */}
+                {/* Instant file drop banner */}
                 {dragOver && (
                   <div
-                    className="mb-2 flex items-center justify-center gap-2 rounded-xl border border-dashed border-sky-400/70 bg-sky-500/15 px-3 py-2 text-[11px] font-medium text-sky-200"
+                    className="mb-2 flex items-center justify-center gap-2 rounded-xl border border-dashed border-white/25 bg-white/[0.05] px-3 py-2 text-[11px] font-medium text-[#F2EFE9]"
                     data-testid="notch-drop-banner"
                   >
-                    <FolderOpen className="h-3.5 w-3.5 text-sky-300" />
-                    <span>Dosyayı buraya bırak — Foolmoon hemen analiz etsin</span>
+                    <FolderOpen className="h-3.5 w-3.5 text-neutral-300" />
+                    <span>Drop files here to analyze immediately</span>
                   </div>
                 )}
-                {/* Indeterminate dynamic aurora progress shimmer along bottom edge while model works */}
+                {/* Clean horizontal hairline progress sweep while model works */}
                 {(isBusy || isSpeaking) && (
                   <div
                     aria-hidden="true"
-                    className="pointer-events-none absolute inset-x-4 bottom-0 h-[1.5px] overflow-hidden rounded-full opacity-90"
+                    className="pointer-events-none absolute inset-x-4 bottom-0 h-[1px] overflow-hidden rounded-full opacity-80"
                     data-testid="notch-activity-shimmer"
                   >
                     <div
@@ -1144,35 +1131,35 @@ export function NotchShell({ inAppPreview = false }: NotchShellProps) {
               {/* CONTEXT PRIORITY 1: AGENTIC TOOL APPROVAL WITH VOICE CONFIRMATION */}
               {expanded && pendingApproval && (
                 <div
-                  className="mt-2.5 flex flex-col gap-2 border-t border-amber-400/25 pt-2.5"
+                  className="mt-2.5 flex flex-col gap-2 border-t border-white/10 pt-2.5"
                   data-testid="notch-approval-card"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
-                    <span className="inline-flex items-center gap-1.5 font-semibold text-amber-200">
-                      <span className="fm-scifi-pulse h-2 w-2 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24]" />
-                      Agentic İzin · {pendingApproval.description}
+                    <span className="inline-flex items-center gap-1.5 font-medium text-[#E8D5B0]">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#D4A55D]" />
+                      Permission Required · {pendingApproval.description}
                     </span>
                     <button
                       aria-label="Voice approve or deny"
-                      className="inline-flex items-center gap-1 rounded-full border border-emerald-400/45 bg-emerald-500/18 px-2.5 py-0.5 text-[10px] font-medium text-emerald-200 hover:bg-emerald-500/30"
+                      className="inline-flex items-center gap-1 rounded-full border border-white/12 bg-white/[0.06] px-2.5 py-0.5 text-[10px] font-medium text-[#C5D6CC] hover:bg-white/[0.11]"
                       data-testid="notch-approve-voice"
                       onClick={() => sendNotchCommand({ type: 'ptt-trigger' })}
                       type="button"
                     >
-                      <Mic className="h-3 w-3" />
-                      Sesle Onayla (&ldquo;Onayla&rdquo; / &ldquo;Reddet&rdquo;)
+                      <Mic className="h-3 w-3 text-[#86B39E]" />
+                      Voice Confirm (&ldquo;Approve&rdquo; / &ldquo;Deny&rdquo;)
                     </button>
                   </div>
 
                   {pendingApproval.command && (
-                    <pre className="max-h-16 overflow-x-auto rounded-lg border border-white/12 bg-black/45 px-2.5 py-1.5 font-mono text-[11px] text-amber-100">
+                    <pre className="max-h-16 overflow-x-auto rounded-lg border border-white/10 bg-[#0B0C0E] px-2.5 py-1.5 font-mono text-[11px] text-[#E6E2D8]">
                       {pendingApproval.command}
                     </pre>
                   )}
 
                   <div className="flex flex-wrap items-center justify-end gap-1.5 text-[11px]">
                     <button
-                      className="rounded-full border border-rose-500/45 bg-rose-500/20 px-2.5 py-0.5 font-medium text-rose-200 transition hover:bg-rose-500/35"
+                      className="rounded-full border border-[#8F4A4A]/45 bg-[#2A191A] px-2.5 py-0.5 font-medium text-[#E29E9C] transition hover:bg-[#3A2223]"
                       data-testid="notch-approve-deny"
                       onClick={() =>
                         sendNotchCommand({
@@ -1185,10 +1172,10 @@ export function NotchShell({ inAppPreview = false }: NotchShellProps) {
                       }
                       type="button"
                     >
-                      Reddet
+                      Deny
                     </button>
                     <button
-                      className="rounded-full border border-white/15 bg-white/8 px-2.5 py-0.5 font-medium text-slate-200 transition hover:bg-white/15"
+                      className="rounded-full border border-white/12 bg-[#1D1E22] px-2.5 py-0.5 font-medium text-neutral-200 transition hover:bg-white/12"
                       data-testid="notch-approve-session"
                       onClick={() =>
                         sendNotchCommand({
@@ -1201,11 +1188,11 @@ export function NotchShell({ inAppPreview = false }: NotchShellProps) {
                       }
                       type="button"
                     >
-                      Oturum Boyunca
+                      Allow Session
                     </button>
                     {pendingApproval.allowPermanent !== false && (
                       <button
-                        className="rounded-full border border-white/15 bg-white/8 px-2.5 py-0.5 font-medium text-slate-200 transition hover:bg-white/15"
+                        className="rounded-full border border-white/12 bg-[#1D1E22] px-2.5 py-0.5 font-medium text-neutral-200 transition hover:bg-white/12"
                         data-testid="notch-approve-always"
                         onClick={() =>
                           sendNotchCommand({
@@ -1218,11 +1205,11 @@ export function NotchShell({ inAppPreview = false }: NotchShellProps) {
                         }
                         type="button"
                       >
-                        Her Zaman
+                        Always Allow
                       </button>
                     )}
                     <button
-                      className="rounded-full px-3 py-0.5 font-semibold shadow-sm transition hover:brightness-110"
+                      className="rounded-full px-3 py-0.5 font-semibold transition hover:opacity-90"
                       data-testid="notch-approve-once"
                       onClick={() =>
                         sendNotchCommand({
@@ -1234,32 +1221,32 @@ export function NotchShell({ inAppPreview = false }: NotchShellProps) {
                         })
                       }
                       style={{
-                        backgroundColor: '#34d399',
-                        color: '#022c22'
+                        backgroundColor: '#F2EFE9',
+                        color: '#111214'
                       }}
                       type="button"
                     >
-                      Onayla
+                      Approve
                     </button>
                   </div>
                 </div>
               )}
 
-              {/* CONTEXT PRIORITY 2: AI REQUESTING USER INPUT + AUTO-OPENED FILE SHELF */}
+              {/* CONTEXT PRIORITY 2: CLARIFICATION INPUT + INLINE FILE SHELF */}
               {expanded && !pendingApproval && pendingClarify && (
                 <div
-                  className="mt-2.5 flex max-h-[195px] flex-col gap-2 overflow-y-auto border-t border-white/12 pt-2 pr-1"
+                  className="mt-2.5 flex max-h-[195px] flex-col gap-2 overflow-y-auto border-t border-white/10 pt-2 pr-1"
                   data-testid="notch-clarify-card"
                 >
                   <div className="flex items-start justify-between gap-2 text-[11px]">
                     <div className="min-w-0 flex-1">
-                      <div className="text-[10px] font-semibold tracking-wider text-sky-300 uppercase">
-                        Yapay Zeka Girdi İstiyor ({pendingClarify.questionIndex}/{pendingClarify.totalQuestions})
+                      <div className="text-[10px] font-semibold tracking-wider text-neutral-400 uppercase">
+                        Input Required ({pendingClarify.questionIndex}/{pendingClarify.totalQuestions})
                       </div>
-                      <div className="mt-0.5 text-xs font-medium text-white">{pendingClarify.question}</div>
+                      <div className="mt-0.5 text-xs font-medium text-[#F2EFE9]">{pendingClarify.question}</div>
                     </div>
                     <button
-                      className="shrink-0 rounded-full border border-white/15 bg-white/8 px-2 py-0.5 text-[10px] text-slate-300 hover:bg-white/15 hover:text-white"
+                      className="shrink-0 rounded-full border border-white/12 bg-[#1D1E22] px-2 py-0.5 text-[10px] text-neutral-300 hover:bg-white/12 hover:text-white"
                       onClick={() =>
                         sendNotchCommand({
                           requestId: pendingClarify.requestId,
@@ -1269,7 +1256,7 @@ export function NotchShell({ inAppPreview = false }: NotchShellProps) {
                       }
                       type="button"
                     >
-                      Atla
+                      Skip
                     </button>
                   </div>
 
@@ -1277,7 +1264,7 @@ export function NotchShell({ inAppPreview = false }: NotchShellProps) {
                     <div className="flex flex-wrap gap-1.5">
                       {pendingClarify.choices.map(choice => (
                         <button
-                          className="rounded-full border border-white/18 bg-white/8 px-2.5 py-0.5 text-[11px] font-medium text-slate-100 transition hover:border-sky-400 hover:bg-white/16"
+                          className="rounded-full border border-white/14 bg-[#1D1E22] px-2.5 py-0.5 text-[11px] font-medium text-neutral-200 transition hover:border-white/30 hover:bg-white/12"
                           data-testid="notch-clarify-choice"
                           key={choice}
                           onClick={() => submitClarifyReply(choice)}
@@ -1297,20 +1284,20 @@ export function NotchShell({ inAppPreview = false }: NotchShellProps) {
                     }}
                   >
                     <input
-                      aria-label="Reply to AI question"
-                      className="h-7 flex-1 rounded-full border border-white/16 bg-white/8 px-3 text-xs text-white placeholder:text-slate-400 focus:border-sky-400 focus:outline-none"
+                      aria-label="Reply to agent question"
+                      className="h-7 flex-1 rounded-full border border-white/12 bg-[#1A1C1F] px-3 text-xs text-white placeholder:text-neutral-500 focus:border-white/30 focus:outline-none"
                       onChange={e => setClarifyAnswer(e.target.value)}
                       onFocus={() => {
                         if (!inAppPreview) {
                           window.hermesDesktop?.notch?.setFocusable?.(true)
                         }
                       }}
-                      placeholder="Yazılı yanıt yazın, dosya bırakın veya sesle cevaplayın..."
+                      placeholder="Type a reply, drop files, or answer by voice..."
                       value={clarifyAnswer}
                     />
                     <button
                       aria-label="Answer by voice"
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/16 bg-white/8 text-slate-200 hover:bg-white/15"
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/12 bg-[#1D1E22] text-neutral-300 hover:bg-white/12"
                       onClick={() => sendNotchCommand({ type: 'ptt-trigger' })}
                       type="button"
                     >
@@ -1318,11 +1305,11 @@ export function NotchShell({ inAppPreview = false }: NotchShellProps) {
                     </button>
                     <button
                       aria-label="Send clarify answer"
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-full shadow-sm transition hover:brightness-110 disabled:opacity-40"
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-full transition hover:opacity-90 disabled:opacity-40"
                       disabled={!clarifyAnswer.trim()}
                       style={{
-                        backgroundColor: 'var(--dt-primary, #38bdf8)',
-                        color: 'var(--dt-primary-foreground, #020617)'
+                        backgroundColor: '#F2EFE9',
+                        color: '#111214'
                       }}
                       type="submit"
                     >
@@ -1331,33 +1318,33 @@ export function NotchShell({ inAppPreview = false }: NotchShellProps) {
                   </form>
 
                   <div
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-white/20 bg-white/[0.04] px-2.5 py-1.5 text-[10.5px]"
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-white/15 bg-white/[0.03] px-2.5 py-1.5 text-[10.5px]"
                     data-testid="notch-context-shelf"
                   >
-                    <span className="inline-flex items-center gap-1.5 text-slate-300">
-                      <FolderOpen className="h-3 w-3 text-sky-300" />
-                      {shelf.length > 0 ? `${shelf.length} dosya hazır` : 'Dosya / görsel gerekiyorsa buraya bırak'}
+                    <span className="inline-flex items-center gap-1.5 text-neutral-300">
+                      <FolderOpen className="h-3 w-3 text-neutral-400" />
+                      {shelf.length > 0 ? `${shelf.length} file(s) staged` : 'Drop files or images here to attach'}
                     </span>
                     <div className="flex items-center gap-1.5">
                       <button
-                        className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/8 px-2 py-0.5 text-slate-100 hover:bg-white/15"
+                        className="inline-flex items-center gap-1 rounded-full border border-white/12 bg-[#1D1E22] px-2 py-0.5 text-neutral-200 hover:bg-white/12"
                         onClick={() => shelfFileRef.current?.click()}
                         type="button"
                       >
                         <FilePlus2 className="h-3 w-3" />
-                        Dosya Seç
+                        Attach File
                       </button>
                       {shelf.length > 0 && (
                         <button
                           className="rounded-full px-2.5 py-0.5 font-medium"
                           onClick={() => sendShelfToChat(true)}
                           style={{
-                            backgroundColor: 'var(--dt-primary, #38bdf8)',
-                            color: 'var(--dt-primary-foreground, #020617)'
+                            backgroundColor: '#F2EFE9',
+                            color: '#111214'
                           }}
                           type="button"
                         >
-                          Gönder
+                          Send
                         </button>
                       )}
                     </div>
@@ -1553,12 +1540,12 @@ export function NotchShell({ inAppPreview = false }: NotchShellProps) {
                                 className="rounded-full px-2.5 py-0.5 font-medium"
                                 onClick={() => sendShelfToChat(true)}
                                 style={{
-                                  backgroundColor: 'var(--dt-primary, #38bdf8)',
-                                  color: 'var(--dt-primary-foreground, #020617)'
+                                  backgroundColor: '#F2EFE9',
+                                  color: '#111214'
                                 }}
                                 type="button"
                               >
-                                Send to AI
+                                Send to Agent
                               </button>
                             </div>
                           </>
@@ -1638,11 +1625,11 @@ export function NotchShell({ inAppPreview = false }: NotchShellProps) {
                           </button>
                           <button
                             aria-label="Send prompt to Foolmoon"
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-full shadow-sm transition hover:brightness-110 disabled:opacity-40"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-full transition hover:opacity-90 disabled:opacity-40"
                             disabled={!prompt.trim()}
                             style={{
-                              backgroundColor: 'var(--dt-primary, #38bdf8)',
-                              color: 'var(--dt-primary-foreground, #020617)'
+                              backgroundColor: '#F2EFE9',
+                              color: '#111214'
                             }}
                             type="submit"
                           >
@@ -1730,11 +1717,11 @@ export function NotchShell({ inAppPreview = false }: NotchShellProps) {
                           />
                           <button
                             aria-label="Add notch note"
-                            className="inline-flex h-7 items-center gap-1 rounded-full px-2.5 font-medium transition hover:brightness-110 disabled:opacity-40"
+                            className="inline-flex h-7 items-center gap-1 rounded-full px-2.5 font-medium transition hover:opacity-90 disabled:opacity-40"
                             disabled={!noteDraft.trim()}
                             style={{
-                              backgroundColor: 'var(--dt-primary, #38bdf8)',
-                              color: 'var(--dt-primary-foreground, #020617)'
+                              backgroundColor: '#F2EFE9',
+                              color: '#111214'
                             }}
                             type="submit"
                           >

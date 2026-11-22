@@ -1,5 +1,3 @@
-import { useId } from 'react'
-
 import type { NotchActivityKind, NotchAuroraPalette } from '@/store/notch'
 
 export interface AuroraColors {
@@ -8,74 +6,42 @@ export interface AuroraColors {
   start: string
 }
 
+/**
+ * Resolves restrained matte architectural tones for the hardware Notch
+ * equalizer and status indicators (no neon saturation or glow bleed).
+ */
 export function resolveAuroraColors(palette: NotchAuroraPalette, activityKind: NotchActivityKind): AuroraColors {
   if (activityKind === 'approval') {
-    return { end: '#fb7185', mid: '#fbbf24', start: '#f59e0b' }
+    return { end: '#8F6A36', mid: '#D4A55D', start: '#A67C3E' }
   }
 
   if (activityKind === 'listening') {
-    return { end: '#38bdf8', mid: '#34d399', start: '#10b981' }
+    return { end: '#496E5D', mid: '#86B39E', start: '#57826E' }
   }
 
   if (activityKind === 'terminal') {
-    return { end: '#38bdf8', mid: '#34d399', start: '#fbbf24' }
-  }
-
-  if (activityKind === 'search') {
-    return { end: '#818cf8', mid: '#38bdf8', start: '#22d3ee' }
-  }
-
-  if (activityKind === 'code') {
-    return { end: '#38bdf8', mid: '#a78bfa', start: '#f472b6' }
+    return { end: '#6E747E', mid: '#D8DCE3', start: '#8E949E' }
   }
 
   switch (palette) {
-    case 'emerald-pulse':
-      return { end: '#818cf8', mid: '#22d3ee', start: '#34d399' }
+    case 'warm-terracotta':
+      return { end: '#7A4737', mid: '#D28B72', start: '#A35C44' }
 
-    case 'cyber-violet':
-      return { end: '#38bdf8', mid: '#a855f7', start: '#f472b6' }
+    case 'sage-slate':
+      return { end: '#466457', mid: '#92B7A6', start: '#5A7F6E' }
 
-    case 'monochrome-frost':
-      return { end: '#94a3b8', mid: '#f8fafc', start: '#cbd5e1' }
+    case 'monochrome-ink':
+      return { end: '#5A5E66', mid: '#F2EFE9', start: '#787C85' }
 
     default:
-      // Aurora Sunset: warm peach -> iridescent violet -> cool ice blue
-      return { end: '#38bdf8', mid: '#a78bfa', start: '#fb923c' }
+      // Matte Graphite: brushed titanium & warm bone ivory
+      return { end: '#666B75', mid: '#E8E4DC', start: '#8C929C' }
   }
 }
 
-function buildAuroraRibbonPath(width: number, cy: number, amp: number, phase: number, freq: number): string {
-  const steps = 20
-  const dx = width / steps
-  const upper: Array<[number, number]> = []
-  const lower: Array<[number, number]> = []
-
-  for (let i = 0; i <= steps; i += 1) {
-    const t = i / steps
-    const envelope = Math.sin(t * Math.PI) ** 1.65
-
-    const wave =
-      Math.sin(t * Math.PI * freq + phase) * 0.62 +
-      Math.sin(t * Math.PI * (freq * 1.8) - phase * 1.35) * 0.38
-
-    const halfThickness = Math.max(0.55, envelope * amp * (0.48 + Math.abs(wave) * 0.68))
-    const offset = envelope * wave * amp * 0.28
-    const x = i * dx
-
-    upper.push([x, cy + offset - halfThickness])
-    lower.push([x, cy + offset + halfThickness])
-  }
-
-  const head = upper.map(([x, y], idx) => `${idx === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ')
-
-  const tail = lower
-    .reverse()
-    .map(([x, y]) => `L${x.toFixed(1)},${y.toFixed(1)}`)
-    .join(' ')
-
-  return `${head} ${tail} Z`
-}
+const TELEMETRY_WEIGHTS = [
+  0.24, 0.34, 0.48, 0.62, 0.78, 0.9, 0.96, 0.88, 1.0, 0.88, 0.96, 0.9, 0.78, 0.62, 0.48, 0.34, 0.24
+]
 
 export function AuroraWaveVisualizer({
   activityKind,
@@ -94,59 +60,63 @@ export function AuroraWaveVisualizer({
   phase: number
   signalLevel: number
 }) {
-  const uid = useId().replace(/[^a-zA-Z0-9_-]/g, '')
   const colors = resolveAuroraColors(palette, activityKind)
   const scale = intensity === 'minimal' ? 0.52 : intensity === 'subtle' ? 0.78 : 1.0
   const energized = isActive || hovered
 
-  const baseAmp = isActive
-    ? Math.min(13.5, (5.8 + signalLevel * 9.5 + (activityKind === 'thinking' ? 1.8 : 2.2)) * scale)
-    : hovered
-      ? 5.8 * scale
-      : 2.8 * scale
-
-  const primaryPath = buildAuroraRibbonPath(220, 14, baseAmp, phase * 0.42, energized ? 3.2 : 2.1)
-  const secondaryPath = buildAuroraRibbonPath(220, 14, baseAmp * 0.72, -phase * 0.56 + 1.2, energized ? 4.4 : 2.6)
-  const corePath = buildAuroraRibbonPath(220, 14, baseAmp * 0.34, phase * 0.68 + 0.6, 2.8)
+  const count = TELEMETRY_WEIGHTS.length
+  const totalWidth = 220
+  const cy = 14
+  const stepX = totalWidth / (count + 1)
 
   return (
     <svg
       aria-hidden="true"
-      className="h-[24px] w-full overflow-visible"
+      className="h-[22px] w-full overflow-visible"
       data-activity={activityKind}
       data-testid="notch-aurora-wave"
-      preserveAspectRatio="none"
+      preserveAspectRatio="xMidYMid meet"
       viewBox="0 0 220 28"
     >
-      <defs>
-        <linearGradient id={`aurora-grad-${uid}`} x1="0%" x2="100%" y1="0%" y2="0%">
-          <stop offset="0%" stopColor={colors.start} stopOpacity="0" />
-          <stop offset="18%" stopColor={colors.start} stopOpacity="0.92" />
-          <stop offset="50%" stopColor={colors.mid} stopOpacity="0.98" />
-          <stop offset="82%" stopColor={colors.end} stopOpacity="0.92" />
-          <stop offset="100%" stopColor={colors.end} stopOpacity="0" />
-        </linearGradient>
-        <linearGradient id={`aurora-core-${uid}`} x1="0%" x2="100%" y1="0%" y2="0%">
-          <stop offset="0%" stopColor="#ffffff" stopOpacity="0" />
-          <stop offset="28%" stopColor={colors.start} stopOpacity="0.7" />
-          <stop offset="50%" stopColor="#ffffff" stopOpacity="0.92" />
-          <stop offset="72%" stopColor={colors.end} stopOpacity="0.7" />
-          <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
-        </linearGradient>
-        <filter height="220%" id={`aurora-glow-${uid}`} width="130%" x="-15%" y="-60%">
-          <feGaussianBlur stdDeviation={isActive ? '3.2' : '2.0'} />
-        </filter>
-      </defs>
-
-      <path
-        d={primaryPath}
-        fill={`url(#aurora-grad-${uid})`}
-        filter={`url(#aurora-glow-${uid})`}
-        opacity={isActive ? 0.72 : 0.42}
+      {/* Precision hairline axis */}
+      <line
+        stroke="rgba(255,255,255,0.12)"
+        strokeLinecap="round"
+        strokeWidth="1"
+        x1="12"
+        x2={totalWidth - 12}
+        y1={cy}
+        y2={cy}
       />
-      <path d={secondaryPath} fill={`url(#aurora-grad-${uid})`} opacity={isActive ? 0.56 : 0.34} />
-      <path d={primaryPath} fill={`url(#aurora-grad-${uid})`} opacity={isActive ? 0.88 : 0.62} />
-      <path d={corePath} fill={`url(#aurora-core-${uid})`} opacity={isActive ? 0.85 : 0.55} />
+
+      {TELEMETRY_WEIGHTS.map((weight, idx) => {
+        const wave = Math.sin(phase * 0.45 + idx * 0.72) * 0.5 + 0.5
+
+        const rawHeight = energized
+          ? Math.max(4, Math.min(20, (5.5 + signalLevel * 12 + wave * 6.5) * weight * scale + 2.5))
+          : Math.max(3, Math.min(9, (3.2 + wave * 2.2) * weight * scale + 1.5))
+
+        const x = Number(((idx + 1) * stepX - 1).toFixed(1))
+        const y = Number((cy - rawHeight / 2).toFixed(1))
+        const h = Number(rawHeight.toFixed(1))
+
+        const distFromCenter = Math.abs(idx - (count - 1) / 2) / ((count - 1) / 2)
+        const fill = distFromCenter < 0.36 ? colors.mid : distFromCenter < 0.72 ? colors.start : colors.end
+        const opacity = energized ? 0.92 - distFromCenter * 0.22 : 0.46 - distFromCenter * 0.14
+
+        return (
+          <rect
+            fill={fill}
+            height={h}
+            key={idx}
+            opacity={Number(opacity.toFixed(2))}
+            rx="1"
+            width="2.2"
+            x={x}
+            y={y}
+          />
+        )
+      })}
     </svg>
   )
 }

@@ -22,6 +22,7 @@ vi.mock('@bwnd/bbot/fx', () => ({
   })
 }))
 
+import { DEFAULT_STUDIO_APPEARANCE, updateStudioAppearance } from '@/store/appearance-studio'
 import { $interfaceMode } from '@/store/interface-mode'
 import {
   $bbotConfig,
@@ -60,10 +61,11 @@ class MockResizeObserver {
   unobserve = vi.fn()
 }
 
-describe('Jarvis Notch, Live Lyrics & Dual-Mode Controls', () => {
+describe('Hardware Notch, Live Lyrics & Dual-Mode Controls', () => {
   beforeEach(() => {
     vi.stubGlobal('ResizeObserver', MockResizeObserver)
     window.localStorage.clear()
+    updateStudioAppearance(DEFAULT_STUDIO_APPEARANCE)
     $jarvisHandsFree.set(false)
     $notchOpen.set(false)
     $notchPreviewOpen.set(false)
@@ -116,34 +118,34 @@ describe('Jarvis Notch, Live Lyrics & Dual-Mode Controls', () => {
     vi.unstubAllGlobals()
   })
 
-  it('renders live karaoke lyrics words when speaking', () => {
+  it('renders live captions words when speaking', () => {
     render(
       <LiveLyrics
         isSpeaking
-        sentence="Hermes Jarvis online"
+        sentence="Hermes Studio online"
         sentenceStartTimeMs={performance.now() - 50}
         words={[
           { endMs: 400, startMs: 0, word: 'Hermes' },
-          { endMs: 900, startMs: 400, word: 'Jarvis' },
+          { endMs: 900, startMs: 400, word: 'Studio' },
           { endMs: 1400, startMs: 900, word: 'online' }
         ]}
       />
     )
 
     expect(screen.getByText('Hermes')).toBeTruthy()
-    expect(screen.getByText('Jarvis')).toBeTruthy()
+    expect(screen.getByText('Studio')).toBeTruthy()
     expect(screen.getByText('online')).toBeTruthy()
   })
 
-  it('expands notch drawer and dispatches real submit, clone switch, mode switch, and jarvis toggle commands', () => {
+  it('expands notch drawer and dispatches real submit, clone switch, mode switch, and hands-free toggle commands', () => {
     const received: unknown[] = []
     const unsub = subscribeNotchCommands(cmd => received.push(cmd))
 
     try {
       render(<NotchShell inAppPreview />)
 
-      // Toggle Jarvis Hands-Free
-      fireEvent.click(screen.getByLabelText('Enable Jarvis hands-free'))
+      // Toggle Hands-Free Voice
+      fireEvent.click(screen.getByLabelText('Enable hands-free voice'))
       expect($jarvisHandsFree.get()).toBe(true)
 
       // Expand quick drawer (Jarvis tab)
@@ -230,12 +232,12 @@ describe('Jarvis Notch, Live Lyrics & Dual-Mode Controls', () => {
       })
     })
     const { rerender } = render(<SimpleJarvisBar />)
-    expect(screen.queryByLabelText('Toggle Jarvis Hands-Free')).toBeNull()
+    expect(screen.queryByLabelText('Toggle Hands-Free Voice')).toBeNull()
 
-    // Simple Mode: sleek macOS + Claude floating voice/lyrics capsule with sci-fi waveform
+    // Simple Mode: floating voice/captions bar with level meter
     $interfaceMode.set('simple')
     rerender(<SimpleJarvisBar />)
-    expect(screen.getByLabelText('Toggle Jarvis Hands-Free')).toBeTruthy()
+    expect(screen.getByLabelText('Toggle Hands-Free Voice')).toBeTruthy()
     expect(screen.getByLabelText('Toggle Top Notch')).toBeTruthy()
     expect(screen.getByTestId('simple-bar-waveform')).toBeTruthy()
     expect(screen.queryByTestId('simple-bar-vram')).toBeNull()
@@ -263,19 +265,23 @@ describe('Jarvis Notch, Live Lyrics & Dual-Mode Controls', () => {
     $notchNotes.set([])
   })
 
-  it('renders Sci-Fi Halo, waveform, and minimal Voice & Live Lyrics Stage in Simple Notch mode', () => {
+  it('renders matte minimal Simple Notch by default and hairline Halo ring when enabled', () => {
     $notchState.set({ ...$notchState.get(), interfaceMode: 'simple' })
     const received: unknown[] = []
     const unsub = subscribeNotchCommands(cmd => received.push(cmd))
 
     try {
-      render(<NotchShell inAppPreview />)
+      const { rerender } = render(<NotchShell inAppPreview />)
       expect(screen.getByTestId('notch-scifi-waveform')).toBeTruthy()
       fireEvent.click(screen.getByLabelText('Expand notch drawer'))
-      expect(screen.getByTestId('notch-scifi-halo')).toBeTruthy()
+      expect(screen.queryByTestId('notch-scifi-halo')).toBeNull()
       expect(screen.getByTestId('notch-simple-stage')).toBeTruthy()
       expect(screen.getByTestId('notch-scifi-waveform-stage')).toBeTruthy()
       expect(screen.queryByRole('tablist')).toBeNull()
+
+      updateStudioAppearance({ notchStyle: 'orbital-pulse' })
+      rerender(<NotchShell inAppPreview />)
+      expect(screen.getByTestId('notch-scifi-halo')).toBeTruthy()
 
       fireEvent.click(screen.getByRole('button', { name: 'Power' }))
       expect(received).toContainEqual({ mode: 'advanced', type: 'set-mode' })
@@ -335,8 +341,8 @@ describe('Jarvis Notch, Live Lyrics & Dual-Mode Controls', () => {
       fireEvent.click(screen.getByLabelText('Expand notch drawer'))
       fireEvent.click(screen.getByRole('tab', { name: 'Persona' }))
       fireEvent.click(screen.getByRole('button', { name: 'Voice & Universe' }))
-      fireEvent.click(screen.getByRole('button', { name: 'Hello Kitty' }))
-      expect(received).toContainEqual({ type: 'set-universe', universeId: 'hello-kitty' })
+      fireEvent.click(screen.getByRole('button', { name: 'Velvet Ribbon' }))
+      expect(received).toContainEqual({ type: 'set-universe', universeId: 'velvet-ribbon' })
     } finally {
       unsub()
       clearNotchShelf()
@@ -600,7 +606,7 @@ describe('Jarvis Notch, Live Lyrics & Dual-Mode Controls', () => {
       fireEvent.click(screen.getByLabelText('Expand notch drawer'))
 
       const input = screen.getByPlaceholderText(/Ask Foolmoon anything/i)
-      fireEvent.change(input, { target: { value: 'Ayarlar butonu nerede?' } })
+      fireEvent.change(input, { target: { value: 'Where is the settings button?' } })
       fireEvent.click(screen.getByTestId('notch-capture-screen-btn'))
 
       await waitFor(() => {
@@ -608,7 +614,7 @@ describe('Jarvis Notch, Live Lyrics & Dual-Mode Controls', () => {
         expect($notchShelf.get().length).toBe(1)
         expect(received).toContainEqual(
           expect.objectContaining({
-            prompt: 'Ayarlar butonu nerede?',
+            prompt: 'Where is the settings button?',
             submit: true,
             type: 'attach-shelf'
           })

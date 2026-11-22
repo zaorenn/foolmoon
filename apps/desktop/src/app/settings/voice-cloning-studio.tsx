@@ -92,7 +92,7 @@ export function VoiceCloningStudio({ scopeProfile }: { scopeProfile?: string }) 
   const [refText, setRefText] = useState('')
 
   const [previewSampleText, setPreviewSampleText] = useState(
-    'Hello! Foolmoon CUDA voice cloning and real-time Jarvis karaoke lyrics are online.'
+    'Hello! Local CUDA voice cloning and synced captions are active.'
   )
 
   const [busyAction, setBusyAction] = useState<string | null>(null)
@@ -458,7 +458,7 @@ export function VoiceCloningStudio({ scopeProfile }: { scopeProfile?: string }) 
           <div>
             <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
               <Sparkles className="h-4 w-4 text-primary" />
-              Foolmoon CUDA Voice Cloning & Jarvis Studio
+              Foolmoon CUDA Voice Cloning Studio
             </h3>
             <p className="text-xs text-muted-foreground">
               {cudaReady
@@ -477,7 +477,7 @@ export function VoiceCloningStudio({ scopeProfile }: { scopeProfile?: string }) 
             variant={jarvisOn ? 'default' : 'outline'}
           >
             {jarvisOn ? <Mic className="mr-1.5 h-3.5 w-3.5" /> : <MicOff className="mr-1.5 h-3.5 w-3.5" />}
-            {jarvisOn ? 'Jarvis Hands-Free ON' : 'Jarvis Hands-Free OFF'}
+            {jarvisOn ? 'Hands-Free ON' : 'Hands-Free OFF'}
           </Button>
           <Button
             onClick={() => void toggleNotch()}
@@ -514,7 +514,7 @@ export function VoiceCloningStudio({ scopeProfile }: { scopeProfile?: string }) 
           <Input
             className="flex-1"
             onChange={e => setPreviewSampleText(e.target.value)}
-            placeholder="Enter sample phrase to test cloning & live karaoke lyrics..."
+            placeholder="Enter sample phrase to test voice cloning & synced captions..."
             size="sm"
             value={previewSampleText}
           />
@@ -536,7 +536,7 @@ export function VoiceCloningStudio({ scopeProfile }: { scopeProfile?: string }) 
           fallbackText={
             playback.status === 'preparing'
               ? 'Synthesizing CUDA cloned waveform on GPU...'
-              : 'Click Test Voice to preview CUDA voice cloning + live karaoke lyrics + @bwnd/bbot lip-sync'
+              : 'Click Test Voice to preview CUDA voice synthesis, synced captions, and companion lip-sync.'
           }
           isSpeaking={playback.status === 'speaking'}
           sentence={playback.sentence ?? ''}
@@ -698,7 +698,7 @@ export function VoiceCloningStudio({ scopeProfile }: { scopeProfile?: string }) 
       <div className="grid gap-2 rounded-lg border border-border/60 bg-background/40 p-3 sm:grid-cols-2">
         <Input
           onChange={e => setCloneName(e.target.value)}
-          placeholder="New clone name (e.g. Jarvis TR / Studio Voice)"
+          placeholder="New clone name (e.g. Studio Narrator / Calm Host)"
           size="sm"
           value={cloneName}
         />

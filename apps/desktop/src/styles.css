@@ -4450,9 +4450,9 @@ input[type='range'] {
   }
 }
 
-/* macOS + Claude centered breathable reading column when enabled or in Simple Mode */
-:root[data-fm-chat-layout='claude-centered'] [data-slot='thread'] [data-slot='message-group'],
-:root[data-fm-chat-layout='claude-centered'] [data-slot='composer-root'] {
+/* Centered breathable reading column when enabled or in Simple Mode */
+:root[data-fm-chat-layout='editorial-centered'] [data-slot='thread'] [data-slot='message-group'],
+:root[data-fm-chat-layout='editorial-centered'] [data-slot='composer-root'] {
   max-width: min(760px, 92vw);
   margin-left: auto;
   margin-right: auto;

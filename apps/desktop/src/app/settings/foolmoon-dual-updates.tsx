@@ -56,10 +56,10 @@ export function FoolmoonDualUpdates() {
       setAppStatus(next)
 
       if (!next.update_available) {
-        notify({ kind: 'info', message: 'Foolmoon arayüz ve TTS bileşenleri güncel.' })
+        notify({ kind: 'info', message: 'Foolmoon Desktop, Notch, and TTS components are up to date.' })
       }
     } catch (error) {
-      notifyError(error, 'Foolmoon sürüm kontrolü başarısız oldu')
+      notifyError(error, 'Failed to check Foolmoon release updates')
     } finally {
       setCheckingApp(false)
     }
@@ -75,8 +75,8 @@ export function FoolmoonDualUpdates() {
         notify({
           kind: 'warning',
           message: res.rolled_back
-            ? `Güncelleme başarısız oldu ve otomatik geri alındı: ${res.error ?? ''}`
-            : (res.error ?? 'Foolmoon güncellemesi uygulanamadı')
+            ? `Update failed and was automatically rolled back: ${res.error ?? ''}`
+            : (res.error ?? 'Could not apply Foolmoon update')
         })
 
         return
@@ -85,20 +85,20 @@ export function FoolmoonDualUpdates() {
       if (res.downloaded_installer) {
         notify({
           kind: 'success',
-          message: `Setup paketi indirildi (${res.sha256_verified ? 'SHA-256 doğrulandı' : 'doğrulandı'}): ${res.downloaded_installer}`
+          message: `Setup package downloaded (${res.sha256_verified ? 'SHA-256 verified' : 'verified'}): ${res.downloaded_installer}`
         })
       } else if (res.updated) {
         notify({
           kind: 'success',
-          message: 'Foolmoon arayüz ve TTS güncellendi. Yeni sürüm için uygulamayı yeniden başlatın.'
+          message: 'Foolmoon UI and TTS updated. Restart the application to load the new build.'
         })
       } else {
-        notify({ kind: 'info', message: 'Foolmoon zaten en güncel sürümde.' })
+        notify({ kind: 'info', message: 'Foolmoon is already on the latest release.' })
       }
 
       void handleCheckApp()
     } catch (error) {
-      notifyError(error, 'Foolmoon güncellemesi başarısız')
+      notifyError(error, 'Foolmoon update failed')
     } finally {
       setApplyingApp(false)
     }
@@ -114,10 +114,10 @@ export function FoolmoonDualUpdates() {
       if (next.error) {
         notify({ kind: 'warning', message: next.error })
       } else if (!next.update_available) {
-        notify({ kind: 'info', message: 'Orijinal Hermes çekirdeği zaten güncel.' })
+        notify({ kind: 'info', message: 'Original Hermes Core is already up to date.' })
       }
     } catch (error) {
-      notifyError(error, 'Hermes çekirdek kontrolü başarısız')
+      notifyError(error, 'Hermes Core update check failed')
     } finally {
       setCheckingCore(false)
     }
@@ -125,10 +125,10 @@ export function FoolmoonDualUpdates() {
 
   const handleApplyCore = useCallback(async () => {
     const ok = await confirm({
-      confirmLabel: 'Güvenli Güncelle',
+      confirmLabel: 'Safe Sync Core',
       description:
-        'NousResearch/hermes-agent güncellemeleri çekirdeğe uygulanacak; Foolmoon arayüzü, Notch, bbot, TTS ve MCP dosyaları korunacak. Sorun çıkarsa otomatik geri alma yapılır.',
-      title: 'Hermes Çekirdeği Güncellensin mi?'
+        'Upstream updates from NousResearch/hermes-agent will merge into core while keeping Foolmoon UI, Notch, bbot, TTS, and MCP layers protected. Any failed integrity check rolls back automatically.',
+      title: 'Sync Original Hermes Core?'
     })
 
     if (!ok) {
@@ -144,8 +144,8 @@ export function FoolmoonDualUpdates() {
         notify({
           kind: 'warning',
           message: res.rolled_back
-            ? `Hermes çekirdek birleştirmesi güvenli biçimde geri alındı: ${res.error ?? ''}`
-            : (res.error ?? 'Hermes çekirdeği güncellenemedi')
+            ? `Hermes Core sync was safely rolled back: ${res.error ?? ''}`
+            : (res.error ?? 'Could not sync Hermes Core')
         })
 
         return
@@ -154,15 +154,15 @@ export function FoolmoonDualUpdates() {
       if (res.updated) {
         notify({
           kind: 'success',
-          message: 'Orijinal Hermes çekirdeği bozulmadan güncellendi. Yeniden başlatma önerilir.'
+          message: 'Original Hermes Core updated without breaking Foolmoon. Restart recommended.'
         })
       } else {
-        notify({ kind: 'info', message: 'Hermes çekirdeği zaten güncel.' })
+        notify({ kind: 'info', message: 'Hermes Core is already up to date.' })
       }
 
       void handleCheckCore()
     } catch (error) {
-      notifyError(error, 'Hermes çekirdek güncellemesi başarısız')
+      notifyError(error, 'Hermes Core sync failed')
     } finally {
       setApplyingCore(false)
     }
@@ -179,18 +179,18 @@ export function FoolmoonDualUpdates() {
           <div>
             <div className="flex items-center gap-2">
               <span className="text-sm font-semibold text-(--ui-text-primary)">
-                Foolmoon Uygulama Sürümü (Arayüz &amp; TTS)
+                Foolmoon Application (UI &amp; TTS)
               </span>
               <Pill tone={appStatus?.update_available ? 'primary' : 'success'}>
                 v{appStatus?.latest_version || manifest.version}
               </Pill>
             </div>
             <p className="mt-1 text-xs text-(--ui-text-tertiary)">
-              Repo: <span className="font-mono">{manifest.foolmoon_repo}</span> · Kurulu v{manifest.version}
-              {appStatus?.git_behind ? ` · ${appStatus.git_behind} yeni commit` : ''}
+              Repo: <span className="font-mono">{manifest.foolmoon_repo}</span> · Installed v{manifest.version}
+              {appStatus?.git_behind ? ` · ${appStatus.git_behind} new commit(s)` : ''}
             </p>
             {appStatus?.latest_subject ? (
-              <p className="mt-1 text-xs text-(--ui-text-secondary)">Son değişiklik: {appStatus.latest_subject}</p>
+              <p className="mt-1 text-xs text-(--ui-text-secondary)">Latest change: {appStatus.latest_subject}</p>
             ) : null}
             {appStatus?.release_notes ? (
               <p className="mt-1 whitespace-pre-line text-xs text-(--ui-text-tertiary)">{appStatus.release_notes}</p>
@@ -205,7 +205,7 @@ export function FoolmoonDualUpdates() {
                 target="_blank"
               >
                 <ExternalLink className="size-3.5" />
-                Sürüm Sayfası
+                Release Notes
               </a>
             ) : null}
             <Button
@@ -216,12 +216,12 @@ export function FoolmoonDualUpdates() {
               variant="outline"
             >
               {checkingApp ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-              Foolmoon&apos;u Kontrol Et
+              Check Foolmoon
             </Button>
             {appStatus?.update_available ? (
               <Button disabled={applyingApp} onClick={() => void handleApplyApp()} size="sm" type="button">
                 {applyingApp ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
-                Foolmoon&apos;u Güncelle
+                Update Foolmoon
               </Button>
             ) : null}
           </div>
@@ -233,36 +233,36 @@ export function FoolmoonDualUpdates() {
           <div>
             <div className="flex items-center gap-2">
               <span className="text-sm font-semibold text-(--ui-text-primary)">
-                Orijinal Hermes Çekirdeği (Güvenli Sync)
+                Original Hermes Core (Safe Sync)
               </span>
               {coreStatus ? (
                 coreStatus.error ? (
-                  <Pill tone="warn">Kontrol Uyarısı</Pill>
+                  <Pill tone="warn">Check Warning</Pill>
                 ) : coreStatus.safe_merge_preview ? (
                   <Pill tone="success">
                     <CheckCircle2 className="mr-1 inline size-3" />
-                    Bozulmaz / Temiz
+                    Non-Breaking / Clean
                   </Pill>
                 ) : (
                   <Pill tone="warn">
                     <AlertTriangle className="mr-1 inline size-3" />
-                    {coreStatus.conflicting_files.length} Çakışma Koruması
+                    {coreStatus.conflicting_files.length} Protected Conflict(s)
                   </Pill>
                 )
               ) : (
                 <Pill tone="muted">
                   <ShieldLock className="mr-1 inline size-3" />
-                  Korumalı
+                  Protected
                 </Pill>
               )}
             </div>
             <p className="mt-1 text-xs text-(--ui-text-tertiary)">
-              Kaynak: <span className="font-mono">{manifest.upstream_repo}</span> · Foolmoon Notch, bbot, TTS &amp;
-              MCP katmanları otomatik korunur; bütünlük testi başarısız olursa otomatik geri alınır.
+              Source: <span className="font-mono">{manifest.upstream_repo}</span> · Protected Notch, Studio, TTS &amp;
+              MCP layers stay intact; automatic rollback triggers if integrity checks fail.
             </p>
             {coreStatus?.update_available ? (
               <p className="mt-1 text-xs text-(--ui-text-secondary)">
-                {coreStatus.behind} yeni çekirdek güncellemesi hazır
+                {coreStatus.behind} upstream core update(s) ready
                 {coreStatus.latest_subject ? ` · ${coreStatus.latest_subject}` : ''}
               </p>
             ) : null}
@@ -276,12 +276,12 @@ export function FoolmoonDualUpdates() {
               variant="outline"
             >
               {checkingCore ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-              Hermes Çekirdeğini Kontrol Et
+              Check Hermes Core
             </Button>
             {coreStatus?.update_available ? (
               <Button disabled={applyingCore} onClick={() => void handleApplyCore()} size="sm" type="button">
                 {applyingCore ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldLock className="size-3.5" />}
-                Hermes&apos;i Güvenle Güncelle
+                Safe Sync Hermes
               </Button>
             ) : null}
           </div>

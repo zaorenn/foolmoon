@@ -372,8 +372,8 @@ _BUILTIN_SKINS: dict[str, dict[str, Any]] = {
             "thinking_faces": ["(☾)", "(✦)", "(◈)", "(⌁)", "(✧)"],
             "thinking_verbs": [
                 "aligning lunar optics", "calibrating CUDA voice clone", "synthesizing studio palette",
-                "scanning notch telemetry", "weaving live lyrics", "harmonizing shaders",
-                "consulting Jarvis core", "locking orbital focus"],
+                "scanning notch telemetry", "weaving synced captions", "harmonizing shaders",
+                "calibrating studio core", "locking orbital focus"],
             "wings": _wings("☾", "✦", "◈", "✧")},
         "branding": _branding(
             "Foolmoon", "☾", "Clear skies! ☾", prompt="☾❯",
@@ -393,11 +393,11 @@ _BUILTIN_SKINS: dict[str, dict[str, Any]] = {
 [#C94A38]⠀⠀⠀⠀⠀⠀⠀⢿⣿⣧⠀⠀⠀⠀⢀⣤⡄⠀⠀⠀⠀⠀⠀⠀⠀[/]
 [#EA745E]⠀⠀⠀⠀⠀⠀⠀⠈⠻⣿⣿⣦⣤⣴⣿⣿⠃⠀⠀⠀✦⠀⠀⠀⠀[/]
 [#F5C28B]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⠛⠿⠿⠟⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
-[dim #9B867A]⠀⠀⠀⠀⠀⠀jarvis notch & lunar studio⠀⠀⠀⠀⠀⠀[/]""",
+[dim #9B867A]⠀⠀⠀⠀⠀⠀hardware notch & lunar studio⠀⠀⠀⠀⠀[/]""",
     },
-    "foolmoon-kitty": {
-        "name": "foolmoon-kitty",
-        "description": "Hello Kitty Ribbon — pastel strawberry cloud, rose ink & kawaii bow",
+    "foolmoon-ribbon": {
+        "name": "foolmoon-ribbon",
+        "description": "Velvet Ribbon — soft rose-ivory velvet, geometric accents & satin prefix",
         "colors": {
             "banner_border": "#D95B8A", "banner_title": "#FFB3D1", "banner_accent": "#FF7AA8",
             "banner_dim": "#B08295", "banner_text": "#FFF0F5", "ui_accent": "#FF7AA8",
@@ -426,26 +426,26 @@ _BUILTIN_SKINS: dict[str, dict[str, Any]] = {
             "waiting_faces": ["(⋈)", "(♡)", "(✿)", "(◠)", "(☆)"],
             "thinking_faces": ["(⋈)", "(♡)", "(✿)", "(⌁)", "(✧)"],
             "thinking_verbs": [
-                "tying satin bows", "polishing strawberry glass", "sketching kawaii stickers",
-                "tuning sugarplum chimes", "weaving pastel shaders", "syncing ribbon telemetry"],
+                "tying satin bows", "polishing velvet glass", "sketching ribbon emblems",
+                "tuning warm chimes", "weaving pastel shaders", "syncing notch telemetry"],
             "wings": _wings("⋈", "♡", "✿", "✧")},
         "branding": _branding(
-            "Foolmoon Kitty", "⋈", "Stay sweet! ⋈", prompt="⋈❯",
-            help_header="(⋈♡) Hello Kitty Studio Commands"),
+            "Foolmoon Ribbon", "⋈", "Stay creative! ⋈", prompt="⋈❯",
+            help_header="(⋈♡) Velvet Ribbon Studio Commands"),
         "tool_prefix": "⋈",
-        "banner_logo": """[bold #FFF0F5]██╗  ██╗███████╗██╗     ██╗      ██████╗     ██╗  ██╗██╗████████╗████████╗██╗   ██╗[/]
-[bold #FFB3D1]██║  ██║██╔════╝██║     ██║     ██╔═══██╗    ██║ ██╔╝██║╚══██╔══╝╚══██╔══╝╚██╗ ██╔╝[/]
-[#FF7AA8]███████║█████╗  ██║     ██║     ██║   ██║    █████╔╝ ██║   ██║      ██║    ╚████╔╝ [/]
-[#EA5288]██╔══██║██╔══╝  ██║     ██║     ██║   ██║    ██╔═██╗ ██║   ██║      ██║     ╚██╔╝  [/]
-[#E11D62]██║  ██║███████╗███████╗███████╗╚██████╔╝    ██║  ██╗██║   ██║      ██║      ██║   [/]
-[#A81349]╚═╝  ╚═╝╚══════╝╚══════╝╚══════╝ ╚═════╝     ╚═╝  ╚═╝╚═╝   ╚═╝      ╚═╝      ╚═╝   [/]""",
+        "banner_logo": """[bold #FFF0F5]██╗   ██╗███████╗██╗    ██╗   ██╗███████╗████████╗    ██████╗ ██╗██████╗ ██████╗  ██████╗ ███╗   ██╗[/]
+[bold #FFB3D1]██║   ██║██╔════╝██║    ██║   ██║██╔════╝╚══██╔══╝    ██╔══██╗██║██╔══██╗██╔══██╗██╔═══██╗████╗  ██║[/]
+[#FF7AA8]██║   ██║█████╗  ██║    ██║   ██║█████╗     ██║       ██████╔╝██║██████╔╝██████╔╝██║   ██║██╔██╗ ██║[/]
+[#EA5288]╚██╗ ██╔╝██╔══╝  ██║    ╚██╗ ██╔╝██╔══╝     ██║       ██╔══██╗██║██╔══██╗██╔══██╗██║   ██║██║╚██╗██║[/]
+[#E11D62] ╚████╔╝ ███████╗███████╗╚████╔╝ ███████╗   ██║       ██║  ██║██║██████╔╝██████╔╝╚██████╔╝██║ ╚████║[/]
+[#A81349]  ╚═══╝  ╚══════╝╚══════╝ ╚═══╝  ╚══════╝   ╚═╝       ╚═╝  ╚═╝╚═╝╚═════╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═══╝[/]""",
         "banner_hero": """[#FFB3D1]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣴⣆⠀⠀⠀⠀⠀⣰⣦⠀⠀⠀⋈⠀⠀⠀⠀[/]
 [#FF7AA8]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿⣷⣤⣤⣶⣾⣿⣿⠀⠀⠀⠀♡⠀⠀⠀⠀[/]
 [#FFF0F5]⠀⠀⠀⠀⠀⠀⠀⠀⠀⣾⡿⠛⠛⠛⠛⠛⠛⢿⣷⠀⠀⠀⠀⠀⠀⠀⠀[/]
 [#FFF0F5]⠀⠀⠀⠀⠀⠀⠀⠀⢸⣿⠀●⠀⠀⠀⠀●⠀⣿⡇⠀⠀⠀⠀⠀⠀⠀[/]
-[#E11D62]⠀⠀⠀⠀⠀⠀⠀⠀⠀⢻⣷⡀⠀⠀●⠀⠀⢀⣾⡟⠀⠀⠀⠀⠀⠀⠀[/]
+[#E11D62]⠀⠀⠀⠀⠀⠀⠀⠀⠀⢻⣷⡀⠀⠀☾⠀⠀⢀⣾⡟⠀⠀⠀⠀⠀⠀⠀[/]
 [#FFB3D1]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⠻⠿⣶⣶⣶⠿⠟⠁⠀⠀⠀⠀⠀⠀⠀⠀[/]
-[dim #B08295]⠀⠀⠀⠀⠀⠀strawberry plush kawaii tui⠀⠀⠀⠀⠀⠀[/]""",
+[dim #B08295]⠀⠀⠀⠀⠀⠀velvet ribbon editorial tui⠀⠀⠀⠀⠀⠀[/]""",
     },
     "foolmoon-quest": {
         "name": "foolmoon-quest",

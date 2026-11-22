@@ -45,7 +45,7 @@ const MATERIAL_COMMANDS: Array<{ id: StudioMaterial; label: string }> = [
 
 const TUI_SKIN_COMMANDS: Array<{ id: string; label: string; universeId: string }> = [
   { id: 'foolmoon', label: 'Foolmoon Nocturne TUI', universeId: 'foolmoon-warm' },
-  { id: 'foolmoon-kitty', label: 'Hello Kitty Ribbon TUI', universeId: 'hello-kitty' },
+  { id: 'foolmoon-ribbon', label: 'Velvet Ribbon TUI', universeId: 'velvet-ribbon' },
   { id: 'foolmoon-quest', label: 'RPG Pixel Quest TUI', universeId: 'pixel-quest' }
 ]
 
@@ -58,7 +58,7 @@ const FACE_FX_COMMANDS: Array<{ id: BbotFxPreset; label: string }> = [
 
 let registered = false
 
-/** Registers Foolmoon's Notch, Jarvis, Studio Architect, Material & Universe commands into Ctrl+K Command Palette. */
+/** Registers Foolmoon's Notch, Voice, Studio Architect, Material & Universe commands into Ctrl+K Command Palette. */
 export function registerFoolmoonPaletteCommands(): void {
   if (registered) {
     return
@@ -71,7 +71,7 @@ export function registerFoolmoonPaletteCommands(): void {
       get: () => $notchOpen.get() || $notchPreviewOpen.get(),
       icon: PanelTop,
       id: 'foolmoon.notch',
-      keywords: ['notch', 'dynamic island', 'jarvis', 'foolmoon', 'hud'],
+      keywords: ['notch', 'dynamic notch', 'voice', 'foolmoon', 'hud'],
       label: 'Foolmoon: Toggle Hardware Notch',
       set: () => {
         void toggleNotch()
@@ -84,8 +84,8 @@ export function registerFoolmoonPaletteCommands(): void {
       get: () => $jarvisHandsFree.get(),
       icon: Mic,
       id: 'foolmoon.jarvis-hands-free',
-      keywords: ['jarvis', 'voice', 'hands-free', 'mic', 'wake word', 'foolmoon'],
-      label: 'Foolmoon: Toggle Jarvis Hands-Free',
+      keywords: ['voice', 'hands-free', 'mic', 'wake word', 'foolmoon'],
+      label: 'Foolmoon: Toggle Hands-Free Voice',
       set: enabled => {
         toggleJarvisHandsFree(enabled)
       }
@@ -110,7 +110,7 @@ export function registerFoolmoonPaletteCommands(): void {
     data: {
       icon: Palette,
       id: 'foolmoon.open-visual-studio',
-      keywords: ['theme', 'material', 'corner', 'radius', 'hello kitty', 'stickers', 'foolmoon', 'studio'],
+      keywords: ['theme', 'material', 'corner', 'radius', 'velvet ribbon', 'stickers', 'foolmoon', 'studio'],
       label: 'Foolmoon: Open Visual, Material & Universe Studio',
       run: () => navigateHash('/settings?tab=config:appearance&page=theme')
     },
@@ -165,18 +165,19 @@ export function registerFoolmoonPaletteCommands(): void {
     id: 'foolmoon.bbot-spotlight-demo'
   })
 
-  const AURORA_CYCLE: NotchAuroraPalette[] = ['apple-sunset', 'emerald-pulse', 'cyber-violet', 'monochrome-frost']
+  const TONE_CYCLE: NotchAuroraPalette[] = ['matte-graphite', 'sage-slate', 'warm-terracotta', 'monochrome-ink']
 
   registry.register({
     area: PALETTE_AREA,
     data: {
       icon: Sparkles,
       id: 'foolmoon.notch-cycle-aurora',
-      keywords: ['notch', 'aurora', 'palette', 'sunset', 'emerald', 'violet', 'foolmoon'],
-      label: 'Foolmoon: Cycle Notch Aurora Palette',
+      keywords: ['notch', 'tone', 'palette', 'graphite', 'sage', 'terracotta', 'monochrome', 'foolmoon'],
+      label: 'Foolmoon: Cycle Notch Telemetry Tone',
       run: () => {
         const cur = $notchConfig.get().auroraPalette
-        const next = AURORA_CYCLE[(AURORA_CYCLE.indexOf(cur) + 1) % AURORA_CYCLE.length]
+        const idx = TONE_CYCLE.indexOf(cur)
+        const next = TONE_CYCLE[((idx >= 0 ? idx : 0) + 1) % TONE_CYCLE.length]
         updateNotchConfig({ auroraPalette: next })
       }
     },
@@ -336,7 +337,7 @@ export function registerFoolmoonPaletteCommands(): void {
       category: 'view',
       defaults: [],
       id: 'foolmoon.keybind.jarvis',
-      label: 'Foolmoon: Toggle Jarvis Hands-Free',
+      label: 'Foolmoon: Toggle Hands-Free Voice',
       run: () => {
         toggleJarvisHandsFree()
       }

@@ -33,7 +33,7 @@ describe('Foolmoon Ctrl+K Command Palette contributions', () => {
     applyStudioToDocument(DEFAULT_STUDIO_APPEARANCE)
   })
 
-  it('registers Foolmoon Notch, Jarvis, Studio Architect, Materials & Universes cleanly', () => {
+  it('registers Foolmoon Notch, Voice, Studio Architect, Materials & Universes cleanly', () => {
     registerFoolmoonPaletteCommands()
     const items = registry.getArea(PALETTE_AREA).map(entry => entry.data as PaletteContribution)
     const ids = new Set(items.map(item => item.id))
@@ -55,9 +55,9 @@ describe('Foolmoon Ctrl+K Command Palette contributions', () => {
     expect(ids.has('foolmoon.fx.crt-retro')).toBe(true)
     expect(ids.has('foolmoon.fx.minimal')).toBe(true)
     expect(ids.has('foolmoon.tui-skin.foolmoon')).toBe(true)
-    expect(ids.has('foolmoon.tui-skin.foolmoon-kitty')).toBe(true)
+    expect(ids.has('foolmoon.tui-skin.foolmoon-ribbon')).toBe(true)
     expect(ids.has('foolmoon.tui-skin.foolmoon-quest')).toBe(true)
-    expect(ids.has('foolmoon.universe.hello-kitty')).toBe(true)
+    expect(ids.has('foolmoon.universe.velvet-ribbon')).toBe(true)
     expect(ids.has('foolmoon.universe.pixel-quest')).toBe(true)
     expect(ids.has('foolmoon.material.liquid-glass')).toBe(true)
 
@@ -76,7 +76,7 @@ describe('Foolmoon Ctrl+K Command Palette contributions', () => {
 
     const cycleAurora = items.find(i => i.id === 'foolmoon.notch-cycle-aurora')!
     cycleAurora.run()
-    expect($notchConfig.get().auroraPalette).toBe('emerald-pulse')
+    expect($notchConfig.get().auroraPalette).toBe('sage-slate')
 
     const cycleCompact = items.find(i => i.id === 'foolmoon.notch-cycle-compactness')!
     cycleCompact.run()
@@ -94,9 +94,9 @@ describe('Foolmoon Ctrl+K Command Palette contributions', () => {
     architect.run()
     expect($composerPersona.get()).toBe('architect')
 
-    const kitty = items.find(i => i.id === 'foolmoon.universe.hello-kitty')!
-    kitty.run()
-    expect($pendingSkinApply.get()).toBe('fm-hello-kitty')
+    const ribbon = items.find(i => i.id === 'foolmoon.universe.velvet-ribbon')!
+    ribbon.run()
+    expect($pendingSkinApply.get()).toBe('fm-velvet-ribbon')
     expect($studioAppearance.get().pattern).toBe('cat-ears-whiskers')
 
     const glass = items.find(i => i.id === 'foolmoon.material.liquid-glass')!

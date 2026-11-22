@@ -6,7 +6,30 @@ import type { LmStudioModelEntry, LocalHardware, VoiceCloneEntry } from '@/types
 export type NotchAgentStatus = 'error' | 'idle' | 'listening' | 'speaking' | 'thinking' | 'tool_running' | 'transcribing'
 export type NotchTab = 'focus' | 'jarvis' | 'notes' | 'persona' | 'shelf'
 export type BbotFxPreset = 'crt-retro' | 'cyber-glow' | 'minimal' | 'mirror-chrome'
-export type NotchAuroraPalette = 'apple-sunset' | 'cyber-violet' | 'emerald-pulse' | 'monochrome-frost'
+export type NotchAuroraPalette = 'matte-graphite' | 'monochrome-ink' | 'sage-slate' | 'warm-terracotta'
+
+export function normalizeNotchPalette(raw: unknown): NotchAuroraPalette {
+  switch (raw) {
+    case 'warm-terracotta':
+
+    case 'cyber-violet':
+      return 'warm-terracotta'
+
+    case 'sage-slate':
+
+    case 'emerald-pulse':
+      return 'sage-slate'
+
+    case 'monochrome-ink':
+
+    case 'monochrome-frost':
+      return 'monochrome-ink'
+
+    default:
+      return 'matte-graphite'
+  }
+}
+
 export type NotchCompactness = 'balanced' | 'compact' | 'ultra-compact'
 export type NotchAnimationIntensity = 'dynamic' | 'minimal' | 'subtle'
 export type NotchActivityKind =
@@ -35,15 +58,15 @@ export interface NotchCustomConfig {
 }
 
 export const DEFAULT_NOTCH_CONFIG: NotchCustomConfig = {
-  animationIntensity: 'dynamic',
-  auroraPalette: 'apple-sunset',
+  animationIntensity: 'subtle',
+  auroraPalette: 'matte-graphite',
   autoExpandOnActivity: true,
   compactness: 'ultra-compact',
-  cornerRadius: 24,
-  glassOpacity: 0.94,
+  cornerRadius: 20,
+  glassOpacity: 0.96,
   hoverPeek: true,
   magneticGlow: true,
-  rimGlow: 0.85,
+  rimGlow: 0.35,
   showActivityTicker: true
 }
 
@@ -191,18 +214,18 @@ export const DEFAULT_BBOT_CONFIG: BbotCustomConfig = {
   blink: true,
   customColorsEnabled: false,
   expressionOverride: 'auto',
-  fxKnobs: fxKnobsForPreset('cyber-glow'),
+  fxKnobs: fxKnobsForPreset('minimal'),
   gapPx: 12,
   hideWhenIdle: true,
   idle: true,
   inkColor: '#e9ebec',
   mouth: true,
-  pupilColor: '#38bdf8',
+  pupilColor: '#d6d3cb',
   pupils: true,
-  ringColor: '#38bdf8',
+  ringColor: '#6b7280',
   side: 'left',
   size: 38,
-  skinColor: '#090d16',
+  skinColor: '#111214',
   track: true
 }
 
@@ -345,7 +368,7 @@ const INITIAL_MIRROR: NotchMirrorState = {
   bbotConfig: DEFAULT_BBOT_CONFIG,
   bbotReaction: null,
   bbotSpotlight: null,
-  fxPreset: 'cyber-glow',
+  fxPreset: 'minimal',
   hardwareTelemetry: null,
   interfaceMode: 'advanced',
   jarvisEnabled: false,
@@ -368,9 +391,9 @@ export const $notchOpen = atom(false)
 export const $notchPreviewOpen = atom(false)
 export const $notchTab = atom<NotchTab>('jarvis')
 export const $notchShelf = atom<NotchShelfItem[]>([])
-export const $bbotFxPreset = persistentAtom<BbotFxPreset>('foolmoon.bbot-fx.v1', 'cyber-glow', {
+export const $bbotFxPreset = persistentAtom<BbotFxPreset>('foolmoon.bbot-fx.v1', 'minimal', {
   decode: raw =>
-    raw === 'crt-retro' || raw === 'minimal' || raw === 'mirror-chrome' ? raw : 'cyber-glow',
+    raw === 'crt-retro' || raw === 'cyber-glow' || raw === 'mirror-chrome' ? raw : 'minimal',
   encode: val => val
 })
 export const $bbotConfig = persistentAtom<BbotCustomConfig>('foolmoon.bbot-config.v1', DEFAULT_BBOT_CONFIG, {
@@ -446,12 +469,7 @@ export const $notchConfig = persistentAtom<NotchCustomConfig>('foolmoon.notch-co
         return DEFAULT_NOTCH_CONFIG
       }
 
-      const auroraPalette: NotchAuroraPalette =
-        parsed.auroraPalette === 'cyber-violet' ||
-        parsed.auroraPalette === 'emerald-pulse' ||
-        parsed.auroraPalette === 'monochrome-frost'
-          ? parsed.auroraPalette
-          : 'apple-sunset'
+      const auroraPalette = normalizeNotchPalette(parsed.auroraPalette)
 
       const compactness: NotchCompactness =
         parsed.compactness === 'compact' || parsed.compactness === 'balanced'
@@ -459,9 +477,9 @@ export const $notchConfig = persistentAtom<NotchCustomConfig>('foolmoon.notch-co
           : 'ultra-compact'
 
       const animationIntensity: NotchAnimationIntensity =
-        parsed.animationIntensity === 'subtle' || parsed.animationIntensity === 'minimal'
+        parsed.animationIntensity === 'dynamic' || parsed.animationIntensity === 'minimal'
           ? parsed.animationIntensity
-          : 'dynamic'
+          : 'subtle'
 
       return {
         animationIntensity,
@@ -740,9 +758,9 @@ export function updateBbotFxKnob(knob: BbotFxKnobName, value: number): BbotCusto
 }
 
 export function resetBbotConfig(): BbotCustomConfig {
-  $bbotFxPreset.set('cyber-glow')
+  $bbotFxPreset.set('minimal')
   $bbotConfig.set(DEFAULT_BBOT_CONFIG)
-  publishNotchState({ bbotConfig: DEFAULT_BBOT_CONFIG, fxPreset: 'cyber-glow' })
+  publishNotchState({ bbotConfig: DEFAULT_BBOT_CONFIG, fxPreset: 'minimal' })
   sendNotchCommand({ config: DEFAULT_BBOT_CONFIG, type: 'set-bbot-config' })
 
   return DEFAULT_BBOT_CONFIG
@@ -754,6 +772,7 @@ export function updateNotchConfig(patch: Partial<NotchCustomConfig>): NotchCusto
   const next: NotchCustomConfig = {
     ...cur,
     ...patch,
+    auroraPalette: patch.auroraPalette !== undefined ? normalizeNotchPalette(patch.auroraPalette) : cur.auroraPalette,
     cornerRadius:
       typeof patch.cornerRadius === 'number' && Number.isFinite(patch.cornerRadius)
         ? Math.max(16, Math.min(34, Math.round(patch.cornerRadius)))

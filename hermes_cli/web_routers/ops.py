@@ -597,30 +597,30 @@ async def seed_memory_profile(body: MemoryProfileSeed, profile: Optional[str] = 
         managed_entries: list[str] = []
         if name or address_as:
             if name and address_as and address_as.lower() != name.lower():
-                managed_entries.append(f"Kullanici adi: {name} | Hitap sekli: {address_as}")
+                managed_entries.append(f"User name: {name} | Address user as: {address_as}")
             else:
-                managed_entries.append(f"Kullanici hitap sekli: {address_as or name}")
+                managed_entries.append(f"Address user as: {address_as or name}")
         if language:
-            managed_entries.append(f"Tercih edilen dil: {language}")
+            managed_entries.append(f"Preferred language: {language}")
         if style:
-            managed_entries.append(f"Iletisim ve yanit tarzi: {style}")
+            managed_entries.append(f"Communication style: {style}")
         if role:
-            managed_entries.append(f"Calisma alani ve rol: {role}")
+            managed_entries.append(f"Role / domain: {role}")
         if rules:
             for line in [ln.strip("-* \t") for ln in rules.splitlines() if ln.strip()]:
-                managed_entries.append(f"Ozel kural: {line}")
+                managed_entries.append(f"Rule: {line}")
 
         for entry in managed_entries:
             if err := _scan_memory_content(entry):
                 raise HTTPException(status_code=400, detail=err)
 
         managed_prefixes = (
-            "Kullanici adi:",
-            "Kullanici hitap sekli:",
-            "Tercih edilen dil:",
-            "Iletisim ve yanit tarzi:",
-            "Calisma alani ve rol:",
-            "Ozel kural:",
+            "User name:",
+            "Address user as:",
+            "Preferred language:",
+            "Communication style:",
+            "Role / domain:",
+            "Rule:",
         )
 
         with config_write_scope(profile):

@@ -139,14 +139,14 @@ def test_customize_foolmoon_studio_saves_materials_patterns_and_stickers(tmp_pat
         patch("tools.theme_stylist_tool.save_config") as mock_save,
     ):
         res = customize_foolmoon_studio(
-            name="Hello Kitty Custom",
+            name="Velvet Ribbon Custom",
             background="#FFF4F7",
             accent="#E11D62",
             material="plush-pastel",
             corner_radius=24,
             pattern="cat-ears-whiskers",
             stickers=[
-                {"slot": "bottom-right", "kind": "kitty-kawaii", "label": "Hello Kitty"},
+                {"slot": "bottom-right", "kind": "velvet-cat", "label": "Velvet Cat"},
                 {"slot": "top-right", "kind": "satin-bow", "label": "Satin Bow"},
             ],
             bbot_fx_preset="mirror-chrome",
@@ -164,7 +164,7 @@ def test_customize_foolmoon_studio_saves_materials_patterns_and_stickers(tmp_pat
         })
 
     assert res["ok"] is True
-    assert res["skin"] == "hello-kitty-custom"
+    assert res["skin"] == "velvet-ribbon-custom"
     assert res["studio_config"]["material"] == "plush-pastel"
     assert res["studio_config"]["cornerRadius"] == 24
     assert res["studio_config"]["pattern"] == "cat-ears-whiskers"
@@ -173,7 +173,7 @@ def test_customize_foolmoon_studio_saves_materials_patterns_and_stickers(tmp_pat
 
     yaml_text = Path(res["skin_path"]).read_text(encoding="utf-8")
     assert "/* foolmoon-studio:" in yaml_text
-    assert "kitty-kawaii" in yaml_text
+    assert "velvet-cat" in yaml_text
     assert "banner_logo:" in yaml_text
     assert "banner_hero:" in yaml_text
     assert "spinner:" in yaml_text

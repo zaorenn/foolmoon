@@ -15,7 +15,7 @@ describe('ShellMenuItems Foolmoon actions', () => {
     $notchPreviewOpen.set(false)
   })
 
-  it('exposes Hardware Notch, Jarvis Hands-Free & Visual Studio in chrome context menu', () => {
+  it('exposes Hardware Notch, Hands-Free Voice & Visual Studio in chrome context menu', () => {
     render(
       <MemoryRouter>
         <ContextMenu>
@@ -31,14 +31,14 @@ describe('ShellMenuItems Foolmoon actions', () => {
 
     fireEvent.contextMenu(screen.getByText('Canvas'))
     const notchItem = screen.getByText('Toggle Hardware Notch')
-    const jarvisItem = screen.getByText('Toggle Jarvis Hands-Free')
+    const voiceItem = screen.getByText('Toggle Hands-Free Voice')
     const studioItem = screen.getByText('Visual & Material Studio')
 
     expect(notchItem).toBeTruthy()
-    expect(jarvisItem).toBeTruthy()
+    expect(voiceItem).toBeTruthy()
     expect(studioItem).toBeTruthy()
 
-    fireEvent.click(jarvisItem)
+    fireEvent.click(voiceItem)
     expect($jarvisHandsFree.get()).toBe(true)
 
     fireEvent.contextMenu(screen.getByText('Canvas'))

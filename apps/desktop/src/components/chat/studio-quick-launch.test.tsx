@@ -12,17 +12,17 @@ describe('StudioQuickLaunch', () => {
     window.location.hash = ''
   })
 
-  it('renders Foolmoon quick launch actions and toggles Jarvis + routes to studios', () => {
+  it('renders Foolmoon quick launch actions and toggles hands-free voice + routes to studios', () => {
     render(<StudioQuickLaunch />)
 
-    const jarvisBtn = screen.getByRole('button', { name: 'Hands-Free Jarvis' })
-    expect(jarvisBtn).toBeTruthy()
+    const voiceBtn = screen.getByRole('button', { name: 'Hands-Free Voice' })
+    expect(voiceBtn).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Hardware Notch' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'CUDA Voice Studio' })).toBeTruthy()
 
-    fireEvent.click(jarvisBtn)
+    fireEvent.click(voiceBtn)
     expect($jarvisHandsFree.get()).toBe(true)
-    expect(screen.getByRole('button', { name: 'Jarvis Live' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Voice Live' })).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: '1-Image Studio' }))
     expect(window.location.hash).toBe('#/settings?tab=config:appearance&page=theme')

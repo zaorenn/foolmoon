@@ -260,7 +260,7 @@ class TestCliBrandingHelpers:
 
     @pytest.mark.parametrize(
         ("skin_name", "expected_prefix"),
-        [("foolmoon", "☾"), ("foolmoon-kitty", "⋈"), ("foolmoon-quest", "⚔")],
+        [("foolmoon", "☾"), ("foolmoon-ribbon", "⋈"), ("foolmoon-quest", "⚔")],
     )
     def test_foolmoon_builtin_tui_skins_have_banners_and_prompt(self, skin_name, expected_prefix):
         from hermes_cli.skin_engine import get_active_prompt_symbol, get_prompt_toolkit_style_overrides, set_active_skin

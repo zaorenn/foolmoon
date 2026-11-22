@@ -9,21 +9,21 @@ import { applyStudioUniverse, STUDIO_UNIVERSE_PRESETS } from './studio-presets'
 // "the Desktop default" everywhere else (boot, backend sync, setTheme).
 const ALIASES: Record<string, string> = {
   ares: 'ember',
-  cyber: 'fm-night-city',
-  'cyber-lantern': 'fm-night-city',
+  cyber: 'fm-obsidian-circuit',
+  'cyber-circuit': 'fm-obsidian-circuit',
   default: 'nous',
   foolmoon: 'fm-foolmoon-warm',
-  'foolmoon-kitty': 'fm-hello-kitty',
   'foolmoon-quest': 'fm-pixel-quest',
+  'foolmoon-ribbon': 'fm-velvet-ribbon',
   gold: 'classic',
-  'hello-kitty': 'fm-hello-kitty',
   hermes: 'classic',
-  kitty: 'fm-hello-kitty',
-  'macos-frost': 'fm-macos-frost',
-  'night-city': 'fm-night-city',
+  'lunar-frost': 'fm-lunar-frost',
   'nous-light': 'nous',
+  'obsidian-circuit': 'fm-obsidian-circuit',
   'pixel-quest': 'fm-pixel-quest',
   quest: 'fm-pixel-quest',
+  ribbon: 'fm-velvet-ribbon',
+  'velvet-ribbon': 'fm-velvet-ribbon',
   'warm-studio': 'fm-foolmoon-warm'
 }
 

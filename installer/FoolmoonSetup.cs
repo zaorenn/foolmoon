@@ -128,7 +128,7 @@ namespace FoolmoonSetup
 
         public SetupWindow()
         {
-            Title = "Foolmoon Kurulum Sihirbazı";
+            Title = "Foolmoon Setup";
             Width = 860;
             Height = 640;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
@@ -181,7 +181,7 @@ namespace FoolmoonSetup
             });
             brandText.Children.Add(new TextBlock
             {
-                Text = "Hermes Agent Desktop Kurulumu · v1.0.0",
+                Text = "Hermes Agent Desktop Installer · v1.0.0",
                 Foreground = B(C_Muted),
                 FontSize = 11
             });
@@ -213,7 +213,7 @@ namespace FoolmoonSetup
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center
             };
-            string[] titles = { "1. Hoş Geldin", "2. Seni Tanıyalım", "3. LM Studio & Model", "4. Kurulum" };
+            string[] titles = { "1. Welcome", "2. Profile", "3. LM Studio & Model", "4. Install" };
             for (int i = 0; i < 4; i++)
             {
                 var pillText = new TextBlock
@@ -248,32 +248,32 @@ namespace FoolmoonSetup
             rootGrid.Children.Add(stepHost);
 
             // Initialize controls
-            _lblHardwareBadge = new TextBlock { Text = "Sistem donanımı kontrol ediliyor...", Foreground = B(C_Muted), FontSize = 12 };
+            _lblHardwareBadge = new TextBlock { Text = "Checking system hardware...", Foreground = B(C_Muted), FontSize = 12 };
             _tbInstallDir = MakeTextBox(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Foolmoon"));
-            _cbDesktopShortcut = MakeCheckBox("Masaüstü kısayolu oluştur", true);
-            _cbStartMenuShortcut = MakeCheckBox("Başlat menüsüne ekle", true);
+            _cbDesktopShortcut = MakeCheckBox("Create Desktop shortcut", true);
+            _cbStartMenuShortcut = MakeCheckBox("Add Start Menu entry", true);
 
             _tbName = MakeTextBox("");
             _tbAddressAs = MakeTextBox("");
-            _cbLanguage = MakeComboBox(new[] { "Türkçe", "English", "Türkçe ve English (İkisi de)" }, 0);
+            _cbLanguage = MakeComboBox(new[] { "English", "Deutsch", "Español", "Français", "Multilingual" }, 0);
             _cbStyle = MakeComboBox(new[]
             {
-                "Samimi, kısa ve çözüm odaklı (soru sormadan doğrudan üret)",
-                "Profesyonel, teknik ve yapılandırılmış",
-                "Yaratıcı, görsel odaklı ve detaylı",
-                "Sakin mentor — adım adım öğretici"
+                "Concise, direct, and execution-focused (proceed without extra prompts)",
+                "Technical, structured, and engineering-grade",
+                "Visual, detailed, and design-oriented",
+                "Guided step-by-step explanations"
             }, 0);
             _tbRole = MakeTextBox("");
             _tbRules = MakeMultilineBox("");
             _cbSkin = MakeComboBox(new[]
             {
-                "night-city|Night City — Karanlık Cyberpunk / Neon",
-                "macos-frost|macOS Frost — Minimal Buzlu Cam",
-                "foolmoon-warm|Warm Studio Cream — Sıcak Alabaster Kağıt"
-            }, 1);
+                "obsidian-circuit|Obsidian Circuit — Matte Graphite / Cyan Traces",
+                "lunar-frost|Lunar Frost Glass — Soft Slate Translucent",
+                "foolmoon-warm|Warm Studio Cream — Alabaster Editorial"
+            }, 2);
 
             _tbLmUrl = MakeTextBox("http://127.0.0.1:1234/v1");
-            _lblLmStatus = new TextBlock { Text = "LM Studio taranıyor...", Foreground = B(C_Muted), FontSize = 12 };
+            _lblLmStatus = new TextBlock { Text = "Scanning LM Studio...", Foreground = B(C_Muted), FontSize = 12 };
             _lbModels = new ListBox
             {
                 Height = 140,
@@ -284,8 +284,8 @@ namespace FoolmoonSetup
                 Margin = new Thickness(0, 6, 0, 6)
             };
             _tbManualModel = MakeTextBox("");
-            _rbUseLmStudio = new RadioButton { Content = "LM Studio (Yerel LLM — Önerilen)", IsChecked = true, Foreground = B(C_Text), Margin = new Thickness(0, 0, 18, 0) };
-            _rbUseCustomApi = new RadioButton { Content = "Özel OpenAI-Uyumlu API", Foreground = B(C_Text) };
+            _rbUseLmStudio = new RadioButton { Content = "LM Studio (Local LLM — Recommended)", IsChecked = true, Foreground = B(C_Text), Margin = new Thickness(0, 0, 18, 0) };
+            _rbUseCustomApi = new RadioButton { Content = "Custom OpenAI-Compatible API", Foreground = B(C_Text) };
             _tbCustomBaseUrl = MakeTextBox("https://api.openai.com/v1");
             _tbCustomModel = MakeTextBox("");
             _pbCustomApiKey = new PasswordBox
@@ -310,7 +310,7 @@ namespace FoolmoonSetup
                 BorderThickness = new Thickness(0)
             };
             _lblPercent = new TextBlock { Text = "0%", Foreground = B(C_Accent), FontSize = 13, FontWeight = FontWeights.SemiBold };
-            _lblCurrentStageMsg = new TextBlock { Text = "Kuruluma başlamaya hazır.", Foreground = B(C_Text), FontSize = 13 };
+            _lblCurrentStageMsg = new TextBlock { Text = "Ready to begin installation.", Foreground = B(C_Text), FontSize = 13 };
             _tbInstallLog = new TextBox
             {
                 Height = 145,
@@ -353,12 +353,12 @@ namespace FoolmoonSetup
                 Padding = new Thickness(28, 0, 28, 0),
                 Child = footer
             };
-            _btnBack = MakeSecondaryButton("Geri");
+            _btnBack = MakeSecondaryButton("Back");
             _btnBack.HorizontalAlignment = HorizontalAlignment.Left;
             _btnBack.VerticalAlignment = VerticalAlignment.Center;
             _btnBack.Click += (s, e) => { if (!_installing && _step > 0) ShowStep(_step - 1); };
 
-            _btnNext = MakePrimaryButton("Devam Et");
+            _btnNext = MakePrimaryButton("Continue");
             _btnNext.HorizontalAlignment = HorizontalAlignment.Right;
             _btnNext.VerticalAlignment = VerticalAlignment.Center;
             _btnNext.Click += OnNextClicked;
@@ -382,24 +382,23 @@ namespace FoolmoonSetup
         private FrameworkElement BuildWelcomePage()
         {
             var stack = new StackPanel();
-            stack.Children.Add(MakeHeading("Bilgisayarına özel Hermes Agent deneyimi."));
+            stack.Children.Add(MakeHeading("A local-first desktop workspace built on Hermes Agent."));
             stack.Children.Add(MakeLead(
-                "Foolmoon; dinamik Notch, akıllı bbot yardımcısı, yerel seslendirme, MCP araçları ve sıfır bozulma güvenceli " +
-                "çift güncelleme sistemiyle saniyeler içinde LM Studio modellerine bağlanır."));
+                "Foolmoon configures the dynamic Notch, @bwnd/bbot companion, local CUDA + SAPI TTS, bundled MCP servers, and dual safe updaters, and connects directly to LM Studio."));
 
-            var hwCard = MakeSectionCard("Donanım & Ortam Özeti");
+            var hwCard = MakeSectionCard("Hardware & Environment Summary");
             ((StackPanel)hwCard.Child).Children.Add(_lblHardwareBadge);
             stack.Children.Add(hwCard);
 
-            var pathCard = MakeSectionCard("Kurulum Konumu & Kısayollar");
+            var pathCard = MakeSectionCard("Install Location & Shortcuts");
             var pathBody = (StackPanel)pathCard.Child;
-            pathBody.Children.Add(MakeLabel("Kurulum Klasörü"));
+            pathBody.Children.Add(MakeLabel("Install Directory"));
 
             var row = new Grid();
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             Grid.SetColumn(_tbInstallDir, 0);
-            var btnBrowse = MakeSecondaryButton("Gözat...");
+            var btnBrowse = MakeSecondaryButton("Browse...");
             btnBrowse.Margin = new Thickness(10, 0, 0, 0);
             btnBrowse.Click += (s, e) =>
             {
@@ -426,11 +425,11 @@ namespace FoolmoonSetup
         private FrameworkElement BuildPersonalizePage()
         {
             var stack = new StackPanel();
-            stack.Children.Add(MakeHeading("Hermes seni ilk açılışta tanısın."));
+            stack.Children.Add(MakeHeading("Personalize your agent profile."));
             stack.Children.Add(MakeLead(
-                "Burada verdiğin bilgiler USER.md kalıcı hafızasına işlenir. İstediğin zaman Ayarlar → Hafıza bölümünden düzenleyebilirsin."));
+                "These preferences are saved into USER.md persistent memory. You can edit them anytime under Settings → Memory & Context."));
 
-            var card = MakeSectionCard("Kimlik & Hitap Tercihleri");
+            var card = MakeSectionCard("Identity & Address Preferences");
             var body = (StackPanel)card.Child;
 
             var grid2 = new Grid();
@@ -439,12 +438,12 @@ namespace FoolmoonSetup
             grid2.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
             var left = new StackPanel();
-            left.Children.Add(MakeLabel("Adın"));
+            left.Children.Add(MakeLabel("Your Name"));
             left.Children.Add(_tbName);
             Grid.SetColumn(left, 0);
 
             var right = new StackPanel();
-            right.Children.Add(MakeLabel("Sana Nasıl Hitap Etmeli?"));
+            right.Children.Add(MakeLabel("How Should Hermes Address You?"));
             right.Children.Add(_tbAddressAs);
             Grid.SetColumn(right, 2);
 
@@ -458,12 +457,12 @@ namespace FoolmoonSetup
             gridLang.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
             var colL = new StackPanel();
-            colL.Children.Add(MakeLabel("Tercih Edilen Dil"));
+            colL.Children.Add(MakeLabel("Preferred Language"));
             colL.Children.Add(_cbLanguage);
             Grid.SetColumn(colL, 0);
 
             var colR = new StackPanel();
-            colR.Children.Add(MakeLabel("Varsayılan Görsel Tema"));
+            colR.Children.Add(MakeLabel("Default Visual Theme"));
             colR.Children.Add(_cbSkin);
             Grid.SetColumn(colR, 2);
 
@@ -471,13 +470,13 @@ namespace FoolmoonSetup
             gridLang.Children.Add(colR);
             body.Children.Add(gridLang);
 
-            body.Children.Add(MakeLabel("Yanıt & Davranış Tarzı", 10));
+            body.Children.Add(MakeLabel("Response & Behavior Style", 10));
             body.Children.Add(_cbStyle);
 
-            body.Children.Add(MakeLabel("Mesleğin / İlgi Alanların", 10));
+            body.Children.Add(MakeLabel("Role / Primary Workflow", 10));
             body.Children.Add(_tbRole);
 
-            body.Children.Add(MakeLabel("Hermes'in Her Zaman Uyması Gereken Kurallar (her satır ayrı hafıza kaydı)", 10));
+            body.Children.Add(MakeLabel("Standing Rules for Hermes (one memory entry per line)", 10));
             body.Children.Add(_tbRules);
 
             stack.Children.Add(card);
@@ -487,9 +486,9 @@ namespace FoolmoonSetup
         private FrameworkElement BuildModelPage()
         {
             var stack = new StackPanel();
-            stack.Children.Add(MakeHeading("LM Studio veya API Modelini Bağla."));
+            stack.Children.Add(MakeHeading("Connect LM Studio or an API endpoint."));
             stack.Children.Add(MakeLead(
-                "Sadece LM Studio ve indirdiğin tek bir LLM olması yeterli. Uygulama yüklü modelleri otomatik algılar."));
+                "Only LM Studio and a single local LLM are required on a fresh Windows PC. Loaded models are detected automatically."));
 
             var modeRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 12) };
             _rbUseLmStudio.Checked += (s, e) => UpdateProviderVisibility();
@@ -498,24 +497,24 @@ namespace FoolmoonSetup
             modeRow.Children.Add(_rbUseCustomApi);
             stack.Children.Add(modeRow);
 
-            var lmCard = MakeSectionCard("LM Studio Bağlantısı");
+            var lmCard = MakeSectionCard("LM Studio Endpoint");
             var lmBody = (StackPanel)lmCard.Child;
             var urlRow = new Grid();
             urlRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             urlRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             Grid.SetColumn(_tbLmUrl, 0);
-            var btnScan = MakeSecondaryButton("Yeniden Tara");
+            var btnScan = MakeSecondaryButton("Rescan");
             btnScan.Margin = new Thickness(10, 0, 0, 0);
             btnScan.Click += (s, e) => ProbeLmStudioAsync();
             Grid.SetColumn(btnScan, 1);
             urlRow.Children.Add(_tbLmUrl);
             urlRow.Children.Add(btnScan);
-            lmBody.Children.Add(MakeLabel("Yerel Sunucu Adresi"));
+            lmBody.Children.Add(MakeLabel("Local Server URL"));
             lmBody.Children.Add(urlRow);
             _lblLmStatus.Margin = new Thickness(0, 6, 0, 0);
             lmBody.Children.Add(_lblLmStatus);
             lmBody.Children.Add(_lbModels);
-            lmBody.Children.Add(MakeLabel("veya Model Kimliğini Elle Yaz (LM Studio şu an kapalıysa):"));
+            lmBody.Children.Add(MakeLabel("or enter Model ID manually (if LM Studio is closed right now):"));
             lmBody.Children.Add(_tbManualModel);
             _lbModels.SelectionChanged += (s, e) =>
             {
@@ -529,11 +528,11 @@ namespace FoolmoonSetup
 
             _customApiBox.Children.Add(MakeLabel("API Base URL"));
             _customApiBox.Children.Add(_tbCustomBaseUrl);
-            _customApiBox.Children.Add(MakeLabel("Model Adı", 8));
+            _customApiBox.Children.Add(MakeLabel("Model ID", 8));
             _customApiBox.Children.Add(_tbCustomModel);
-            _customApiBox.Children.Add(MakeLabel("API Anahtarı (yalnızca yerel .env dosyanıza kaydedilir)", 8));
+            _customApiBox.Children.Add(MakeLabel("API Key (stored strictly in local .env)", 8));
             _customApiBox.Children.Add(_pbCustomApiKey);
-            var customCard = MakeSectionCard("Özel OpenAI-Uyumlu API Ayarları");
+            var customCard = MakeSectionCard("Custom OpenAI-Compatible API");
             ((StackPanel)customCard.Child).Children.Add(_customApiBox);
             _customApiBox.Visibility = Visibility.Visible;
             customCard.Visibility = Visibility.Collapsed;
@@ -555,10 +554,10 @@ namespace FoolmoonSetup
         private FrameworkElement BuildInstallPage()
         {
             var stack = new StackPanel();
-            stack.Children.Add(MakeHeading("Kurulum Durumu"));
-            stack.Children.Add(MakeLead("Hermes çekirdeği, Foolmoon masaüstü arayüzü, MCP araçları ve kişisel hafızan kuruluyor."));
+            stack.Children.Add(MakeHeading("Installing Foolmoon"));
+            stack.Children.Add(MakeLead("Provisioning Hermes Core, Desktop UI, bundled MCP servers, and initial profile memory."));
 
-            var card = MakeSectionCard("İlerleme");
+            var card = MakeSectionCard("Progress");
             var body = (StackPanel)card.Child;
 
             var topRow = new Grid();
@@ -572,18 +571,18 @@ namespace FoolmoonSetup
 
             string[][] stages =
             {
-                new[] { "tools", "1. Git & Kurulum Araçları" },
-                new[] { "repo", "2. Foolmoon + Hermes Deposu" },
-                new[] { "runtime", "3. Python & Çekirdek Bağımlılıkları" },
-                new[] { "desktop", "4. Masaüstü Arayüz Derlemesi" },
-                new[] { "personalize", "5. LM Studio, Hafıza & MCP Araçları" },
-                new[] { "shortcuts", "6. Kısayollar & Sistem Tepsisi" }
+                new[] { "tools", "1. Git & Runtime Tools" },
+                new[] { "repo", "2. Foolmoon + Hermes Repository" },
+                new[] { "runtime", "3. Python & Core Dependencies" },
+                new[] { "desktop", "4. Desktop Workspace Build" },
+                new[] { "personalize", "5. LM Studio, Memory & MCP Servers" },
+                new[] { "shortcuts", "6. Shortcuts & System Tray" }
             };
             foreach (string[] st in stages)
             {
                 var row = new Grid { Margin = new Thickness(0, 3, 0, 3) };
                 var title = new TextBlock { Text = st[1], Foreground = B(C_Text), FontSize = 12.5 };
-                var badge = new TextBlock { Text = "Bekliyor", Foreground = B(C_Muted), FontSize = 12, HorizontalAlignment = HorizontalAlignment.Right };
+                var badge = new TextBlock { Text = "Pending", Foreground = B(C_Muted), FontSize = 12, HorizontalAlignment = HorizontalAlignment.Right };
                 _stageBadges[st[0]] = badge;
                 row.Children.Add(title);
                 row.Children.Add(badge);
@@ -591,7 +590,7 @@ namespace FoolmoonSetup
             }
             stack.Children.Add(card);
 
-            var logCard = MakeSectionCard("Kurulum Günlüğü");
+            var logCard = MakeSectionCard("Installation Log");
             ((StackPanel)logCard.Child).Children.Add(_tbInstallLog);
             stack.Children.Add(logCard);
 
@@ -610,10 +609,10 @@ namespace FoolmoonSetup
             }
 
             _btnBack.Visibility = (idx > 0 && !_installing && !_installDone) ? Visibility.Visible : Visibility.Collapsed;
-            if (idx < 2) _btnNext.Content = "Devam Et";
-            else if (idx == 2) _btnNext.Content = "Kurulumu Başlat";
-            else if (_installDone) _btnNext.Content = "Foolmoon'u Başlat";
-            else _btnNext.Content = "Kuruluyor...";
+            if (idx < 2) _btnNext.Content = "Continue";
+            else if (idx == 2) _btnNext.Content = "Start Install";
+            else if (_installDone) _btnNext.Content = "Launch Foolmoon";
+            else _btnNext.Content = "Installing...";
             _btnNext.IsEnabled = !_installing || _installDone;
         }
 
@@ -653,7 +652,7 @@ namespace FoolmoonSetup
         {
             ThreadPool.QueueUserWorkItem(_ =>
             {
-                string gpu = "GPU algılanamadı (CPU + Windows SAPI ses yedeği hazır)";
+                string gpu = "No discrete GPU detected (CPU + Windows SAPI voice fallback ready)";
                 try
                 {
                     var psi = new ProcessStartInfo
@@ -685,7 +684,7 @@ namespace FoolmoonSetup
         private void ProbeLmStudioAsync()
         {
             string baseUrl = _tbLmUrl.Text.Trim().TrimEnd('/');
-            _lblLmStatus.Text = "LM Studio taranıyor (" + baseUrl + "/models)...";
+            _lblLmStatus.Text = "Scanning LM Studio (" + baseUrl + "/models)...";
             _lblLmStatus.Foreground = B(C_Muted);
 
             ThreadPool.QueueUserWorkItem(_ =>
@@ -733,12 +732,12 @@ namespace FoolmoonSetup
                     if (found.Count > 0)
                     {
                         _lbModels.SelectedIndex = 0;
-                        _lblLmStatus.Text = found.Count + " adet sohbet modeli algılandı ve seçilmeye hazır.";
+                        _lblLmStatus.Text = found.Count + " chat model(s) detected and ready to select.";
                         _lblLmStatus.Foreground = B(C_Success);
                     }
                     else
                     {
-                        _lblLmStatus.Text = "LM Studio yanıt vermedi (" + (err ?? "model bulunamadı") + "). İstersen devam edip sonradan ayarlardan bağlayabilirsin.";
+                        _lblLmStatus.Text = "LM Studio did not respond (" + (err ?? "no models found") + "). You can continue and configure models in Settings later.";
                         _lblLmStatus.Foreground = B(C_Muted);
                     }
                 }));
@@ -750,16 +749,16 @@ namespace FoolmoonSetup
             _installing = true;
             _btnBack.Visibility = Visibility.Collapsed;
             _btnNext.IsEnabled = false;
-            _btnNext.Content = "Kuruluyor...";
+            _btnNext.Content = "Installing...";
 
-            string skinVal = (_cbSkin.SelectedItem as string ?? "night-city|").Split('|')[0];
+            string skinVal = (_cbSkin.SelectedItem as string ?? "obsidian-circuit|").Split('|')[0];
             var cfg = new Dictionary<string, object>();
             cfg["installDir"] = _tbInstallDir.Text.Trim();
             cfg["createDesktopShortcut"] = _cbDesktopShortcut.IsChecked == true;
             cfg["createStartMenuShortcut"] = _cbStartMenuShortcut.IsChecked == true;
             cfg["userName"] = _tbName.Text.Trim();
             cfg["addressAs"] = _tbAddressAs.Text.Trim();
-            cfg["language"] = _cbLanguage.SelectedItem as string ?? "Türkçe";
+            cfg["language"] = _cbLanguage.SelectedItem as string ?? "English";
             cfg["style"] = _cbStyle.SelectedItem as string ?? "";
             cfg["userRole"] = _tbRole.Text.Trim();
             cfg["userRules"] = _tbRules.Text.Trim();
@@ -830,7 +829,7 @@ namespace FoolmoonSetup
                                             _lblCurrentStageMsg.Text = msg;
                                             if (_stageBadges.ContainsKey(id))
                                             {
-                                                _stageBadges[id].Text = status == "done" ? "Tamamlandı" : status == "running" ? "Çalışıyor..." : status;
+                                                _stageBadges[id].Text = status == "done" ? "Done" : status == "running" ? "Running..." : status;
                                                 _stageBadges[id].Foreground = B(status == "done" ? C_Success : C_Accent);
                                             }
                                             AppendLog("→ " + msg);
@@ -857,17 +856,17 @@ namespace FoolmoonSetup
                                 _installDone = true;
                                 _progressBar.Value = 100;
                                 _lblPercent.Text = "100%";
-                                _lblCurrentStageMsg.Text = "Kurulum tamamlandı!";
+                                _lblCurrentStageMsg.Text = "Installation complete!";
                                 _lblCurrentStageMsg.Foreground = B(C_Success);
-                                _btnNext.Content = "Foolmoon'u Başlat";
+                                _btnNext.Content = "Launch Foolmoon";
                                 _btnNext.IsEnabled = true;
                             }
                             else
                             {
-                                _lblCurrentStageMsg.Text = "Kurulum hatası (kod " + proc.ExitCode + "). Günlüğü inceleyin.";
+                                _lblCurrentStageMsg.Text = "Installation failed (exit code " + proc.ExitCode + "). Check the log below.";
                                 _lblCurrentStageMsg.Foreground = B(C_Error);
                                 _btnBack.Visibility = Visibility.Visible;
-                                _btnNext.Content = "Yeniden Dene";
+                                _btnNext.Content = "Retry";
                                 _btnNext.IsEnabled = true;
                             }
                         }));
@@ -878,12 +877,12 @@ namespace FoolmoonSetup
                     Dispatcher.BeginInvoke(new Action(() =>
                     {
                         _installing = false;
-                        _lblCurrentStageMsg.Text = "Başlatma hatası: " + ex.Message;
+                        _lblCurrentStageMsg.Text = "Launch error: " + ex.Message;
                         _lblCurrentStageMsg.Foreground = B(C_Error);
                         AppendLog(ex.ToString());
                         _btnBack.Visibility = Visibility.Visible;
                         _btnNext.IsEnabled = true;
-                        _btnNext.Content = "Yeniden Dene";
+                        _btnNext.Content = "Retry";
                     }));
                 }
                 finally

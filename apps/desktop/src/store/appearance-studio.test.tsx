@@ -44,11 +44,11 @@ describe('Foolmoon appearance studio, patterns, stickers & backend sync', () => 
     expect(globalThis.document.getElementById('foolmoon-user-custom-css')).toBeNull()
   })
 
-  it('applies Hello Kitty showcase preset and renders non-blocking SVG pattern + corner stickers', () => {
-    const preset = applyStudioUniverse('hello-kitty')
+  it('applies Velvet Ribbon showcase preset and renders non-blocking SVG pattern + corner stickers', () => {
+    const preset = applyStudioUniverse('velvet-ribbon')
 
-    expect(preset?.id).toBe('hello-kitty')
-    expect($pendingSkinApply.get()).toBe('fm-hello-kitty')
+    expect(preset?.id).toBe('velvet-ribbon')
+    expect($pendingSkinApply.get()).toBe('fm-velvet-ribbon')
     expect($bbotFxPreset.get()).toBe('mirror-chrome')
 
     const { container } = render(<StudioOverlays />)
@@ -57,7 +57,7 @@ describe('Foolmoon appearance studio, patterns, stickers & backend sync', () => 
     expect(root).not.toBeNull()
     expect(root?.className).toContain('pointer-events-none')
     expect(container.querySelector('[data-studio-pattern="cat-ears-whiskers"]')).not.toBeNull()
-    expect(container.querySelector('[data-studio-sticker="kitty-kawaii"]')).not.toBeNull()
+    expect(container.querySelector('[data-studio-sticker="velvet-cat"]')).not.toBeNull()
     expect(container.querySelector('[data-studio-sticker="satin-bow"]')).not.toBeNull()
   })
 
@@ -86,7 +86,7 @@ describe('Foolmoon appearance studio, patterns, stickers & backend sync', () => 
       new StorageEvent('storage', {
         key: 'foolmoon.studio-appearance.v1',
         newValue: JSON.stringify({
-          activeUniverse: 'hello-kitty',
+          activeUniverse: 'velvet-ribbon',
           cornerRadius: 26,
           material: 'plush-pastel',
           pattern: 'cat-ears-whiskers'

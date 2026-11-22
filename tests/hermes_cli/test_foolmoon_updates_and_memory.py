@@ -146,19 +146,19 @@ def test_memory_files_and_profile_seed_routes(tmp_path: Path, monkeypatch):
     r_seed = client.post(
         "/api/memory/profile-seed",
         json={
-            "name": "Deniz",
-            "address_as": "Deniz",
-            "language": "Türkçe",
-            "style": "Kısa ve net",
-            "role": "Geliştirici",
-            "rules": "Soru sorma\nTypeScript kullan",
+            "name": "Alex",
+            "address_as": "Alex",
+            "language": "English",
+            "style": "Concise and direct",
+            "role": "Systems Engineer",
+            "rules": "Use TypeScript\nProceed directly",
             "apply_personality": False,
         },
     )
     assert r_seed.status_code == 200
     entries = r_seed.json()["entries"]
-    assert any("Deniz" in e for e in entries)
-    assert any("TypeScript kullan" in e for e in entries)
+    assert any("Alex" in e for e in entries)
+    assert any("Use TypeScript" in e for e in entries)
 
 
 def test_validate_public_http_url_blocks_ssrf():

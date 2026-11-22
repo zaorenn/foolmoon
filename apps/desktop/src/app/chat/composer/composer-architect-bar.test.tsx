@@ -20,20 +20,20 @@ describe('ComposerArchitectBar', () => {
   it('switches between Standard and Studio Architect modes and exposes zero native button titles', () => {
     const { container } = render(<ComposerArchitectBar onPickImages={() => {}} />)
 
-    expect(screen.queryByRole('button', { name: 'Hello Kitty Theme' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Velvet Ribbon' })).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Studio Architect' }))
 
     expect($composerPersona.get()).toBe('architect')
-    expect(screen.getByRole('button', { name: 'Hello Kitty Theme' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Velvet Ribbon' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Stage Architect Recipe' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Visual Studio' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Voice Cloning' })).toBeTruthy()
     expect(container.querySelectorAll('button[title]').length).toBe(0)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Hello Kitty Theme' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Velvet Ribbon' }))
 
-    expect($pendingSkinApply.get()).toBe('fm-hello-kitty')
+    expect($pendingSkinApply.get()).toBe('fm-velvet-ribbon')
     expect($studioAppearance.get().pattern).toBe('cat-ears-whiskers')
   })
 })

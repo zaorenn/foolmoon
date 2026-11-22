@@ -23,7 +23,7 @@ import { type ChangeEvent, type DragEvent, useCallback, useEffect, useRef, useSt
 import { useNavigate } from 'react-router'
 
 import { requestComposerAttachImages, requestComposerFocus, requestComposerInsert } from '@/app/chat/composer/focus'
-import { AuroraWaveVisualizer, resolveAuroraColors } from '@/app/notch/aurora-wave'
+import { AuroraWaveVisualizer } from '@/app/notch/aurora-wave'
 import { BbotAvatar } from '@/app/notch/bbot-avatar'
 import { setTerminalTakeover } from '@/app/right-sidebar/store'
 import { createTerminal } from '@/app/right-sidebar/terminal/terminals'
@@ -42,7 +42,6 @@ import {
   $studioAppearance,
   type BuiltinStickerKind,
   removeStudioStickerBySlot,
-  sanitizeStudioAppearance,
   type StudioChatLayout,
   type StudioMaterial,
   type StudioMotionLevel,
@@ -82,6 +81,12 @@ import {
 import { notify, notifyError } from '@/store/notifications'
 import { extractStudioAppearanceFromCss, ingestBackendSkin } from '@/themes/backend-sync'
 import { useTheme } from '@/themes/context'
+import {
+  applyThemeBundle,
+  buildThemeBundle,
+  downloadThemeBundleFile,
+  parseAndValidateThemeBundle
+} from '@/themes/foolmoon-theme-bundle'
 import { ownAccent, persistAccent } from '@/themes/persist-accent'
 import { applyStudioUniverse, STUDIO_UNIVERSE_PRESETS } from '@/themes/studio-presets'
 import { resolveTheme } from '@/themes/user-themes'
@@ -123,7 +128,7 @@ const PATTERNS: Array<{ id: StudioPatternKind; label: string }> = [
 ]
 
 const STICKER_CHOICES: Array<{ accent: string; kind: BuiltinStickerKind; label: string }> = [
-  { accent: '#E11D62', kind: 'kitty-kawaii', label: 'Hello Kitty' },
+  { accent: '#E11D62', kind: 'velvet-cat', label: 'Velvet Cat' },
   { accent: '#FB3768', kind: 'satin-bow', label: 'Satin Bow' },
   { accent: '#F59E0B', kind: 'pixel-hero', label: 'Pixel Hero' },
   { accent: '#38BDF8', kind: 'game-cartridge', label: 'Quest Cart' },
@@ -143,7 +148,7 @@ const ACCENT_SWATCHES: Array<{ hex: string; label: string }> = [
   { hex: '#E11D62', label: 'Sakura Rose' },
   { hex: '#F59E0B', label: 'Quest Gold' },
   { hex: '#06B6D4', label: 'Cyber Cyan' },
-  { hex: '#0A66E8', label: 'Sonoma Blue' },
+  { hex: '#0A66E8', label: 'Cobalt Blue' },
   { hex: '#8B5CF6', label: 'Amethyst' },
   { hex: '#10B981', label: 'Emerald' },
   { hex: '#EC4899', label: 'Flamingo' }
@@ -157,20 +162,20 @@ const BUILTIN_TUI_SKINS: Array<{
   universeId?: string
 }> = [
   { dot: '#EA745E', glyph: '☾', id: 'foolmoon', label: 'Foolmoon Nocturne', universeId: 'foolmoon-warm' },
-  { dot: '#E11D62', glyph: '⋈', id: 'foolmoon-kitty', label: 'Hello Kitty TUI', universeId: 'hello-kitty' },
+  { dot: '#E11D62', glyph: '⋈', id: 'foolmoon-ribbon', label: 'Velvet Ribbon TUI', universeId: 'velvet-ribbon' },
   { dot: '#FACC15', glyph: '⚔', id: 'foolmoon-quest', label: 'Pixel Quest TUI', universeId: 'pixel-quest' },
   { dot: '#DD4A3A', glyph: '⚔', id: 'ares', label: 'Ares Crimson' },
   { dot: '#5DB8F5', glyph: 'Ψ', id: 'poseidon', label: 'Poseidon' },
-  { dot: '#F29C38', glyph: '✦', id: 'charizard', label: 'Charizard' }
+  { dot: '#A1A1AA', glyph: '◆', id: 'mono', label: 'Obsidian Mono' }
 ]
 
 function tuiPreviewBanner(skinId: string): { art: string[]; subtitle: string; title: string } {
   switch (skinId) {
-    case 'foolmoon-kitty':
+    case 'foolmoon-ribbon':
       return {
-        art: [' ⋈♡  HELLO KITTY · KAWAII TUI  ♡⋈', '  /\\_/\\   ( =①ω①= )   Ribbon v3', ' ╰─────  strawberry velvet  ─────╯'],
+        art: [' ⋈♡  VELVET RIBBON · EDITORIAL TUI  ♡⋈', '  /\\_/\\   ribbon & ivory glass', ' ╰─────  velvet rose palette  ─────╯'],
         subtitle: 'prompt: ⋈❯ · prefix: ⋈ · light & dark',
-        title: 'HELLO KITTY RIBBON'
+        title: 'VELVET RIBBON'
       }
 
     case 'foolmoon-quest':
@@ -194,16 +199,16 @@ function tuiPreviewBanner(skinId: string): { art: string[]; subtitle: string; ti
         title: 'POSEIDON AGENT'
       }
 
-    case 'charizard':
+    case 'mono':
       return {
-        art: [' ✦  CHARIZARD · VOLCANIC TUI  ✦', '  ▲🔥▲  tail flame igniting cores', ' ╰───────  ember obsidian  ───────╯'],
-        subtitle: 'prompt: ✦❯ · prefix: │ · burnt ember',
-        title: 'CHARIZARD AGENT'
+        art: [' ◆  OBSIDIAN MONO · ARCHITECT TUI  ◆', '  ──  pure neutral typographic ink', ' ╰──────  matte graphite contrast  ───╯'],
+        subtitle: 'prompt: ◆❯ · prefix: │ · monochrome neutral',
+        title: 'OBSIDIAN MONO'
       }
 
     default:
       return {
-        art: [' ☾✦  FOOLMOON NOCTURNE · TUI  ✦☾', '  Lunar Terracotta · Porcelain & Night', ' ╰─────  jarvis notch + cli skin ─────╯'],
+        art: [' ☾✦  FOOLMOON NOCTURNE · TUI  ✦☾', '  Lunar Terracotta · Porcelain & Night', ' ╰───  hardware notch + cli skin  ───╯'],
         subtitle: 'prompt: ☾❯ · prefix: ☾ · 28-key WCAG',
         title: 'FOOLMOON AGENT'
       }
@@ -231,6 +236,7 @@ export function ImageThemeStudio() {
   const { setTheme, theme, themeName: activeDesktopTheme } = useTheme()
   const fileRef = useRef<HTMLInputElement | null>(null)
   const stickerUploadRef = useRef<HTMLInputElement | null>(null)
+  const bundleFileRef = useRef<HTMLInputElement | null>(null)
 
   const [imageDataUrl, setImageDataUrl] = useState<string>('')
   const [imageName, setImageName] = useState('')
@@ -242,6 +248,7 @@ export function ImageThemeStudio() {
   const [selectedSlot, setSelectedSlot] = useState<StudioStickerSlot>('bottom-right')
   const [busy, setBusy] = useState(false)
   const [dragOver, setDragOver] = useState(false)
+  const [bundleDragOver, setBundleDragOver] = useState(false)
   const [previewPalette, setPreviewPalette] = useState<Record<string, string> | null>(null)
   const [userSkins, setUserSkins] = useState<UserSkinEntry[]>([])
   const [activeTuiSkin, setActiveTuiSkin] = useState('foolmoon')
@@ -575,12 +582,55 @@ export function ImageThemeStudio() {
     }
   }
 
-  const handleExportStudioJson = async () => {
+  const handleExportThemeFile = () => {
     try {
-      await writeClipboardText(JSON.stringify($studioAppearance.get(), null, 2))
-      notify({ kind: 'success', message: 'Copied complete Foolmoon Studio JSON preset to clipboard.' })
+      const bundle = buildThemeBundle({
+        name: themeName.trim() || theme.label || studio.activeUniverse || 'foolmoon-theme',
+        notch: notchConfig,
+        preferredMode: mode === 'dark' || mode === 'light' ? mode : undefined,
+        studio: $studioAppearance.get(),
+        theme
+      })
+
+      const filename = downloadThemeBundleFile(bundle)
+      notify({ kind: 'success', message: `Exported portable theme bundle "${filename}".` })
     } catch (err) {
-      notifyError(err, 'Could not copy Studio JSON preset')
+      notifyError(err, 'Could not export .foolmoon theme file')
+    }
+  }
+
+  const importBundleRaw = (rawText: string, byteLength?: number) => {
+    const bundle = parseAndValidateThemeBundle(rawText, byteLength, theme)
+    const applied = applyThemeBundle(bundle)
+    setPresetImportText('')
+    notify({ kind: 'success', message: `Imported & applied theme "${applied.label}".` })
+  }
+
+  const handleImportBundleFile = async (file: File) => {
+    try {
+      const rawText = await file.text()
+      importBundleRaw(rawText, file.size)
+    } catch (err) {
+      notifyError(err, 'Could not import .foolmoon theme file')
+    }
+  }
+
+  const handleBundleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+
+    if (file) {
+      void handleImportBundleFile(file)
+    }
+  }
+
+  const handleBundleDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setBundleDragOver(false)
+    const file = e.dataTransfer.files?.[0]
+
+    if (file) {
+      void handleImportBundleFile(file)
     }
   }
 
@@ -592,13 +642,9 @@ export function ImageThemeStudio() {
     }
 
     try {
-      const parsed: unknown = JSON.parse(raw)
-      const next = sanitizeStudioAppearance(parsed)
-      updateStudioAppearance(next)
-      setPresetImportText('')
-      notify({ kind: 'success', message: 'Imported and applied Foolmoon Studio JSON preset.' })
+      importBundleRaw(raw, raw.length)
     } catch (err) {
-      notifyError(err, 'Invalid Studio JSON preset')
+      notifyError(err, 'Invalid Studio theme bundle')
     }
   }
 
@@ -714,7 +760,7 @@ export function ImageThemeStudio() {
           <>
             <ImagePlus className="h-5 w-5 text-primary" />
             <div className="text-xs text-muted-foreground">
-              Drop any artwork, Hello Kitty art, game character, or wallpaper here to extract a full 1-image theme
+              Drop any artwork, illustration, or wallpaper here to extract a full 1-image theme
             </div>
           </>
         )}
@@ -740,7 +786,7 @@ export function ImageThemeStudio() {
         <Input
           className="sm:col-span-2"
           onChange={e => setThemeName(e.target.value)}
-          placeholder="Theme name (e.g. hello-kitty-dream, zelda-gold)"
+          placeholder="Theme name (e.g. velvet-ribbon, lunar-slate)"
           size="sm"
           value={themeName}
         />
@@ -886,13 +932,13 @@ export function ImageThemeStudio() {
 
         <div className="flex flex-col gap-1.5 border-t border-border/50 pt-2.5 md:col-span-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-medium text-muted-foreground">Notch Halo Style:</span>
+            <span className="text-[11px] font-medium text-muted-foreground">Notch Ring Style:</span>
             <SegmentedControl
               onChange={val => updateStudioAppearance({ notchStyle: val as StudioNotchStyle })}
               options={[
-                { id: 'scifi-hologram', label: 'Sci-Fi Hologram' },
-                { id: 'orbital-pulse', label: 'Orbital Pulse' },
-                { id: 'macos-minimal', label: 'Minimal Notch' }
+                { id: 'macos-minimal', label: 'Minimal Matte' },
+                { id: 'orbital-pulse', label: 'Hairline Ring' },
+                { id: 'scifi-hologram', label: 'Precision Reticle' }
               ]}
               value={studio.notchStyle}
             />
@@ -902,7 +948,7 @@ export function ImageThemeStudio() {
             <SegmentedControl
               onChange={val => updateStudioAppearance({ chatLayout: val as StudioChatLayout })}
               options={[
-                { id: 'claude-centered', label: 'Claude Centered' },
+                { id: 'editorial-centered', label: 'Editorial Centered' },
                 { id: 'full-studio', label: 'Full Studio' }
               ]}
               value={studio.chatLayout}
@@ -922,7 +968,7 @@ export function ImageThemeStudio() {
             <div>
               <div className="text-xs font-semibold text-foreground">Dynamic Notch Studio</div>
               <div className="text-[11px] text-muted-foreground">
-                Customize the unified morphing Notch, Aurora wave palette, corner roundness, obsidian opacity, rim glow, and live model-activity motion.
+                Configure the hardware-matte Notch housing, telemetry equalizer tone, corner radius, ceramic opacity, and subtle edge contrast.
               </div>
             </div>
           </div>
@@ -938,32 +984,32 @@ export function ImageThemeStudio() {
           </div>
         </div>
 
-        {/* Live Unified Single-Body Notch Preview inside Settings */}
+        {/* Live Unified Matte Notch Preview inside Settings */}
         <div
-          className="relative flex flex-col items-center overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-[#0e1b33] via-[#1c1b42] to-[#13293d] px-4 pt-0 pb-3"
+          className="relative flex flex-col items-center overflow-hidden rounded-xl border border-white/10 bg-[#1B1D21] px-4 pt-0 pb-3"
           data-testid="settings-notch-live-preview"
         >
           <div className="inline-flex items-start justify-center">
             <svg
               aria-hidden="true"
               className="-mr-[0.5px] h-[16px] w-[16px] shrink-0"
-              style={{ color: `rgba(5, 6, 11, ${previewActivity === 'idle' ? 0.98 : notchConfig.glassOpacity})` }}
+              style={{ color: `rgba(17, 18, 20, ${previewActivity === 'idle' ? 0.98 : notchConfig.glassOpacity})` }}
               viewBox="0 0 18 18"
             >
               <path d="M18 0H0C9.941 0 18 8.059 18 18V0Z" fill="currentColor" />
             </svg>
             <div
-              className={`flex flex-col overflow-hidden text-slate-100 ring-1 ring-inset ring-white/10 transition-all duration-300 ${
+              className={`flex flex-col overflow-hidden text-[#EFECE6] ring-1 ring-inset ring-white/10 transition-all duration-300 ${
                 previewActivity === 'idle' ? 'w-[190px] px-2.5 py-1' : 'w-[270px] px-3 pt-1.5 pb-2'
               }`}
               style={{
-                backgroundColor: `rgba(5, 6, 11, ${previewActivity === 'idle' ? 0.98 : notchConfig.glassOpacity})`,
-                borderBottomLeftRadius: `${previewActivity === 'idle' ? 16 : notchConfig.cornerRadius}px`,
-                borderBottomRightRadius: `${previewActivity === 'idle' ? 16 : notchConfig.cornerRadius}px`,
+                backgroundColor: `rgba(17, 18, 20, ${previewActivity === 'idle' ? 0.98 : notchConfig.glassOpacity})`,
+                borderBottomLeftRadius: `${previewActivity === 'idle' ? 14 : notchConfig.cornerRadius}px`,
+                borderBottomRightRadius: `${previewActivity === 'idle' ? 14 : notchConfig.cornerRadius}px`,
                 boxShadow:
                   notchConfig.rimGlow > 0.02
-                    ? `0 10px 28px -6px rgba(0,0,0,0.8), 0 2px ${Math.round(16 * notchConfig.rimGlow)}px -3px ${resolveAuroraColors(notchConfig.auroraPalette, previewActivity).mid}88`
-                    : '0 10px 28px -6px rgba(0,0,0,0.8)'
+                    ? `0 10px 26px -6px rgba(0,0,0,0.72), inset 0 -1px 0 rgba(255,255,255,${(0.06 + notchConfig.rimGlow * 0.1).toFixed(2)})`
+                    : '0 10px 24px -6px rgba(0,0,0,0.72)'
               }}
             >
               <AuroraWaveVisualizer
@@ -975,24 +1021,24 @@ export function ImageThemeStudio() {
                 signalLevel={previewActivity === 'speaking' ? 0.65 : previewActivity === 'idle' ? 0.05 : 0.35}
               />
               {previewActivity !== 'idle' && (
-                <div className="mt-1.5 flex items-center justify-between border-t border-white/10 pt-1.5 text-[11px] text-slate-200">
+                <div className="mt-1.5 flex items-center justify-between border-t border-white/10 pt-1.5 text-[11px] text-[#E6E2D8]">
                   <span className="truncate font-medium">
                     {previewActivity === 'terminal'
                       ? 'Running terminal…'
                       : previewActivity === 'speaking'
-                        ? 'Speaking live lyrics…'
+                        ? 'Speaking synced captions…'
                         : previewActivity === 'approval'
-                          ? 'Permission · Say "Onayla"'
+                          ? 'Permission · Say "Approve"'
                           : 'Foolmoon reasoning…'}
                   </span>
-                  <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                  <span className="h-2 w-2 rounded-full bg-[#86B39E]" />
                 </div>
               )}
             </div>
             <svg
               aria-hidden="true"
               className="-ml-[0.5px] h-[16px] w-[16px] shrink-0"
-              style={{ color: `rgba(5, 6, 11, ${previewActivity === 'idle' ? 0.98 : notchConfig.glassOpacity})` }}
+              style={{ color: `rgba(17, 18, 20, ${previewActivity === 'idle' ? 0.98 : notchConfig.glassOpacity})` }}
               viewBox="0 0 18 18"
             >
               <path d="M0 0H18C8.059 0 0 8.059 0 18V0Z" fill="currentColor" />
@@ -1011,8 +1057,8 @@ export function ImageThemeStudio() {
               <button
                 className={`rounded-full border px-2 py-0.5 text-[10px] font-medium transition ${
                   previewActivity === st.id
-                    ? 'border-white/35 bg-white/18 text-white'
-                    : 'border-white/12 bg-black/25 text-slate-300 hover:bg-white/10'
+                    ? 'border-white/30 bg-white/14 text-white'
+                    : 'border-white/10 bg-black/25 text-neutral-300 hover:bg-white/10'
                 }`}
                 key={st.id}
                 onClick={() => setPreviewActivity(st.id)}
@@ -1026,14 +1072,14 @@ export function ImageThemeStudio() {
 
         <div className="grid gap-3 md:grid-cols-2">
           <div className="flex flex-col gap-2">
-            <span className="text-[11px] font-medium text-muted-foreground">Aurora Wave Palette</span>
+            <span className="text-[11px] font-medium text-muted-foreground">Telemetry Tone</span>
             <div className="flex flex-wrap gap-1.5">
               {(
                 [
-                  { id: 'apple-sunset', label: 'Aurora Sunset' },
-                  { id: 'emerald-pulse', label: 'Emerald Pulse' },
-                  { id: 'cyber-violet', label: 'Cyber Violet' },
-                  { id: 'monochrome-frost', label: 'Monochrome Frost' }
+                  { id: 'matte-graphite', label: 'Matte Graphite' },
+                  { id: 'warm-terracotta', label: 'Warm Terracotta' },
+                  { id: 'sage-slate', label: 'Sage Slate' },
+                  { id: 'monochrome-ink', label: 'Monochrome Ink' }
                 ] as Array<{ id: NotchAuroraPalette; label: string }>
               ).map(p => (
                 <Button
@@ -1064,8 +1110,8 @@ export function ImageThemeStudio() {
               <SegmentedControl
                 onChange={val => updateNotchConfig({ animationIntensity: val as NotchAnimationIntensity })}
                 options={[
-                  { id: 'dynamic', label: 'Hyper Reactive' },
-                  { id: 'subtle', label: 'Smooth' },
+                  { id: 'dynamic', label: 'Responsive' },
+                  { id: 'subtle', label: 'Subtle' },
                   { id: 'minimal', label: 'Calm' }
                 ]}
                 value={notchConfig.animationIntensity}
@@ -1092,11 +1138,11 @@ export function ImageThemeStudio() {
 
           <label className="flex flex-col gap-1 text-[11px] text-muted-foreground">
             <span className="flex items-center justify-between">
-              <span>Aurora Rim Glow</span>
+              <span>Edge Contrast</span>
               <span className="font-mono text-foreground">{Math.round(notchConfig.rimGlow * 100)}%</span>
             </span>
             <input
-              aria-label="Notch aurora rim glow"
+              aria-label="Notch edge contrast"
               className="w-full accent-primary"
               max={1}
               min={0}
@@ -1149,7 +1195,7 @@ export function ImageThemeStudio() {
                 onChange={e => updateNotchConfig({ magneticGlow: e.target.checked })}
                 type="checkbox"
               />
-              Magnetic Cursor Glow
+              Subtle Cursor Sheen
             </label>
           </div>
           <span className="rounded-full border border-border/70 bg-muted/50 px-2.5 py-0.5 font-mono text-[10px] text-muted-foreground">
@@ -1158,7 +1204,7 @@ export function ImageThemeStudio() {
         </div>
       </div>
 
-      {/* 3C. Original @bwnd/bbot Companion Studio (Full Original bbot Customization in Settings) */}
+      {/* 3C. Original @bwnd/bbot Companion Studio */}
       <div
         className="flex flex-col gap-3 rounded-xl border border-border/60 bg-background/40 p-3"
         data-testid="bbot-settings-card"
@@ -1180,7 +1226,7 @@ export function ImageThemeStudio() {
                 triggerBbotSpotlight({
                   durationMs: 3600,
                   expression: 'excited',
-                  label: 'Look right here! (Returning to Notch…)',
+                  label: 'Settings button is here',
                   xNorm: 0.68,
                   yNorm: 0.42
                 })
@@ -1200,7 +1246,7 @@ export function ImageThemeStudio() {
 
         <div className="grid gap-3 md:grid-cols-[120px_1fr]">
           {/* Live Interactive @bwnd/bbot Preview Stage */}
-          <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-border/60 bg-[#05070c] p-3">
+          <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-white/10 bg-[#141518] p-3">
             <BbotAvatar
               config={{ ...bbotConfig, size: 74 }}
               fxPreset={fxPreset}
@@ -1751,19 +1797,35 @@ export function ImageThemeStudio() {
         </div>
       </div>
 
-      {/* 6. Custom CSS Sheet & Studio JSON Export/Import */}
+      {/* 6. Portable Single-File Theme Sharing (.foolmoon) & Live Custom CSS */}
       <div
-        className="flex flex-col gap-2.5 rounded-xl border border-border/65 bg-background/45 p-3"
+        className={`flex flex-col gap-2.5 rounded-xl border p-3 transition ${
+          bundleDragOver ? 'border-primary bg-primary/5' : 'border-border/65 bg-background/45'
+        }`}
         data-testid="custom-css-studio-card"
+        onDragLeave={() => setBundleDragOver(false)}
+        onDragOver={e => {
+          e.preventDefault()
+          setBundleDragOver(true)
+        }}
+        onDrop={handleBundleDrop}
       >
+        <input
+          accept=".foolmoon,.json,application/json"
+          aria-label="Choose .foolmoon theme file"
+          className="hidden"
+          onChange={handleBundleFileChange}
+          ref={bundleFileRef}
+          type="file"
+        />
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
               <Code2 className="h-3.5 w-3.5 text-primary" />
-              Live Custom CSS &amp; Studio JSON Preset Export/Import
+              Share &amp; Import Theme (.foolmoon File) &amp; Custom CSS
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Inject custom CSS rules live across cards, composer &amp; notch, or share/restore your full Studio preset.
+              Package palette colors, materials, SVG patterns, corner stickers &amp; Notch finish into one portable <code>.foolmoon</code> file, or drop a shared file here.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
@@ -1784,9 +1846,13 @@ export function ImageThemeStudio() {
                 Clear CSS
               </Button>
             )}
-            <Button onClick={() => void handleExportStudioJson()} size="xs" variant="outline">
+            <Button onClick={handleExportThemeFile} size="xs" variant="default">
               <Download className="mr-1 h-3 w-3" />
-              Export Studio JSON
+              Export .foolmoon File
+            </Button>
+            <Button onClick={() => bundleFileRef.current?.click()} size="xs" variant="outline">
+              <Upload className="mr-1 h-3 w-3" />
+              Import .foolmoon File
             </Button>
           </div>
         </div>
@@ -1795,23 +1861,23 @@ export function ImageThemeStudio() {
           aria-label="Custom studio CSS"
           className="w-full rounded-lg border border-border/70 bg-background/70 p-2 font-mono text-[11px] text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
           onChange={e => updateStudioAppearance({ customCss: e.target.value })}
-          placeholder="/* Paste custom CSS (applies live across Foolmoon) e.g. [data-fm-surface] { backdrop-filter: blur(28px); } */"
+          placeholder="/* Optional custom CSS (applies live across Foolmoon) e.g. [data-fm-surface] { backdrop-filter: blur(28px); } */"
           rows={3}
           value={studio.customCss}
         />
 
         <div className="flex flex-wrap items-center gap-2">
           <Input
-            aria-label="Paste Studio JSON preset to import"
+            aria-label="Paste .foolmoon bundle JSON to import"
             className="flex-1 font-mono text-[11px]"
             onChange={e => setPresetImportText(e.target.value)}
-            placeholder="Paste Studio JSON preset here to import..."
+            placeholder="Drop a .foolmoon file above, or paste a shared .foolmoon bundle JSON here..."
             size="sm"
             value={presetImportText}
           />
           <Button disabled={!presetImportText.trim()} onClick={handleImportStudioJson} size="xs" variant="default">
             <Upload className="mr-1 h-3 w-3" />
-            Apply JSON
+            Apply Bundle
           </Button>
         </div>
       </div>

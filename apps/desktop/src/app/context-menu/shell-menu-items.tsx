@@ -105,7 +105,7 @@ function shellSections(
       renderActionItem(kit, {
         iconNode: <Mic className="size-3.5" />,
         key: 'shell-foolmoon-jarvis',
-        label: 'Toggle Jarvis Hands-Free',
+        label: 'Toggle Hands-Free Voice',
         onSelect: () => toggleJarvisHandsFree()
       }),
       renderActionItem(kit, {
