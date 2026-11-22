@@ -35,12 +35,55 @@ namespace FoolmoonSetup
                 {
                     return RunSelfTest();
                 }
+                if (string.Equals(arg, "--ui-test", StringComparison.OrdinalIgnoreCase))
+                {
+                    return RunUiTest();
+                }
             }
 
             ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072; // TLS 1.2
             var app = new SetupApp();
             var win = new SetupWindow();
             return app.Run(win);
+        }
+
+        private static int RunUiTest()
+        {
+            int selfRc = RunSelfTest();
+            if (selfRc != 0) return selfRc;
+
+            int exitCode = 1;
+            try
+            {
+                var app = new SetupApp();
+                var win = new SetupWindow();
+                win.ShowInTaskbar = false;
+                win.Loaded += (s, e) =>
+                {
+                    try
+                    {
+                        win.VerifyAllPagesRender();
+                        Console.WriteLine("UI_TEST_OK: SetupWindow rendered all 4 steps.");
+                        exitCode = 0;
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine("UI_TEST_FAIL: " + ex);
+                        exitCode = 3;
+                    }
+                    finally
+                    {
+                        win.Close();
+                    }
+                };
+                app.Run(win);
+                return exitCode;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("UI_TEST_FAIL: " + ex);
+                return 3;
+            }
         }
 
         private static int RunSelfTest()
@@ -109,6 +152,7 @@ namespace FoolmoonSetup
         private readonly Button _btnNext;
 
         // Step 1 state & controls
+        private readonly Border _boxInstallDir;
         private readonly TextBox _tbInstallDir;
         private bool _desktopShortcut = true;
         private bool _startMenuShortcut = true;
@@ -117,9 +161,13 @@ namespace FoolmoonSetup
         private readonly Ellipse _hwStatusDot;
 
         // Step 2 state & controls
+        private readonly Border _boxName;
         private readonly TextBox _tbName;
+        private readonly Border _boxAddressAs;
         private readonly TextBox _tbAddressAs;
+        private readonly Border _boxRole;
         private readonly TextBox _tbRole;
+        private readonly Border _boxRules;
         private readonly TextBox _tbRules;
         private string _selectedLanguage = "English";
         private string _selectedSkin = "foolmoon-warm";
@@ -136,14 +184,19 @@ namespace FoolmoonSetup
         private Button _segBtnCustom;
         private Border _lmPanel;
         private Border _customPanel;
+        private readonly Border _boxLmUrl;
         private readonly TextBox _tbLmUrl;
         private readonly TextBlock _lblLmStatus;
         private readonly Ellipse _lmStatusDot;
         private readonly StackPanel _modelListPanel;
+        private readonly Border _boxManualModel;
         private readonly TextBox _tbManualModel;
         private string _selectedDetectedModel = string.Empty;
+        private readonly Border _boxCustomBaseUrl;
         private readonly TextBox _tbCustomBaseUrl;
+        private readonly Border _boxCustomModel;
         private readonly TextBox _tbCustomModel;
+        private readonly Border _boxCustomApiKey;
         private readonly PasswordBox _pbCustomApiKey;
 
         // Step 4 state & controls
@@ -344,23 +397,25 @@ namespace FoolmoonSetup
             _hwStatusDot = new Ellipse { Width = 8, Height = 8, Fill = B(C_Muted), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
             _lblHardwareBadge = new TextBlock { Text = "Scanning hardware...", Foreground = B(C_Ink), FontSize = 12.5, FontWeight = FontWeights.Medium, TextTrimming = TextTrimming.CharacterEllipsis };
             _lblOsBadge = new TextBlock { Text = "Windows " + Environment.OSVersion.Version, Foreground = B(C_Muted), FontSize = 11.5, Margin = new Thickness(0, 2, 0, 0) };
-            _tbInstallDir = MakeStyledTextBox(
+            _boxInstallDir = MakeStyledTextBox(
                 System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Foolmoon"),
-                "Select install directory...");
+                "Select install directory...",
+                false,
+                out _tbInstallDir);
 
-            _tbName = MakeStyledTextBox("", "e.g. Serhat");
-            _tbAddressAs = MakeStyledTextBox("", "e.g. Serhat");
-            _tbRole = MakeStyledTextBox("", "e.g. Software Engineering & Research");
-            _tbRules = MakeStyledTextBox("", "One standing rule per line (optional)", true);
+            _boxName = MakeStyledTextBox("", "e.g. Serhat", false, out _tbName);
+            _boxAddressAs = MakeStyledTextBox("", "e.g. Serhat", false, out _tbAddressAs);
+            _boxRole = MakeStyledTextBox("", "e.g. Software Engineering & Research", false, out _tbRole);
+            _boxRules = MakeStyledTextBox("", "One standing rule per line (optional)", true, out _tbRules);
 
-            _tbLmUrl = MakeStyledTextBox("http://127.0.0.1:1234/v1", "http://127.0.0.1:1234/v1");
+            _boxLmUrl = MakeStyledTextBox("http://127.0.0.1:1234/v1", "http://127.0.0.1:1234/v1", false, out _tbLmUrl);
             _lmStatusDot = new Ellipse { Width = 7, Height = 7, Fill = B(C_Muted), Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center };
             _lblLmStatus = new TextBlock { Text = "Scanning LM Studio...", Foreground = B(C_Muted), FontSize = 11.5 };
             _modelListPanel = new StackPanel();
-            _tbManualModel = MakeStyledTextBox("", "Model ID (if LM Studio is closed)");
-            _tbCustomBaseUrl = MakeStyledTextBox("https://api.openai.com/v1", "https://api.openai.com/v1");
-            _tbCustomModel = MakeStyledTextBox("", "e.g. gpt-4o");
-            _pbCustomApiKey = MakeStyledPasswordBox();
+            _boxManualModel = MakeStyledTextBox("", "Model ID (if LM Studio is closed)", false, out _tbManualModel);
+            _boxCustomBaseUrl = MakeStyledTextBox("https://api.openai.com/v1", "https://api.openai.com/v1", false, out _tbCustomBaseUrl);
+            _boxCustomModel = MakeStyledTextBox("", "e.g. gpt-4o", false, out _tbCustomModel);
+            _boxCustomApiKey = MakeStyledPasswordBox(out _pbCustomApiKey);
 
             _progressTrack = new Border
             {
@@ -482,12 +537,12 @@ namespace FoolmoonSetup
 
         private void RegisterResources()
         {
-            // Global ultra-slim rounded ScrollBar style
+            // Trigger-free slim rounded ScrollBar template
             const string scrollStyleXaml =
                 "<Style xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' " +
                 "xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='ScrollBar'>" +
-                "<Setter Property='Width' Value='5'/>" +
-                "<Setter Property='MinWidth' Value='5'/>" +
+                "<Setter Property='Width' Value='6'/>" +
+                "<Setter Property='MinWidth' Value='6'/>" +
                 "<Setter Property='Background' Value='Transparent'/>" +
                 "<Setter Property='Template'><Setter.Value>" +
                 "<ControlTemplate TargetType='ScrollBar'>" +
@@ -495,10 +550,7 @@ namespace FoolmoonSetup
                 "<Track x:Name='PART_Track' IsDirectionReversed='True'>" +
                 "<Track.DecreaseRepeatButton><RepeatButton Command='ScrollBar.PageUpCommand' Opacity='0' IsTabStop='False'/></Track.DecreaseRepeatButton>" +
                 "<Track.Thumb><Thumb><Thumb.Template><ControlTemplate TargetType='Thumb'>" +
-                "<Border x:Name='ThumbPill' Background='#CFC3B2' CornerRadius='2.5'/>" +
-                "<ControlTemplate.Triggers><Trigger Property='IsMouseOver' Value='True'>" +
-                "<Setter TargetName='ThumbPill' Property='Background' Value='#A69987'/>" +
-                "</Trigger></ControlTemplate.Triggers>" +
+                "<Border Background='#CFC3B2' CornerRadius='2'/>" +
                 "</ControlTemplate></Thumb.Template></Thumb></Track.Thumb>" +
                 "<Track.IncreaseRepeatButton><RepeatButton Command='ScrollBar.PageDownCommand' Opacity='0' IsTabStop='False'/></Track.IncreaseRepeatButton>" +
                 "</Track></Grid></ControlTemplate></Setter.Value></Setter></Style>";
@@ -578,7 +630,7 @@ namespace FoolmoonSetup
             pathRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             pathRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-            Grid.SetColumn(_tbInstallDir, 0);
+            Grid.SetColumn(_boxInstallDir, 0);
             var btnBrowse = MakeSecondaryButton("Browse");
             btnBrowse.Margin = new Thickness(8, 0, 0, 0);
             btnBrowse.Padding = new Thickness(14, 8, 14, 8);
@@ -594,7 +646,7 @@ namespace FoolmoonSetup
                 }
             };
             Grid.SetColumn(btnBrowse, 1);
-            pathRow.Children.Add(_tbInstallDir);
+            pathRow.Children.Add(_boxInstallDir);
             pathRow.Children.Add(btnBrowse);
             pathStack.Children.Add(pathRow);
             pathCard.Child = pathStack;
@@ -635,12 +687,12 @@ namespace FoolmoonSetup
 
             var colL = new StackPanel();
             colL.Children.Add(MakeFieldLabel("YOUR NAME", 0));
-            colL.Children.Add(_tbName);
+            colL.Children.Add(_boxName);
             Grid.SetColumn(colL, 0);
 
             var colR = new StackPanel();
             colR.Children.Add(MakeFieldLabel("ADDRESS YOU AS", 0));
-            colR.Children.Add(_tbAddressAs);
+            colR.Children.Add(_boxAddressAs);
             Grid.SetColumn(colR, 2);
 
             nameRow.Children.Add(colL);
@@ -720,12 +772,12 @@ namespace FoolmoonSetup
 
             // Role & Standing Rules
             stack.Children.Add(MakeFieldLabel("PRIMARY ROLE / WORKFLOW", 2));
-            _tbRole.Margin = new Thickness(0, 4, 0, 10);
-            stack.Children.Add(_tbRole);
+            _boxRole.Margin = new Thickness(0, 4, 0, 10);
+            stack.Children.Add(_boxRole);
 
             stack.Children.Add(MakeFieldLabel("STANDING MEMORY RULES", 0));
-            _tbRules.Margin = new Thickness(0, 4, 0, 6);
-            stack.Children.Add(_tbRules);
+            _boxRules.Margin = new Thickness(0, 4, 0, 6);
+            stack.Children.Add(_boxRules);
 
             return new ScrollViewer
             {
@@ -792,13 +844,13 @@ namespace FoolmoonSetup
             var urlRow = new Grid { Margin = new Thickness(0, 6, 0, 8) };
             urlRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             urlRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            Grid.SetColumn(_tbLmUrl, 0);
+            Grid.SetColumn(_boxLmUrl, 0);
             var btnScan = MakeSecondaryButton("Rescan");
             btnScan.Margin = new Thickness(8, 0, 0, 0);
             btnScan.Padding = new Thickness(14, 8, 14, 8);
             btnScan.Click += (s, e) => ProbeLmStudioAsync();
             Grid.SetColumn(btnScan, 1);
-            urlRow.Children.Add(_tbLmUrl);
+            urlRow.Children.Add(_boxLmUrl);
             urlRow.Children.Add(btnScan);
             lmBody.Children.Add(urlRow);
 
@@ -818,8 +870,8 @@ namespace FoolmoonSetup
             lmBody.Children.Add(modelScroll);
 
             lmBody.Children.Add(MakeFieldLabel("MANUAL MODEL ID", 0));
-            _tbManualModel.Margin = new Thickness(0, 5, 0, 0);
-            lmBody.Children.Add(_tbManualModel);
+            _boxManualModel.Margin = new Thickness(0, 5, 0, 0);
+            lmBody.Children.Add(_boxManualModel);
 
             _lmPanel.Child = lmBody;
             stack.Children.Add(_lmPanel);
@@ -829,16 +881,16 @@ namespace FoolmoonSetup
             _customPanel.Visibility = Visibility.Collapsed;
             var customBody = new StackPanel();
             customBody.Children.Add(MakeFieldLabel("API BASE URL", 0));
-            _tbCustomBaseUrl.Margin = new Thickness(0, 5, 0, 10);
-            customBody.Children.Add(_tbCustomBaseUrl);
+            _boxCustomBaseUrl.Margin = new Thickness(0, 5, 0, 10);
+            customBody.Children.Add(_boxCustomBaseUrl);
 
             customBody.Children.Add(MakeFieldLabel("MODEL ID", 0));
-            _tbCustomModel.Margin = new Thickness(0, 5, 0, 10);
-            customBody.Children.Add(_tbCustomModel);
+            _boxCustomModel.Margin = new Thickness(0, 5, 0, 10);
+            customBody.Children.Add(_boxCustomModel);
 
             customBody.Children.Add(MakeFieldLabel("API KEY (LOCAL .ENV ONLY)", 0));
-            _pbCustomApiKey.Margin = new Thickness(0, 5, 0, 0);
-            customBody.Children.Add(_pbCustomApiKey);
+            _boxCustomApiKey.Margin = new Thickness(0, 5, 0, 0);
+            customBody.Children.Add(_boxCustomApiKey);
             _customPanel.Child = customBody;
             stack.Children.Add(_customPanel);
 
@@ -1048,6 +1100,22 @@ namespace FoolmoonSetup
             else _btnNext.Content = "Installing...";
 
             _btnNext.IsEnabled = !_installing || _installDone;
+        }
+
+        internal void VerifyAllPagesRender()
+        {
+            ShowStep(1, true);
+            UpdateLayout();
+            ShowStep(2, true);
+            UpdateLayout();
+            SetProviderMode(true);
+            UpdateLayout();
+            SetProviderMode(false);
+            UpdateLayout();
+            ShowStep(3, true);
+            UpdateLayout();
+            ShowStep(0, true);
+            UpdateLayout();
         }
 
         private void SetProviderMode(bool custom)
@@ -1608,82 +1676,109 @@ namespace FoolmoonSetup
             };
         }
 
-        private static TextBox MakeStyledTextBox(string initial, string placeholder, bool multiline = false)
+        private static Border MakeStyledTextBox(string initial, string placeholder, bool multiline, out TextBox tb)
         {
-            string vertAlign = multiline ? "Top" : "Center";
-            string fontSz = multiline ? "12" : "12.5";
-            string radius = multiline ? "12" : "11";
-            string tplXaml =
-                "<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' " +
-                "xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='TextBox'>" +
-                "<Border x:Name='BoxBorder' Background='#FFFFFF' BorderBrush='#E2D9CB' BorderThickness='1.25' CornerRadius='" + radius + "' Padding='10,8,10,8'>" +
-                "<Grid>" +
-                "<TextBlock x:Name='PlaceholderText' Text='{TemplateBinding Tag}' Foreground='#A3988A' FontSize='" + fontSz + "' IsHitTestVisible='False' VerticalAlignment='" + vertAlign + "' Visibility='Collapsed'/>" +
-                "<ScrollViewer x:Name='PART_ContentHost' Margin='0' VerticalAlignment='" + vertAlign + "'/>" +
-                "</Grid>" +
-                "</Border>" +
-                "<ControlTemplate.Triggers>" +
-                "<DataTrigger Binding='{Binding Text, RelativeSource={RelativeSource TemplatedParent}}' Value=''>" +
-                "<Setter TargetName='PlaceholderText' Property='Visibility' Value='Visible'/>" +
-                "</DataTrigger>" +
-                "<Trigger Property='IsMouseOver' Value='True'>" +
-                "<Setter TargetName='BoxBorder' Property='BorderBrush' Value='#CFC3B2'/>" +
-                "</Trigger>" +
-                "<Trigger Property='IsKeyboardFocused' Value='True'>" +
-                "<Setter TargetName='BoxBorder' Property='BorderBrush' Value='#C8372D'/>" +
-                "</Trigger>" +
-                "</ControlTemplate.Triggers>" +
-                "</ControlTemplate>";
-
-            var tb = new TextBox
+            tb = new TextBox
             {
                 Text = initial ?? string.Empty,
-                Tag = placeholder,
                 Foreground = B(C_Ink),
                 CaretBrush = B(C_Red),
                 SelectionBrush = B(C_Red),
                 SelectionOpacity = 0.2,
+                Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(0),
                 FontSize = multiline ? 12 : 12.5,
-                Margin = multiline ? new Thickness(0) : new Thickness(0, 4, 0, 0),
-                Template = (ControlTemplate)XamlReader.Parse(tplXaml)
+                VerticalContentAlignment = multiline ? VerticalAlignment.Top : VerticalAlignment.Center
             };
             if (multiline)
             {
                 tb.AcceptsReturn = true;
-                tb.Height = 62;
+                tb.Height = 54;
                 tb.TextWrapping = TextWrapping.Wrap;
                 tb.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
                 tb.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
             }
-            return tb;
+
+            var ph = new TextBlock
+            {
+                Text = placeholder ?? string.Empty,
+                Foreground = B(Color.FromRgb(163, 152, 138)),
+                FontSize = multiline ? 12 : 12.5,
+                IsHitTestVisible = false,
+                VerticalAlignment = multiline ? VerticalAlignment.Top : VerticalAlignment.Center,
+                Visibility = string.IsNullOrEmpty(tb.Text) ? Visibility.Visible : Visibility.Collapsed
+            };
+            TextBox capturedTb = tb;
+            tb.TextChanged += (s, e) =>
+            {
+                ph.Visibility = string.IsNullOrEmpty(capturedTb.Text) ? Visibility.Visible : Visibility.Collapsed;
+            };
+
+            var host = new Grid();
+            host.Children.Add(ph);
+            host.Children.Add(tb);
+
+            return WrapInputContainer(tb, host, multiline ? 12 : 11, multiline ? new Thickness(0) : new Thickness(0, 4, 0, 0));
         }
 
-        private static PasswordBox MakeStyledPasswordBox()
+        private static Border MakeStyledPasswordBox(out PasswordBox pb)
         {
-            const string tplXaml =
-                "<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' " +
-                "xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='PasswordBox'>" +
-                "<Border x:Name='BoxBorder' Background='#FFFFFF' BorderBrush='#E2D9CB' BorderThickness='1.25' CornerRadius='11' Padding='10,8,10,8'>" +
-                "<ScrollViewer x:Name='PART_ContentHost' Margin='0' VerticalAlignment='Center'/>" +
-                "</Border>" +
-                "<ControlTemplate.Triggers>" +
-                "<Trigger Property='IsMouseOver' Value='True'>" +
-                "<Setter TargetName='BoxBorder' Property='BorderBrush' Value='#CFC3B2'/>" +
-                "</Trigger>" +
-                "<Trigger Property='IsKeyboardFocused' Value='True'>" +
-                "<Setter TargetName='BoxBorder' Property='BorderBrush' Value='#C8372D'/>" +
-                "</Trigger>" +
-                "</ControlTemplate.Triggers>" +
-                "</ControlTemplate>";
-
-            return new PasswordBox
+            pb = new PasswordBox
             {
                 Foreground = B(C_Ink),
                 CaretBrush = B(C_Red),
                 SelectionBrush = B(C_Red),
+                Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(0),
                 FontSize = 12.5,
-                Template = (ControlTemplate)XamlReader.Parse(tplXaml)
+                VerticalContentAlignment = VerticalAlignment.Center
             };
+            return WrapInputContainer(pb, pb, 11, new Thickness(0));
+        }
+
+        private static Border WrapInputContainer(UIElement focusTarget, UIElement content, double radius, Thickness margin)
+        {
+            var borderBrush = new SolidColorBrush(C_Border);
+            var frame = new Border
+            {
+                Background = Brushes.White,
+                BorderBrush = borderBrush,
+                BorderThickness = new Thickness(1.25),
+                CornerRadius = new CornerRadius(radius),
+                Padding = new Thickness(10, 7, 10, 7),
+                Margin = margin,
+                Child = content
+            };
+
+            frame.MouseLeftButtonDown += (s, e) =>
+            {
+                if (!focusTarget.IsKeyboardFocused) focusTarget.Focus();
+            };
+            frame.MouseEnter += (s, e) =>
+            {
+                if (!focusTarget.IsKeyboardFocused)
+                {
+                    borderBrush.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(C_BorderStrong, TimeSpan.FromMilliseconds(120)));
+                }
+            };
+            frame.MouseLeave += (s, e) =>
+            {
+                if (!focusTarget.IsKeyboardFocused)
+                {
+                    borderBrush.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(C_Border, TimeSpan.FromMilliseconds(120)));
+                }
+            };
+            focusTarget.GotKeyboardFocus += (s, e) =>
+            {
+                borderBrush.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(C_Red, TimeSpan.FromMilliseconds(140)));
+            };
+            focusTarget.LostKeyboardFocus += (s, e) =>
+            {
+                borderBrush.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(C_Border, TimeSpan.FromMilliseconds(140)));
+            };
+            return frame;
         }
 
         private static Border MakeToggleCard(string title, string subtitle, bool initial, Action<bool> onChanged)
@@ -1883,47 +1978,52 @@ namespace FoolmoonSetup
             };
         }
 
+        private static ControlTemplate CreateRoundedButtonTemplate(double radius, bool showBorder, double fixedSize = 0)
+        {
+            var borderFactory = new FrameworkElementFactory(typeof(Border));
+            borderFactory.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
+            borderFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(radius));
+            borderFactory.SetValue(Border.PaddingProperty, new TemplateBindingExtension(Button.PaddingProperty));
+            if (showBorder)
+            {
+                borderFactory.SetValue(Border.BorderBrushProperty, new TemplateBindingExtension(Button.BorderBrushProperty));
+                borderFactory.SetValue(Border.BorderThicknessProperty, new TemplateBindingExtension(Button.BorderThicknessProperty));
+            }
+            if (fixedSize > 0)
+            {
+                borderFactory.SetValue(FrameworkElement.WidthProperty, fixedSize);
+                borderFactory.SetValue(FrameworkElement.HeightProperty, fixedSize);
+            }
+
+            var cpFactory = new FrameworkElementFactory(typeof(ContentPresenter));
+            cpFactory.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+            cpFactory.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+            borderFactory.AppendChild(cpFactory);
+
+            var tpl = new ControlTemplate(typeof(Button));
+            tpl.VisualTree = borderFactory;
+            return tpl;
+        }
+
         private static Button MakeSegmentButton(string text, bool active)
         {
-            const string tplXaml =
-                "<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' TargetType='Button'>" +
-                "<Border Background='Transparent' Padding='{TemplateBinding Padding}'>" +
-                "<ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/>" +
-                "</Border></ControlTemplate>";
-
             return new Button
             {
                 Content = text,
+                Background = Brushes.Transparent,
                 Foreground = B(active ? C_Ink : C_Muted),
                 FontSize = 12,
                 FontWeight = FontWeights.SemiBold,
                 Padding = new Thickness(10, 8, 10, 8),
                 Cursor = Cursors.Hand,
-                Template = (ControlTemplate)XamlReader.Parse(tplXaml)
+                Template = CreateRoundedButtonTemplate(10, false)
             };
         }
 
         private static Button MakePrimaryButton(string text)
         {
-            const string tplXaml =
-                "<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' " +
-                "xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='Button'>" +
-                "<Border x:Name='BtnBg' Background='{TemplateBinding Background}' CornerRadius='14' Padding='{TemplateBinding Padding}' RenderTransformOrigin='0.5,0.5'>" +
-                "<Border.RenderTransform><ScaleTransform x:Name='BtnScale' ScaleX='1' ScaleY='1'/></Border.RenderTransform>" +
-                "<ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/>" +
-                "</Border>" +
-                "<ControlTemplate.Triggers>" +
-                "<Trigger Property='IsPressed' Value='True'>" +
-                "<Setter TargetName='BtnScale' Property='ScaleX' Value='0.98'/>" +
-                "<Setter TargetName='BtnScale' Property='ScaleY' Value='0.98'/>" +
-                "</Trigger>" +
-                "<Trigger Property='IsEnabled' Value='False'>" +
-                "<Setter TargetName='BtnBg' Property='Opacity' Value='0.55'/>" +
-                "</Trigger>" +
-                "</ControlTemplate.Triggers>" +
-                "</ControlTemplate>";
-
             var bgBrush = new SolidColorBrush(C_Red);
+            var pressScale = new ScaleTransform(1, 1);
             var btn = new Button
             {
                 Content = text,
@@ -1933,54 +2033,54 @@ namespace FoolmoonSetup
                 FontSize = 13.5,
                 FontWeight = FontWeights.SemiBold,
                 Cursor = Cursors.Hand,
-                Template = (ControlTemplate)XamlReader.Parse(tplXaml),
+                RenderTransformOrigin = new Point(0.5, 0.5),
+                RenderTransform = pressScale,
+                Template = CreateRoundedButtonTemplate(14, false),
                 Effect = new DropShadowEffect { BlurRadius = 14, ShadowDepth = 4, Opacity = 0.2, Color = C_Red }
             };
             btn.MouseEnter += (s, e) => bgBrush.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(C_RedHover, TimeSpan.FromMilliseconds(150)));
-            btn.MouseLeave += (s, e) => bgBrush.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(C_Red, TimeSpan.FromMilliseconds(150)));
+            btn.MouseLeave += (s, e) =>
+            {
+                bgBrush.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(C_Red, TimeSpan.FromMilliseconds(150)));
+                pressScale.ScaleX = 1.0;
+                pressScale.ScaleY = 1.0;
+            };
+            btn.PreviewMouseLeftButtonDown += (s, e) => { pressScale.ScaleX = 0.98; pressScale.ScaleY = 0.98; };
+            btn.PreviewMouseLeftButtonUp += (s, e) => { pressScale.ScaleX = 1.0; pressScale.ScaleY = 1.0; };
+            btn.IsEnabledChanged += (s, e) => { btn.Opacity = btn.IsEnabled ? 1.0 : 0.55; };
             return btn;
         }
 
         private static Button MakeSecondaryButton(string text)
         {
-            const string tplXaml =
-                "<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' " +
-                "xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='Button'>" +
-                "<Border x:Name='BtnBg' Background='{TemplateBinding Background}' BorderBrush='#E2D9CB' BorderThickness='1.25' CornerRadius='14' Padding='{TemplateBinding Padding}'>" +
-                "<ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/>" +
-                "</Border>" +
-                "<ControlTemplate.Triggers>" +
-                "<Trigger Property='IsPressed' Value='True'>" +
-                "<Setter TargetName='BtnBg' Property='BorderBrush' Value='#C8372D'/>" +
-                "</Trigger>" +
-                "</ControlTemplate.Triggers>" +
-                "</ControlTemplate>";
-
             var bgBrush = new SolidColorBrush(C_PaperCard);
+            var borderBrush = new SolidColorBrush(C_Border);
             var btn = new Button
             {
                 Content = text,
                 Background = bgBrush,
+                BorderBrush = borderBrush,
+                BorderThickness = new Thickness(1.25),
                 Foreground = B(C_Ink),
                 Padding = new Thickness(18, 11, 18, 11),
                 FontSize = 13,
                 FontWeight = FontWeights.Medium,
                 Cursor = Cursors.Hand,
-                Template = (ControlTemplate)XamlReader.Parse(tplXaml)
+                Template = CreateRoundedButtonTemplate(14, true)
             };
             btn.MouseEnter += (s, e) => bgBrush.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(C_PaperInset, TimeSpan.FromMilliseconds(140)));
-            btn.MouseLeave += (s, e) => bgBrush.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(C_PaperCard, TimeSpan.FromMilliseconds(140)));
+            btn.MouseLeave += (s, e) =>
+            {
+                bgBrush.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(C_PaperCard, TimeSpan.FromMilliseconds(140)));
+                borderBrush.Color = C_Border;
+            };
+            btn.PreviewMouseLeftButtonDown += (s, e) => borderBrush.Color = C_Red;
+            btn.PreviewMouseLeftButtonUp += (s, e) => borderBrush.Color = C_Border;
             return btn;
         }
 
         private static Button MakeCircleGhostButton(string glyph, bool isClose)
         {
-            const string tplXaml =
-                "<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' TargetType='Button'>" +
-                "<Border Background='{TemplateBinding Background}' CornerRadius='14' Width='28' Height='28'>" +
-                "<ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/>" +
-                "</Border></ControlTemplate>";
-
             var bgBrush = new SolidColorBrush(Colors.Transparent);
             var btn = new Button
             {
@@ -1988,8 +2088,9 @@ namespace FoolmoonSetup
                 Background = bgBrush,
                 Foreground = B(C_Muted),
                 FontSize = 12,
+                Padding = new Thickness(0),
                 Cursor = Cursors.Hand,
-                Template = (ControlTemplate)XamlReader.Parse(tplXaml)
+                Template = CreateRoundedButtonTemplate(14, false, 28)
             };
             btn.MouseEnter += (s, e) =>
             {
