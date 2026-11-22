@@ -9,9 +9,18 @@ import type {
   CuratorStatusResponse,
   DebugShareResponse,
   ElevenLabsVoicesResponse,
+  LmStudioModelsResponse,
   MemoryProviderConfig,
   MemoryProviderOAuthStatus,
-  MemoryStatusResponse
+  MemoryStatusResponse,
+  StudioSkinSyncRequest,
+  StudioSkinSyncResponse,
+  ThemeFromImageRequest,
+  ThemeFromImageResponse,
+  UserSkinsResponse,
+  VoiceCloneAudioResponse,
+  VoiceCloneCreateResponse,
+  VoiceCloneListResponse
 } from '@/types/hermes'
 
 import {
@@ -104,6 +113,101 @@ export function getMemoryProviderOAuthStatus(
 // Memory data + curator (parity with `hermes memory` / `hermes curator`).
 // ---------------------------------------------------------------------------
 
+export interface MemoryFileState {
+  chars: number
+  content: string
+  entries: string[]
+  limit: number
+}
+
+export interface MemoryFilesResponse {
+  compression: { enabled: boolean; threshold: number }
+  delimiter: string
+  memory: MemoryFileState
+  memory_enabled: boolean
+  user: MemoryFileState
+  user_profile_enabled: boolean
+}
+
+export interface MemoryProfileSeedPayload {
+  address_as: string
+  apply_personality?: boolean
+  language: string
+  name: string
+  role: string
+  rules: string
+  style: string
+}
+
+export interface FoolmoonManifest {
+  core_hook_files: string[]
+  foolmoon_branch: string
+  foolmoon_repo: string
+  product: string
+  protected_paths: string[]
+  upstream_branch: string
+  upstream_repo: string
+  version: string
+}
+
+export interface HermesCoreUpdateCheckResponse {
+  behind: number
+  branch: string
+  conflicting_files: string[]
+  current_sha: string
+  error?: string
+  latest_date?: string
+  latest_subject?: string
+  repo: string
+  safe_merge_preview: boolean
+  update_available: boolean
+  upstream_sha: string
+}
+
+export interface HermesCoreUpdateApplyResponse {
+  error?: string
+  integrity_errors?: string[]
+  needs_restart?: boolean
+  ok: boolean
+  post_sha?: string
+  pre_sha?: string
+  rollback_ref?: string
+  rolled_back?: boolean
+  updated?: boolean
+}
+
+export interface FoolmoonAppUpdateCheckResponse {
+  branch?: string
+  checksum_asset?: string
+  current_sha?: string
+  current_version: string
+  error?: string
+  git_behind: number
+  installer_asset?: string
+  latest_subject?: string
+  latest_version: string
+  release_available: boolean
+  release_notes?: string
+  release_url?: string
+  remote_sha?: string
+  repo: string
+  update_available: boolean
+}
+
+export interface FoolmoonAppUpdateApplyResponse {
+  desktop_rebuilt?: boolean
+  downloaded_installer?: string
+  error?: string
+  integrity_errors?: string[]
+  needs_restart?: boolean
+  ok: boolean
+  post_sha?: string
+  pre_sha?: string
+  rolled_back?: boolean
+  sha256_verified?: boolean
+  updated?: boolean
+}
+
 export function getMemoryStatus(profile?: null | string): Promise<MemoryStatusResponse> {
   return hermesApi<MemoryStatusResponse>({
     ...profileScoped(profile),
@@ -111,9 +215,44 @@ export function getMemoryStatus(profile?: null | string): Promise<MemoryStatusRe
   })
 }
 
-export function resetMemory(target: 'all' | 'memory' | 'user'): Promise<{ ok: boolean; deleted: string[] }> {
-  return hermesApi<{ ok: boolean; deleted: string[] }>({
-    ...profileScoped(),
+export function getMemoryFiles(profile?: null | string): Promise<MemoryFilesResponse> {
+  return hermesApi<MemoryFilesResponse>({
+    ...profileScoped(profile),
+    path: '/api/memory/files'
+  })
+}
+
+export function saveMemoryFile(
+  target: 'memory' | 'user',
+  content: string,
+  profile?: null | string
+): Promise<{ chars: number; entries: string[]; ok: boolean; target: 'memory' | 'user' }> {
+  return hermesApi<{ chars: number; entries: string[]; ok: boolean; target: 'memory' | 'user' }>({
+    ...profileScoped(profile),
+    path: '/api/memory/files',
+    method: 'PUT',
+    body: { content, target }
+  })
+}
+
+export function seedUserMemoryProfile(
+  payload: MemoryProfileSeedPayload,
+  profile?: null | string
+): Promise<{ chars: number; entries: string[]; ok: boolean }> {
+  return hermesApi<{ chars: number; entries: string[]; ok: boolean }>({
+    ...profileScoped(profile),
+    path: '/api/memory/profile-seed',
+    method: 'POST',
+    body: payload
+  })
+}
+
+export function resetMemory(
+  target: 'all' | 'memory' | 'user',
+  profile?: null | string
+): Promise<{ deleted: string[]; ok: boolean }> {
+  return hermesApi<{ deleted: string[]; ok: boolean }>({
+    ...profileScoped(profile),
     path: '/api/memory/reset',
     method: 'POST',
     body: { target }
@@ -268,6 +407,137 @@ export function getElevenLabsVoices(profile?: null | string): Promise<ElevenLabs
   })
 }
 
+export function listVoiceClones(profile?: null | string): Promise<VoiceCloneListResponse> {
+  return hermesApi<VoiceCloneListResponse>({
+    path: '/api/audio/clones',
+    ...profileScoped(profile)
+  })
+}
+
+export function createVoiceClone(
+  payload: {
+    data_url: string
+    filename?: string
+    name: string
+    ref_text?: string
+    activate?: boolean
+  },
+  profile?: null | string
+): Promise<VoiceCloneCreateResponse> {
+  return hermesApi<VoiceCloneCreateResponse>({
+    ...profileScoped(profile),
+    body: {
+      activate: payload.activate ?? true,
+      data_url: payload.data_url,
+      filename: payload.filename,
+      name: payload.name,
+      ref_text: payload.ref_text
+    },
+    method: 'POST',
+    path: '/api/audio/clones',
+    timeoutMs: 120_000
+  })
+}
+
+export function setActiveVoiceClone(
+  cloneId: string | null,
+  profile?: null | string,
+  opts?: { engine?: string; warm?: boolean }
+): Promise<VoiceCloneListResponse> {
+  return hermesApi<VoiceCloneListResponse>({
+    ...profileScoped(profile),
+    body: {
+      clone_id: cloneId ?? '',
+      ...(opts?.engine ? { engine: opts.engine } : {}),
+      warm: opts?.warm ?? true
+    },
+    method: 'POST',
+    path: '/api/audio/clones/activate',
+    timeoutMs: 120_000
+  })
+}
+
+export function deleteVoiceClone(cloneId: string, profile?: null | string): Promise<{ ok: boolean }> {
+  return hermesApi<{ ok: boolean }>({
+    ...profileScoped(profile),
+    method: 'DELETE',
+    path: `/api/audio/clones/${encodeURIComponent(cloneId)}`
+  })
+}
+
+export function getVoiceCloneAudio(
+  cloneId: string,
+  profile?: null | string
+): Promise<VoiceCloneAudioResponse> {
+  return hermesApi<VoiceCloneAudioResponse>({
+    ...profileScoped(profile),
+    path: `/api/audio/clones/${encodeURIComponent(cloneId)}/audio`
+  })
+}
+
+export function generateThemeFromImage(
+  payload: ThemeFromImageRequest,
+  profile?: null | string
+): Promise<ThemeFromImageResponse> {
+  return hermesApi<ThemeFromImageResponse>({
+    ...profileScoped(profile),
+    body: payload,
+    method: 'POST',
+    path: '/api/themes/from-image',
+    timeoutMs: 60_000
+  })
+}
+
+export function syncStudioSkinToTui(
+  payload: StudioSkinSyncRequest,
+  profile?: null | string
+): Promise<StudioSkinSyncResponse> {
+  return hermesApi<StudioSkinSyncResponse>({
+    ...profileScoped(profile),
+    body: payload,
+    method: 'POST',
+    path: '/api/themes/studio-skin',
+    timeoutMs: 30_000
+  })
+}
+
+export function listUserSkins(profile?: null | string): Promise<UserSkinsResponse> {
+  return hermesApi<UserSkinsResponse>({
+    ...profileScoped(profile),
+    path: '/api/themes/user-skins'
+  })
+}
+
+export function deleteUserSkin(slug: string, profile?: null | string): Promise<{ deleted: string; ok: boolean }> {
+  return hermesApi<{ deleted: string; ok: boolean }>({
+    ...profileScoped(profile),
+    method: 'DELETE',
+    path: `/api/themes/user-skins/${encodeURIComponent(slug)}`
+  })
+}
+
+export function getLmStudioModels(profile?: null | string): Promise<LmStudioModelsResponse> {
+  return hermesApi<LmStudioModelsResponse>({
+    ...profileScoped(profile),
+    path: '/api/models/lmstudio'
+  })
+}
+
+export function selectLmStudioModel(
+  model: string,
+  opts?: { baseUrl?: string; profile?: null | string }
+): Promise<{ base_url: string; model: string; ok: boolean; provider: string }> {
+  return hermesApi<{ base_url: string; model: string; ok: boolean; provider: string }>({
+    ...profileScoped(opts?.profile),
+    body: {
+      model,
+      ...(opts?.baseUrl ? { base_url: opts.baseUrl } : {})
+    },
+    method: 'POST',
+    path: '/api/models/lmstudio/select'
+  })
+}
+
 // ---------------------------------------------------------------------------
 // Maintenance operations (parity with `hermes doctor` / `hermes security
 // audit` / `hermes backup` / `hermes debug share` and the dashboard System
@@ -312,5 +582,51 @@ export function runDebugShare(owner: ResolvedOwner): Promise<DebugShareResponse>
     body: { consent: true },
     // Synchronous upload of the allowlisted summary to the public paste service.
     timeoutMs: 120_000
+  })
+}
+
+export function getFoolmoonManifest(): Promise<FoolmoonManifest> {
+  return hermesApi<FoolmoonManifest>({
+    ...profileScoped(),
+    path: '/api/foolmoon/updates/manifest'
+  })
+}
+
+export function checkHermesCoreUpdate(): Promise<HermesCoreUpdateCheckResponse> {
+  return hermesApi<HermesCoreUpdateCheckResponse>({
+    ...profileScoped(),
+    path: '/api/foolmoon/updates/hermes/check',
+    method: 'POST',
+    timeoutMs: 60_000
+  })
+}
+
+export function applyHermesCoreUpdate(): Promise<HermesCoreUpdateApplyResponse> {
+  return hermesApi<HermesCoreUpdateApplyResponse>({
+    ...profileScoped(),
+    path: '/api/foolmoon/updates/hermes/apply',
+    method: 'POST',
+    timeoutMs: 180_000
+  })
+}
+
+export function checkFoolmoonAppUpdate(): Promise<FoolmoonAppUpdateCheckResponse> {
+  return hermesApi<FoolmoonAppUpdateCheckResponse>({
+    ...profileScoped(),
+    path: '/api/foolmoon/updates/app/check',
+    method: 'POST',
+    timeoutMs: 60_000
+  })
+}
+
+export function applyFoolmoonAppUpdate(
+  mode: 'auto' | 'git' | 'installer' = 'auto'
+): Promise<FoolmoonAppUpdateApplyResponse> {
+  return hermesApi<FoolmoonAppUpdateApplyResponse>({
+    ...profileScoped(),
+    path: '/api/foolmoon/updates/app/apply',
+    method: 'POST',
+    body: { mode },
+    timeoutMs: 300_000
   })
 }

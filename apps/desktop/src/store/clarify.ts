@@ -261,7 +261,7 @@ export async function skipClarifyRequest(sessionId: string | null | undefined): 
 }
 
 /** Answer the clarify parked on `sessionId` with composer text: the answer to its first question not yet locked. */
-function answerClarifyText(sessionId: string, text: string): null | Promise<boolean> {
+export function answerClarifyText(sessionId: string, text: string): null | Promise<boolean> {
   const request = $clarifyRequests.get()[keyFor(sessionId)]
 
   if (!request) {

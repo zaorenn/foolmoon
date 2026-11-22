@@ -1,7 +1,12 @@
 import type { GatewayEvent } from '@hermes/shared'
 import { useCallback } from 'react'
 
-import { gatewayEventCompletedFileDiff } from '@/lib/gateway-events'
+import {
+  gatewayEventCompletedFileDiff,
+  gatewayEventDeliveredMediaPreviewPath,
+  gatewayEventPreviewableFilePath,
+  gatewayEventTouchedWebAsset
+} from '@/lib/gateway-events'
 import { normalizeOrLocalPreviewTarget } from '@/lib/local-preview'
 import { reachablePreviewUrl } from '@/lib/preview-reach'
 import {
@@ -189,14 +194,70 @@ export function usePreviewRouting({ baseHandleGatewayEvent, currentCwd, requestG
         }
       }
 
+      const autoPreviewLocalPath = (rawPath: string, eventSessionId?: string) => {
+        void normalizeOrLocalPreviewTarget(rawPath, $currentCwd.get() || currentCwd || undefined).then(resolved => {
+          if (!resolved) {
+            return
+          }
+
+          const alreadyOpen = $previewTabs
+            .get()
+            .some(
+              tab =>
+                tab.target.url === resolved.url ||
+                tab.target.source === resolved.source ||
+                (resolved.path && tab.target.path === resolved.path)
+            )
+
+          if (alreadyOpen) {
+            requestPreviewReload()
+
+            return
+          }
+
+          openPreview(
+            renderedHtmlTarget(resolved),
+            previewOwnerForEvent(eventSessionId),
+            eventSessionId || undefined,
+            eventSessionId ? previewScopeForRuntime(eventSessionId) : undefined
+          )
+        })
+      }
+
+      if (event.type === 'tool.complete' && (!event.session_id || sessionIsOnScreen(event.session_id))) {
+        const createdPath = gatewayEventPreviewableFilePath(event)
+
+        if (createdPath) {
+          autoPreviewLocalPath(createdPath, event.session_id)
+        }
+      }
+
+      if (event.type === 'message.complete' && (!event.session_id || sessionIsOnScreen(event.session_id))) {
+        const deliveredMediaPath = gatewayEventDeliveredMediaPreviewPath(event)
+
+        if (deliveredMediaPath) {
+          autoPreviewLocalPath(deliveredMediaPath, event.session_id)
+        }
+      }
+
       if (event.session_id && event.session_id !== $focusedRuntimeId.get()) {
         return
       }
 
-      // Only refresh an already-open live preview when a file changes; never
-      // open one unprompted. (Preview links are surfaced from the tool row into
-      // the status stack — see tool-fallback.tsx.)
-      if ($previewTabs.get().some(tab => tab.target.kind === 'url') && gatewayEventCompletedFileDiff(event)) {
+      // Live real-time reload when a web/document/SVG/CSS/JS/PDF file is updated while preview is open.
+      if (
+        (gatewayEventCompletedFileDiff(event) || gatewayEventTouchedWebAsset(event)) &&
+        $previewTabs
+          .get()
+          .some(
+            tab =>
+              tab.target.kind === 'url' ||
+              tab.target.previewKind === 'html' ||
+              tab.target.previewKind === 'pdf' ||
+              tab.target.language === 'svg' ||
+              Boolean(tab.target.path && /\.(?:html?|pdf|svg)$/i.test(tab.target.path))
+          )
+      ) {
         requestPreviewReload()
       }
     },

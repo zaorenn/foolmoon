@@ -9,7 +9,7 @@
  */
 
 import { useStore } from '@nanostores/react'
-import { type ReactNode, useState } from 'react'
+import { type ChangeEvent, type ReactNode, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
@@ -28,7 +28,7 @@ import {
 } from '@/store/interface-mode'
 
 import type { LayoutNode } from '../model'
-import { isLayoutNode } from '../model'
+import { findGroupOfPane, isLayoutNode } from '../model'
 import {
   applyLayoutPreset,
   deleteUserPreset,
@@ -36,9 +36,10 @@ import {
   layoutPresetResting,
   layoutPresetTier,
   LAYOUTS_AREA,
-  saveCurrentLayoutAs
+  saveCurrentLayoutAs,
+  saveLayoutPresetTree
 } from '../presets'
-import { $activePresetId } from '../store'
+import { $activePresetId, $dismissedPanes, $hiddenTreePanes, $layoutTree } from '../store'
 import { $zoneEditorOpen } from '../zone-editor'
 
 /** Miniature render of a layout tree — the preset card thumbnail. A zone whose
@@ -164,6 +165,81 @@ export function LayoutPicker() {
   const mode = useStore($interfaceMode)
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
+  const [importError, setImportError] = useState<string | null>(null)
+  const importRef = useRef<HTMLInputElement | null>(null)
+
+  const exportCurrentLayout = () => {
+    const tree = $layoutTree.get()
+
+    if (!tree) {
+      return
+    }
+
+    const hidden = $hiddenTreePanes.get()
+    const dismissed = $dismissedPanes.get()
+    const resting: string[] = []
+
+    const collect = (n: LayoutNode) => {
+      if (n.type === 'group') {
+        for (const p of n.panes) {
+          if (hidden.has(p) || dismissed.has(p) || findGroupOfPane(tree, p)?.minimized) {
+            resting.push(p)
+          }
+        }
+      } else {
+        n.children.forEach(collect)
+      }
+    }
+
+    collect(tree)
+
+    const blob = new Blob([JSON.stringify({ name: 'Custom Hermes Layout', resting, tree }, null, 2)], {
+      type: 'application/json'
+    })
+
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `hermes-layout-${Date.now()}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleImportLayout = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+
+    if (!file) {
+      return
+    }
+
+    setImportError(null)
+    const reader = new FileReader()
+
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(String(reader.result)) as { name?: string; resting?: string[]; tree?: LayoutNode }
+        const tree = parsed?.tree
+
+        if (!tree || !isLayoutNode(tree)) {
+          setImportError('Invalid layout file: missing valid layout tree')
+
+          return
+        }
+
+        const presetName = parsed.name?.trim() || file.name.replace(/\.json$/i, '') || 'Imported Layout'
+        const id = saveLayoutPresetTree(presetName, tree, Array.isArray(parsed.resting) ? parsed.resting : [])
+
+        if (id) {
+          applyLayoutPreset(id, tree)
+        }
+      } catch {
+        setImportError('Could not parse layout JSON')
+      }
+    }
+
+    reader.readAsText(file)
+  }
 
   // Simple is always the Basic arrangement — its shelf is the two sidebar
   // sides (layout-presets.ts) and nothing to arrange or save. The decks and
@@ -260,10 +336,30 @@ export function LayoutPicker() {
               </Button>
             </form>
           ) : (
-            <Button className="self-start" onClick={() => setSaving(true)} size="inline" variant="text">
-              <Codicon name="save" size="0.8125rem" />
-              {t.zones.saveCurrentAs}
-            </Button>
+            <>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button className="self-start" onClick={() => setSaving(true)} size="inline" variant="text">
+                  <Codicon name="save" size="0.8125rem" />
+                  {t.zones.saveCurrentAs}
+                </Button>
+                <Button className="self-start" onClick={exportCurrentLayout} size="inline" variant="text">
+                  <Codicon name="export" size="0.8125rem" />
+                  Export JSON
+                </Button>
+                <Button className="self-start" onClick={() => importRef.current?.click()} size="inline" variant="text">
+                  <Codicon name="folder-opened" size="0.8125rem" />
+                  Import JSON
+                </Button>
+                <input
+                  accept=".json,application/json"
+                  className="hidden"
+                  onChange={handleImportLayout}
+                  ref={importRef}
+                  type="file"
+                />
+              </div>
+              {importError && <p className="text-[0.65rem] text-destructive">{importError}</p>}
+            </>
           )}
         </>
       )}

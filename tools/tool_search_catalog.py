@@ -11,7 +11,10 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
-import snowballstemmer
+try:
+    import snowballstemmer
+except ImportError:  # Fallback when running on Python < 3.14 without optional stemmer dep.
+    snowballstemmer = None  # type: ignore[assignment]
 
 # Reserved bridge names: a user/plugin/MCP tool may not take them (registry override
 # protection rejects such registrations).
@@ -39,11 +42,27 @@ _TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
 _thread_local = threading.local()
 
 
+def _fallback_stem(token: str) -> str:
+    """Lightweight English suffix stemmer used only if snowballstemmer is unavailable."""
+    if len(token) <= 3:
+        return token
+    for suffix, min_root in (("ings", 3), ("ing", 3), ("ies", 2), ("ed", 3)):
+        if token.endswith(suffix) and len(token) - len(suffix) >= min_root:
+            return token[: -len(suffix)] + ("y" if suffix == "ies" else "")
+    if token.endswith("es") and len(token) > 5 and token[:-2].endswith(("ch", "sh", "x", "z", "s")):
+        return token[:-2]
+    if token.endswith("s") and not token.endswith("ss") and len(token) > 3:
+        return token[:-1]
+    return token
+
+
 @functools.lru_cache(maxsize=16384)
 def _stem(token: str) -> str:
     """Stem one token, memoized across stateless catalog rebuilds. Snowball stemmers carry
     mutable parsing state and bridge dispatch runs on parallel tool-call threads, so the
     stemmer is one-per-thread, created lazily."""
+    if snowballstemmer is None:
+        return _fallback_stem(token)
     if getattr(_thread_local, "stemmer", None) is None:
         _thread_local.stemmer = snowballstemmer.stemmer("english")
     return _thread_local.stemmer.stemWord(token)

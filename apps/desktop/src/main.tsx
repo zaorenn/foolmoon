@@ -11,6 +11,8 @@ import './store/power'
 import './store/translucency'
 // Side-effect: applies the persisted user-bubble transparency on load.
 import './store/user-bubble-transparency'
+// Side-effect: applies Foolmoon corner radius, surface material & motion preferences on load.
+import './store/appearance-studio'
 // Side-effect: restores chat typography before the first conversation paints.
 import './store/chat-text-scale'
 // Side-effect: mirrors the keep-awake mode to main and listens for main's
@@ -42,6 +44,7 @@ import { isTransparentWindow } from './lib/transparent-windows'
 import { startUiPreferencesSync } from './lib/ui-preferences/sync'
 import { installBrowserTabTitle } from './store/browser-tab-title'
 import { ThemeProvider } from './themes/context'
+import { bootstrapFoolmoonStudio } from './themes/studio-presets'
 
 installClipboardShim()
 // Chromium serializes selection copies (Cmd+C, right-click Copy) with the
@@ -52,6 +55,7 @@ installSelectionCopyColorGuard()
 installBrowserTabTitle()
 // One preferences store per machine, shared by native Desktop and its Webapp (#145213).
 startUiPreferencesSync(window.hermesDesktop?.uiPreferences)
+bootstrapFoolmoonStudio()
 
 // The perf probe ships in dev, and in a production build ONLY when explicitly
 // opted in (VITE_PERF_PROBE=1) — this lets the perf harness measure a real,
@@ -83,6 +87,8 @@ if (isTransparentWindow()) {
 
 if (winParam === 'overlay') {
   void import('./app/pet-overlay/overlay-root').then(({ mountPetOverlay }) => mountPetOverlay())
+} else if (winParam === 'notch') {
+  void import('./app/notch/notch-root').then(({ mountNotch }) => mountNotch())
 } else if (winParam === 'quick') {
   void import('./app/quick-entry/quick-entry-root').then(({ mountQuickEntry }) => mountQuickEntry())
 } else if (winParam === 'wake') {

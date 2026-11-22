@@ -521,8 +521,15 @@ def seed_config_file(config_path: Path, template: Optional[Path] = None) -> bool
     if template.exists():
         shutil.copy2(template, config_path)
         _secure_file(config_path)
+        with suppress(Exception):
+            from hermes_cli.bundled_mcps import sync_bundled_mcp_servers
+            sync_bundled_mcp_servers(hermes_home=config_path.parent, quiet=True)
+        _secure_file(config_path)
         return True
     save_config(DEFAULT_CONFIG)
+    with suppress(Exception):
+        from hermes_cli.bundled_mcps import sync_bundled_mcp_servers
+        sync_bundled_mcp_servers(hermes_home=config_path.parent, quiet=True)
     return False
 
 

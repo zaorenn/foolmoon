@@ -348,6 +348,11 @@ export const ENUM_OPTIONS: Record<string, string[]> = {
   // (agent/tts_registry.py::_BUILTIN_NAMES / tools/tts_tool.py::
   // BUILTIN_TTS_PROVIDERS). 'xai' is Grok TTS.
   'tts.provider': [
+    'chatterbox_turbo',
+    'chatterbox',
+    'xtts_v2',
+    'f5_tts',
+    'kokoro',
     'edge',
     'elevenlabs',
     'openai',

@@ -1069,6 +1069,7 @@ DEFAULT_CONFIG = {
             # Shortest first sentence (chars) spoken on its own by streaming TTS; shorter openers
             # ride with the next sentence. 20 suits English; CJK voice setups use ~6.
             "min_len": 20,
+            "first_clause_cut": True,
         },
         "edge": {
             # Popular: AriaNeural, JennyNeural, AndrewNeural, BrianNeural, SoniaNeural
@@ -1134,6 +1135,34 @@ DEFAULT_CONFIG = {
             "model": "",  # empty = first tts-tagged model from the live catalog
             "voice": "default",
             # optional "base_url" key overrides DEEPINFRA_BASE_URL for TTS only
+        },
+        "chatterbox_turbo": {
+            "language": "en",
+            "temperature": 0.8,
+            "clone_wav_path": "",
+        },
+        "chatterbox": {
+            "language": "en",
+            "exaggeration": 0.55,
+            "cfg_weight": 0.5,
+            "temperature": 0.8,
+            "clone_wav_path": "",
+        },
+        "xtts_v2": {
+            "language": "en",
+            "voice_id": "Claribel Dervla",
+            "speed": 1.0,
+            "clone_wav_path": "",
+        },
+        "f5_tts": {
+            "speed": 1.0,
+            "nfe_step": 16,
+            "clone_wav_path": "",
+            "ref_text": "",
+        },
+        "kokoro": {
+            "voice": "af_heart",
+            "speed": 1.0,
         },
     },
 

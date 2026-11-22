@@ -9,6 +9,7 @@ import { $cloudOwnsUpdates } from '@/store/cloud-updates'
 import { $connection } from '@/store/session'
 import { $desktopVersion, checkBackendUpdates, refreshDesktopVersion } from '@/store/updates'
 
+import { FoolmoonDualUpdates } from './foolmoon-dual-updates'
 import { SectionHeading, SettingsContent } from './primitives'
 import { SETTING_IDS, settingElementId } from './settings-manifest'
 import { UninstallSection } from './uninstall-section'
@@ -61,6 +62,7 @@ function AppUpdatesSettings({ includeUninstall }: AppUpdatesSettingsProps): Reac
       <div className="mx-auto mt-4 w-full max-w-2xl">
         {!cloudOwned.client && (
           <>
+            <FoolmoonDualUpdates />
             <SectionHeading icon={RefreshCw} title={t.settings.about.updates} />
             <div className="grid gap-3" id={settingElementId(SETTING_IDS.about.updates)}>
               <UpdateStatusCard target="client" version={version} />

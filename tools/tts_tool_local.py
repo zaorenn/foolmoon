@@ -33,8 +33,18 @@ _TTS_MODEL_CACHE_MAX = 3
 # (+cuda flag); KittenTTS on model name.
 _piper_voice_cache: dict[str, Any] = {}
 _kittentts_model_cache: dict[str, Any] = {}
+_chatterbox_turbo_cache: dict[str, Any] = {}
+_chatterbox_cache: dict[str, Any] = {}
+_xtts_v2_cache: dict[str, Any] = {}
+_f5_tts_cache: dict[str, Any] = {}
 _LOCAL_TTS_MODEL_CACHES: dict[str, dict[str, Any]] = {
-    "piper": _piper_voice_cache, "kittentts": _kittentts_model_cache}
+    "piper": _piper_voice_cache,
+    "kittentts": _kittentts_model_cache,
+    "chatterbox_turbo": _chatterbox_turbo_cache,
+    "chatterbox": _chatterbox_cache,
+    "xtts_v2": _xtts_v2_cache,
+    "f5_tts": _f5_tts_cache,
+}
 
 
 def _tts_cache_get_or_load(cache: dict[str, Any], key: str, load: Callable[[], Any]) -> Any:
@@ -193,3 +203,28 @@ def _generate_kittentts(text: str, output_path: str, tts_config: dict[str, Any])
     wav_path = _wav_sidecar_path(output_path)
     sf.write(wav_path, audio, 24000)
     return _finalize_wav_output(wav_path, output_path)
+
+
+def _generate_chatterbox_turbo(text: str, output_path: str, tts_config: dict[str, Any]) -> str:
+    from tools.tts_cloning_cuda import generate_cuda_cloning_audio
+    return generate_cuda_cloning_audio(text, output_path, tts_config, engine="chatterbox_turbo")
+
+
+def _generate_chatterbox(text: str, output_path: str, tts_config: dict[str, Any]) -> str:
+    from tools.tts_cloning_cuda import generate_cuda_cloning_audio
+    return generate_cuda_cloning_audio(text, output_path, tts_config, engine="chatterbox")
+
+
+def _generate_xtts_v2(text: str, output_path: str, tts_config: dict[str, Any]) -> str:
+    from tools.tts_cloning_cuda import generate_cuda_cloning_audio
+    return generate_cuda_cloning_audio(text, output_path, tts_config, engine="xtts_v2")
+
+
+def _generate_f5_tts(text: str, output_path: str, tts_config: dict[str, Any]) -> str:
+    from tools.tts_cloning_cuda import generate_cuda_cloning_audio
+    return generate_cuda_cloning_audio(text, output_path, tts_config, engine="f5_tts")
+
+
+def _generate_kokoro(text: str, output_path: str, tts_config: dict[str, Any]) -> str:
+    from tools.tts_cloning_cuda import generate_cuda_cloning_audio
+    return generate_cuda_cloning_audio(text, output_path, tts_config, engine="kokoro")

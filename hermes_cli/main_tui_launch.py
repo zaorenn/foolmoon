@@ -550,10 +550,14 @@ def _pin_kanban_board_env() -> None:
 
 def _sync_bundled_skills_quietly() -> None:
     """Seed ``~/.hermes/skills/`` with the bundled library (idempotent, milliseconds when synced).
-    Failures are swallowed: skills are an enhancement, not a hard dependency."""
+    Also ensures bundled zero-API-key MCP servers are registered on first startup.
+    Failures are swallowed: skills and bundled MCPs are enhancements, not hard dependencies."""
     with contextlib.suppress(Exception):
         from tools.skills_sync import sync_skills
         sync_skills(quiet=True)
+    with contextlib.suppress(Exception):
+        from hermes_cli.bundled_mcps import sync_bundled_mcp_servers
+        sync_bundled_mcp_servers(quiet=True)
 
 
 def _resolve_use_tui(args) -> bool:

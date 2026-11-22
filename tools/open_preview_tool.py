@@ -15,17 +15,37 @@ from tools import desktop_ui
 from tools.registry import tool_error
 
 
+_LOCAL_FILE_EXTENSIONS = frozenset({
+    ".html", ".htm", ".pdf", ".svg", ".md", ".markdown", ".txt", ".png", ".jpg",
+    ".jpeg", ".webp", ".gif", ".json", ".csv", ".css", ".js", ".mjs", ".ts",
+    ".tsx", ".jsx", ".py", ".xml", ".yaml", ".yml", ".log",
+})
+
+
 def _normalize_target(raw: str) -> str:
     """Coax a bare host/domain into a fetchable URL; leave paths + schemes alone.
 
     ``www.cnn.com`` -> ``https://www.cnn.com``; ``localhost:3000`` -> ``http://localhost:3000``.
-    File paths and explicit schemes pass through for the renderer's preview normalizer.
+    Local files (e.g. ``index.html``, ``report.pdf``, ``C:\\...\\demo.html``) and explicit
+    schemes pass through untouched for the renderer's preview normalizer.
     """
     v = raw.strip().strip("`").strip()
     if not v or "://" in v or v.startswith(("/", "./", "../", "~", "file:")):
         return v
+    # Windows drive paths (C:\... or C:/...) and UNC paths (\\server\share) are local files.
+    if re.match(r"^[A-Za-z]:[/\\]", v) or v.startswith("\\\\"):
+        return v
     if re.match(r"^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:\d+)?(/|$)", v, re.IGNORECASE):
         return "http://" + v
+    # Leave relative/bare local filenames (index.html, report.pdf, diagram.svg) as paths.
+    suffix = Path(v).suffix.lower()
+    if suffix in _LOCAL_FILE_EXTENSIONS:
+        return v
+    try:
+        if Path(v).expanduser().exists():
+            return v
+    except OSError:
+        pass
     if re.match(r"^[\w.-]+\.[a-z]{2,}(:\d+)?(/.*)?$", v, re.IGNORECASE):
         return "https://" + v
     return v
@@ -67,9 +87,39 @@ def _is_existing_directory(target: str) -> bool:
         return False
 
 
+def _resolve_windows_local_target(target: str) -> str:
+    """Resolve Windows `/filename` or relative paths against cwd / home when missing as-is."""
+    if os.name != "nt":
+        return target
+    v = (target or "").strip()
+    if not v or re.match(r"^(?:file|https?):", v, re.IGNORECASE):
+        return target
+    if v.startswith("\\\\") or re.match(r"^[A-Za-z]:[/\\]", v):
+        return target
+    try:
+        p = Path(v).expanduser()
+        if p.exists():
+            return str(p.resolve())
+    except OSError:
+        pass
+
+    rel = v.lstrip("/") if (v.startswith("/") and not v.startswith("//")) else v
+    if not rel or ".." in Path(rel).parts:
+        return target
+
+    for base_dir in (Path.cwd(), Path.home()):
+        try:
+            candidate = (base_dir / rel).resolve()
+            if candidate.exists():
+                return str(candidate)
+        except OSError:
+            continue
+    return target
+
+
 def open_preview_tool(url: str, label: str = "") -> str:
     """Ask the desktop GUI to show ``url`` in the preview pane beside the chat."""
-    target = _normalize_target(url or "")
+    target = _resolve_windows_local_target(_normalize_target(url or ""))
     if not target:
         return tool_error(
             "url is required — a web URL (https://…), a localhost dev server, or a "

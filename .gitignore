@@ -339,3 +339,13 @@ infografico/
 /pm/.lock.json.lock
 
 apps/desktop/.dist-build*
+
+# Local agent workspaces, installer build output, and personal state
+.gemini/
+.claude/
+.cursor/
+installer/dist/
+memories/
+voice_clones/
+*.local.json
+

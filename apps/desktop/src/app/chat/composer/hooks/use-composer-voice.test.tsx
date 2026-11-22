@@ -83,6 +83,7 @@ vi.mock('@/store/wake-word', () => ({
 
 vi.mock('../focus', () => ({
   onComposerDictationRequest: vi.fn(() => () => undefined),
+  onComposerVoiceStopTurnRequest: vi.fn(() => () => undefined),
   onComposerVoiceToggleRequest: vi.fn(() => () => undefined)
 }))
 

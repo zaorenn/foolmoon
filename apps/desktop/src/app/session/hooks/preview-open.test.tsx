@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { assistantTextPart, type ChatMessage } from '@/lib/chat-messages'
 import {
   $browserPages,
+  $previewReloadRequest,
   $previewTabs,
   $previewTarget,
   closeRightRail,
@@ -342,6 +343,75 @@ describe('preview routing', () => {
       } finally {
         $sessionTiles.set(tiles)
       }
+    })
+
+    it('auto-opens HTML/PDF artifacts and reloads live on subsequent CSS/HTML edits without popping source files', async () => {
+      render(<Harness />)
+
+      // Source files (.ts/.py) must not unpromptedly pop open Preview
+      await act(async () => {
+        handleEvent({
+          payload: { args: { path: '/work/app.ts' }, name: 'write_file' },
+          session_id: RUNTIME_SESSION_ID,
+          type: 'tool.complete'
+        } as unknown as GatewayEvent)
+      })
+      expect($previewTabs.get()).toHaveLength(0)
+
+      // Creating an HTML website or PDF auto-opens Live Preview beside the chat
+      await act(async () => {
+        handleEvent({
+          payload: { args: { path: '/work/demo.html' }, name: 'write_file' },
+          session_id: RUNTIME_SESSION_ID,
+          type: 'tool.complete'
+        } as unknown as GatewayEvent)
+      })
+      await waitFor(() => expect($previewTarget.get()?.path).toBe('/work/demo.html'))
+
+      const reloadBefore = $previewReloadRequest.get()
+
+      await act(async () => {
+        handleEvent({
+          payload: { args: { path: '/work/styles.css' }, name: 'patch' },
+          session_id: RUNTIME_SESSION_ID,
+          type: 'tool.complete'
+        } as unknown as GatewayEvent)
+      })
+      expect($previewReloadRequest.get()).toBeGreaterThan(reloadBefore)
+
+      await act(async () => {
+        handleEvent({
+          payload: { args: { output_path: '/work/report.pdf' }, name: 'execute_code' },
+          session_id: RUNTIME_SESSION_ID,
+          type: 'tool.complete'
+        } as unknown as GatewayEvent)
+      })
+      await waitFor(() => expect($previewTabs.get().some(t => t.target.path === '/work/report.pdf')).toBe(true))
+    })
+
+    it('auto-opens HTML/PDF artifacts delivered via MEDIA: tags on message.complete (e.g. subagent output)', async () => {
+      render(<Harness />)
+
+      // Plain prose mentioning a path must NOT open preview
+      await act(async () => {
+        handleEvent({
+          payload: { text: 'Open /portfolio_site.html in Chrome.' },
+          session_id: RUNTIME_SESSION_ID,
+          type: 'message.complete'
+        } as unknown as GatewayEvent)
+      })
+      expect($previewTabs.get()).toHaveLength(0)
+
+      // Explicit MEDIA:/portfolio_site.html delivery auto-opens rendered HTML preview
+      await act(async () => {
+        handleEvent({
+          payload: { text: 'Website ready!\n\nMEDIA:/portfolio_site.html' },
+          session_id: RUNTIME_SESSION_ID,
+          type: 'message.complete'
+        } as unknown as GatewayEvent)
+      })
+      await waitFor(() => expect($previewTarget.get()?.path).toBe('/portfolio_site.html'))
+      expect($previewTarget.get()?.renderMode).toBe('preview')
     })
   })
 })

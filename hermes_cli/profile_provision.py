@@ -250,6 +250,8 @@ def provision_profile(request: ProfileCreateRequest) -> ProvisionResult:
             path, quiet=request.quiet, problems=problems))
         if request.quiet:  # nothing printed them: the caller (a gateway's client) shows them
             result.warnings.extend(line.strip().removeprefix("⚠ ") for line in problems if line.strip())
+        from hermes_cli.bundled_mcps import sync_bundled_mcp_servers
+        step("bundled MCP servers", lambda: sync_bundled_mcp_servers(hermes_home=path, quiet=request.quiet))
         from hermes_cli.default_plugins import spawn_install
         step("default plugins", lambda: spawn_install(path))  # detached: a create never waits on git
     if request.alias:

@@ -316,6 +316,7 @@ import {
   tightenSecretFileMode,
   writeSecretFileAtomic
 } from './hardening'
+import { createHermesNotchController } from './hermes-notch'
 import { isHermesProcess } from './hermes-process'
 import { assertNotPassiveSpawn } from './host-backend-singleton'
 import { requestHudClose } from './hud-close'
@@ -356,7 +357,12 @@ import { createNvidiaEglRecovery } from './linux-nvidia-egl-recovery'
 import { relaunchIfNoSandboxCameTooLate } from './linux-sandbox-relaunch'
 import { createLocalBackendLifecycle, waitForTeardown } from './local-backend-lifecycle'
 import { localProfileIsLive } from './local-profile-liveness'
-import { resolveIpcFileReadPath, resolveMediaStreamFile, resolvePreviewTargetPath } from './local-read-path'
+import {
+  resolveIpcFileReadPath,
+  resolveMediaStreamFile,
+  resolvePreviewTargetPath,
+  windowsFallbackPreviewCandidates
+} from './local-read-path'
 import { resolveDesktopClientVersion } from './local-runtime-version'
 import { localSkinProfileKey, registerLocalSkinIpc } from './local-skin'
 import { ACTIVE_LOG_POLL_MS, planLogRotation, reclaimActiveLogIfOversized } from './log-rotation'
@@ -4864,7 +4870,7 @@ async function resolveHermesBackend(backendArgs: string[], progress?: typeof adv
   //    cloned repo at SOURCE_REPO_ROOT takes precedence over ACTIVE and any
   //    installed `hermes` on PATH so local Python edits are actually exercised.
   //    (In dev with no checkout, SOURCE_REPO_ROOT won't pass isHermesSourceRoot.)
-  if (!IS_PACKAGED && isHermesSourceRoot(SOURCE_REPO_ROOT)) {
+  if ((!IS_PACKAGED || !app.isPackaged) && isHermesSourceRoot(SOURCE_REPO_ROOT)) {
     const backend: SourceBackend | null = createSourcePythonBackend(
       SOURCE_REPO_ROOT,
       await findPythonForRoot(SOURCE_REPO_ROOT),
@@ -5621,6 +5627,21 @@ async function previewFileTarget(rawTarget, baseDir) {
   // preview/download 404s even though the file is present on disk (#115609).
   if (!fileExists(resolved) && !directoryExists(resolved)) {
     for (const candidate of homeRelativeAttachmentCandidates(raw, app.getPath('home'), HERMES_HOME)) {
+      if (fileExists(candidate)) {
+        resolved = candidate
+
+        break
+      }
+    }
+  }
+
+  if (!fileExists(resolved) && !directoryExists(resolved)) {
+    for (const candidate of windowsFallbackPreviewCandidates(raw, [
+      base,
+      app.getPath('home'),
+      resolveHermesCwd(),
+      HERMES_HOME
+    ])) {
       if (fileExists(candidate)) {
         resolved = candidate
 
@@ -11832,11 +11853,13 @@ const sessionWindows = createSessionWindowRegistry()
 
 const minimizeToTray = createMinimizeToTray({
   preferencesPath: path.join(app.getPath('userData'), 'minimize-to-tray.json'),
+  defaultEnabled: process.platform === 'win32',
   getIconPath: getAppIconPath,
   // A tray click is an explicit relaunch gesture (#130810): restore with
   // activation (show + focus), not the ambient showInactive path.
   restoreMainWindow: () =>
     ensureMainWindow(mainWindow, { isReady: app.isReady(), createWindow, focusWindow: activateWindow }),
+  toggleNotch: () => hermesNotchController?.toggle(),
   isQuittingForHandoff: () => isQuittingForHandoff,
   log: rememberLog
 })
@@ -11877,7 +11900,7 @@ function spawnSecondaryWindow({
     height: SESSION_WINDOW_MIN_HEIGHT,
     minWidth: SESSION_WINDOW_MIN_WIDTH,
     minHeight: SESSION_WINDOW_MIN_HEIGHT,
-    title: 'Hermes',
+    title: 'Foolmoon',
     titleBarStyle: 'hidden',
     titleBarOverlay: getTitleBarOverlayOptions(),
     trafficLightPosition: IS_MAC ? WINDOW_BUTTON_POSITION : undefined,
@@ -12094,7 +12117,7 @@ function createInstanceWindow(
     ...nextInstanceBounds(source),
     minWidth: WINDOW_MIN_WIDTH,
     minHeight: WINDOW_MIN_HEIGHT,
-    title: 'Hermes',
+    title: 'Foolmoon',
     titleBarStyle: 'hidden',
     titleBarOverlay: getTitleBarOverlayOptions(),
     trafficLightPosition: IS_MAC ? WINDOW_BUTTON_POSITION : undefined,
@@ -12168,6 +12191,18 @@ const wakeIndicatorController = createWakeIndicatorWindowController({
   preloadPath: PRELOAD_PATH,
   rendererIndex: resolveRendererIndex,
   wireWindow: window => wireCommonWindowHandlers(window, zoomWiringForWindowKind('wakeIndicator'))
+})
+
+const hermesNotchController = createHermesNotchController({
+  devServer: DEV_SERVER,
+  getMainWindow: () => mainWindow,
+  globalShortcut,
+  isMac: IS_MAC,
+  loadWindowUrl,
+  log: rememberLog,
+  preloadPath: PRELOAD_PATH,
+  rendererIndex: resolveRendererIndex,
+  wireWindow: window => wireCommonWindowHandlers(window, zoomWiringForWindowKind('notch'))
 })
 
 registerWindowSizing({ mainWindow: (): BrowserWindow | null => mainWindow })
@@ -13179,7 +13214,7 @@ function createWindow() {
     ),
     minWidth: WINDOW_MIN_WIDTH,
     minHeight: WINDOW_MIN_HEIGHT,
-    title: 'Hermes',
+    title: 'Foolmoon',
     // Frameless title bar on every platform so the renderer can paint the
     // "hide sidebar" button (and other left-side titlebar tools) flush with
     // the top edge — matching the macOS layout where the traffic lights sit
@@ -13951,6 +13986,7 @@ registerPetOverlayIpc({
   openPetOverlay,
   closePetOverlay
 })
+hermesNotchController.registerIpc()
 
 // --- HUD mode (chrome-free floating chat) — see hud-ipc.ts. ---------------
 const hudIpc = registerHudIpc({
@@ -17500,6 +17536,12 @@ app.whenReady().then(() => {
 
   screen.on('display-removed', rehomePetOverlay)
 
+  const repositionNotch = () => hermesNotchController.reposition()
+  screen.on('display-added', repositionNotch)
+  screen.on('display-metrics-changed', repositionNotch)
+  screen.on('display-removed', repositionNotch)
+  hermesNotchController.registerShortcut()
+
   // A hard crash can interrupt the in-memory restore loop after exact remote
   // serves were drained. The owner-only recovery journal survives that crash;
   // its worker waits for the install marker to clear, then reopens every scope
@@ -17796,6 +17838,7 @@ app.on('before-quit', event => {
   // pet can't keep the process alive or float over a quit app.
   closePetOverlay()
   wakeIndicatorController.close()
+  hermesNotchController.dispose()
 
   // Same for the HUD — an always-on-top panel outliving the app would leave a
   // floating composer with nothing behind it. Close it directly rather than via

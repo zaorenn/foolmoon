@@ -175,10 +175,23 @@ def _workspace_basename() -> str:
     return os.path.basename(root.rstrip("/\\")) or root
 
 
-# Cursor's case-sensitive context vars -> resolver.
+def _hermes_project_root() -> str:
+    """Absolute project root for ``${hermesProjectRoot}`` (bundled MCP scripts)."""
+    try:
+        from hermes_cli._startup_fast import project_root_str
+        root = project_root_str()
+        if root:
+            return root
+    except Exception:
+        pass
+    return str(Path(__file__).resolve().parent.parent)
+
+
+# Cursor's case-sensitive context vars -> resolver, plus Hermes bundled-runtime resolvers.
 _CONTEXT_VAR_RESOLVERS = {
     "userHome": lambda: os.path.expanduser("~"), "workspaceFolder": lambda: _workspace_folder(),
-    "workspaceFolderBasename": _workspace_basename, "pathSeparator": lambda: os.sep, "/": lambda: os.sep}
+    "workspaceFolderBasename": _workspace_basename, "pathSeparator": lambda: os.sep, "/": lambda: os.sep,
+    "hermesPython": lambda: sys.executable, "hermesProjectRoot": _hermes_project_root}
 
 
 class _RenderedStr(str):

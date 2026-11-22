@@ -65,6 +65,7 @@ def take_speech_interrupted() -> bool:
 
 # Sentence boundary: after .!? followed by whitespace, or a blank line.
 SENTENCE_BOUNDARY_RE = re.compile(r"(?<=[.!?])(?:\s|\n)|(?:\n\n)")
+CLAUSE_BOUNDARY_RE = re.compile(r"(?<=[,;:\u2014])(?:\s|\n)")
 # Reasoning tags come from the one canonical list (agent.think_scrubber), matched case-insensitively,
 # so feed() and flush() strip/cut exactly the tags every other reasoning-hiding surface does.
 _THINK_NAMES = "|".join(re.escape(name) for name in THINK_TAG_NAMES)
@@ -77,8 +78,10 @@ class SentenceChunker:
     speak-stream WebSocket so every surface cuts speech identically. Strips ``<think>`` blocks (even
     split across deltas) and merges fragments shorter than *min_len* into the following sentence."""
 
-    def __init__(self, min_len: int = 20):
+    def __init__(self, min_len: int = 20, first_clause_cut: bool = False):
         self.min_len = min_len
+        self.first_clause_cut = first_clause_cut
+        self._emitted_any = False
         self.buf = ""
 
     @classmethod
@@ -87,7 +90,11 @@ class SentenceChunker:
         characters is a whole clause, so voice setups lower it to speak the first sentence
         alone instead of buffering it behind the second. Floor 1: 0 would emit every boundary."""
         try:
-            return cls(min_len=max(1, int((tts_config.get("streaming") or {}).get("min_len", 20))))
+            streaming_cfg = tts_config.get("streaming") or {}
+            return cls(
+                min_len=max(1, int(streaming_cfg.get("min_len", 20))),
+                first_clause_cut=bool(streaming_cfg.get("first_clause_cut", False)),
+            )
         except (AttributeError, TypeError, ValueError):  # non-mapping / non-numeric → default
             return cls()
 
@@ -97,6 +104,13 @@ class SentenceChunker:
         if _THINK_OPEN_RE.search(self.buf):
             return []  # open think tag — the closing tag may arrive next delta
         out: list[str] = []
+        if self.first_clause_cut and not self._emitted_any:
+            if m_clause := CLAUSE_BOUNDARY_RE.search(self.buf):
+                head_c = self.buf[: m_clause.end()]
+                if len(head_c.strip()) >= max(24, self.min_len):
+                    out.append(head_c)
+                    self.buf = self.buf[m_clause.end():]
+                    self._emitted_any = True
         start = 0  # skip boundaries that would leave the head too short
         while m := SENTENCE_BOUNDARY_RE.search(self.buf, start):
             head = self.buf[: m.end()]
@@ -105,6 +119,7 @@ class SentenceChunker:
                 continue
             out.append(head)
             self.buf = self.buf[m.end():]
+            self._emitted_any = True
             start = 0
         return out
 
@@ -554,3 +569,58 @@ class XAIStreamer(StreamingTTSProvider):
                         envelope.get("message") or envelope.get("error") or envelope
                     )
                     raise RuntimeError(f"xAI streaming TTS error: {detail}")
+
+
+class _CudaCloningStreamerBase(StreamingTTSProvider):
+    """Persistent local CUDA cloning TTS streamer with native/acoustic word-boundary timings."""
+
+    engine_name: str = ""
+
+    @classmethod
+    def available(cls) -> bool:
+        try:
+            from tools.tts_cloning_cuda import is_cuda_engine_installed
+            return is_cuda_engine_installed(cls.engine_name)
+        except Exception:
+            return False
+
+    def stream_with_timings(self, text: str) -> tuple[bytes, int, list[dict[str, Any]]]:
+        from tools.tts_cloning_cuda import synthesize_cuda_pcm_with_timings
+        pcm, sr, timings = synthesize_cuda_pcm_with_timings(
+            text, engine=self.engine_name, tts_config=self.tts_config
+        )
+        if sr:
+            self.sample_rate = sr
+        return pcm, self.sample_rate, timings
+
+    def stream(self, text: str) -> Iterator[bytes]:
+        pcm, _sr, _timings = self.stream_with_timings(text)
+        if pcm:
+            chunk_size = 16384
+            for off in range(0, len(pcm), chunk_size):
+                yield pcm[off : off + chunk_size]
+
+
+@register("chatterbox_turbo")
+class ChatterboxTurboStreamer(_CudaCloningStreamerBase):
+    engine_name = "chatterbox_turbo"
+
+
+@register("chatterbox")
+class ChatterboxMultilingualStreamer(_CudaCloningStreamerBase):
+    engine_name = "chatterbox"
+
+
+@register("xtts_v2")
+class XttsV2Streamer(_CudaCloningStreamerBase):
+    engine_name = "xtts_v2"
+
+
+@register("f5_tts")
+class F5TtsStreamer(_CudaCloningStreamerBase):
+    engine_name = "f5_tts"
+
+
+@register("kokoro")
+class KokoroLocalStreamer(_CudaCloningStreamerBase):
+    engine_name = "kokoro"

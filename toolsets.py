@@ -137,7 +137,12 @@ TOOLSETS = {
         "reactions, appearance (GUI sessions only)",
         ["read_terminal", "close_terminal", "desktop_preview", "drive_preview",
          "annotate_preview", "read_window_below", "focus_pane", "react_to_message",
-         "gui_tour", "show_tip", "set_theme"],
+         "gui_tour", "show_tip", "set_theme", "point_bbot_at_screen", "open_on_computer"],
+    ),
+    "studio_architect": _ts(
+        "Foolmoon Studio Architect — custom app themes, surface materials, SVG patterns, and stickers (Studio Architect mode only)",
+        ["customize_foolmoon_studio", "stylize_theme_from_image", "set_theme"],
+        platforms=frozenset({"desktop"}),
     ),
     "onboarding": _ts("First-run onboarding cards; folded in only for the onboarding chat (tui_gateway/methods_onboarding.py)",
                       ["setup_beat"], platforms=frozenset({"desktop"})),

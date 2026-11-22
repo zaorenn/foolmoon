@@ -43,9 +43,10 @@ def _handle_preview(args, **kw):
 PREVIEW_SCHEMA = {
     "name": "desktop_preview",
     "description": (
-        "Open, close, or read the preview pane beside the chat. open: show "
-        "a web URL (bare domains fine), a localhost dev server, or a file path "
-        "(HTML renders live) — opens for the current window only. close: dismiss "
+        "Open, close, or read the preview pane beside the chat. open: renders "
+        "local HTML websites live, PDFs, images, SVG, Markdown, a web URL "
+        "(bare domains fine), or a localhost dev server — opens for the current "
+        "window only and auto-reloads live as files are edited. close: dismiss "
         "the whole pane, or one tab via url. read: what the pane currently shows "
         "— returns {kind, url, title, text, start, end, total_chars}; a Browser "
         "tab's text is the rendered page's visible text, paged with start/count "

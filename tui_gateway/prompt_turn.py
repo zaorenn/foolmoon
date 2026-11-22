@@ -673,6 +673,48 @@ def _sync_agent_daybreak(agent) -> None:
                           and (_load_cfg().get("agent") or {}).get("daybreak") is True)
 
 
+_STUDIO_ARCHITECT_TOOLS = frozenset({"customize_foolmoon_studio", "stylize_theme_from_image"})
+
+
+def _sync_studio_architect_tools(session: dict, agent: Any) -> str:
+    """Strictly isolate Studio Architect theme tools from Standard Hermes turns."""
+    is_architect = (session.get("composer_persona") == "architect")
+    current_tools = list(getattr(agent, "tools", None) or [])
+    valid_names = set(getattr(agent, "valid_tool_names", None) or set())
+
+    if not is_architect:
+        filtered = [
+            t for t in current_tools
+            if (t.get("function") or {}).get("name") not in _STUDIO_ARCHITECT_TOOLS
+        ]
+        agent.tools = filtered
+        agent.valid_tool_names = valid_names - _STUDIO_ARCHITECT_TOOLS
+        return ""
+
+    from tools.registry import registry
+
+    present = {
+        (t.get("function") or {}).get("name")
+        for t in current_tools
+        if isinstance(t, dict)
+    }
+    missing = _STUDIO_ARCHITECT_TOOLS - present
+    if missing:
+        for schema in registry.get_definitions(missing, quiet=True):
+            name = (schema.get("function") or {}).get("name")
+            if name and name not in present:
+                current_tools.append(schema)
+                present.add(name)
+    agent.tools = current_tools
+    agent.valid_tool_names = valid_names | (present & _STUDIO_ARCHITECT_TOOLS)
+    return (
+        "[Studio Architect Mode] You are styling the Foolmoon desktop app's own theme, "
+        "surface material, patterns, corner geometry, stickers, and bbot aesthetics. Use "
+        "customize_foolmoon_studio / stylize_theme_from_image / set_theme once cleanly to "
+        "apply the requested Foolmoon app theme."
+    )
+
+
 def _prepare_turn_input(sid: str, session: dict, st: _TurnRun, text: Any, images: list[str]):
     """Bind scopes, sync the agent, snapshot history, build the run message; returns
     ``(prompt, run_message, cols, streamer)`` or None when @-expansion was refused.
@@ -749,6 +791,9 @@ def _prepare_turn_input(sid: str, session: dict, st: _TurnRun, text: Any, images
         run_message = _prepend_note(run_message, SPEECH_INTERRUPTED_NOTE)
     run_message = _prepend_note(run_message, _pending_reaction_notes(session))
     agent._voice_turn_pending = bool(session.pop("voice_turn", False))  # auxiliary.voice_chat route
+    _architect_note = _sync_studio_architect_tools(session, agent)
+    if _architect_note:
+        run_message = _prepend_note(run_message, _architect_note)
     return prompt, _prepend_note(run_message, _hud_surface_note(session)), cols, streamer
 
 

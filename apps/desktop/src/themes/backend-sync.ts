@@ -20,6 +20,8 @@ import type { HermesSkin } from '@hermes/shared/skin'
 import { atom } from 'nanostores'
 
 import { readJson, writeJson } from '@/lib/storage'
+import { type StudioAppearanceState, updateStudioAppearance } from '@/store/appearance-studio'
+import { $bbotConfig, $bbotFxPreset, fxKnobsForPreset } from '@/store/notch'
 
 import { BUILTIN_THEMES, DEFAULT_SKIN_NAME, RETIRED_SKINS } from './presets'
 import { skinToDesktopTheme } from './skin'
@@ -93,6 +95,30 @@ export function __resetBackendSkinSync(): void {
   $backendCustomCSS.set({})
 }
 
+export function extractStudioAppearanceFromCss(css?: string | null): Partial<StudioAppearanceState> | null {
+  if (!css) {
+    return null
+  }
+
+  const match = css.match(/\/\*\s*foolmoon-studio:([\s\S]*?)\*\//)
+
+  if (!match?.[1]) {
+    return null
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(match[1].trim())
+
+    if (!parsed || typeof parsed !== 'object') {
+      return null
+    }
+
+    return parsed as Partial<StudioAppearanceState>
+  } catch {
+    return null
+  }
+}
+
 /**
  * Fold a resolved skin into the desktop. `apply: false` (connect-time seed) only
  * records the baseline; `apply: true` (runtime change / poll) repaints on a name
@@ -159,6 +185,15 @@ export function ingestBackendSkin(skin: HermesSkin | undefined | null, { apply }
   if (name !== lastSynced?.name || !lastSynced.applied) {
     lastSynced = { applied: true, name }
     $pendingSkinApply.set(name)
+
+    const studioMeta = extractStudioAppearanceFromCss(skin?.customCSS)
+
+    if (studioMeta) {
+      const next = updateStudioAppearance(studioMeta)
+
+      $bbotFxPreset.set(next.bbotFxPreset)
+      $bbotConfig.set({ ...$bbotConfig.get(), fxKnobs: fxKnobsForPreset(next.bbotFxPreset) })
+    }
   }
 }
 

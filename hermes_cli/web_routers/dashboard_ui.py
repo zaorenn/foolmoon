@@ -70,6 +70,114 @@ async def get_dashboard_themes(profile: Optional[str] = None):
     return await config_scoped_to_thread(profile, _run)
 
 
+@router.post("/api/themes/from-image")
+async def create_theme_from_image(request: Request, profile: Optional[str] = None):
+    """Generate a stylized Hermes skin + desktop CSS from a single reference image."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="Body must be a JSON object")
+
+    def _run():
+        from tools.theme_stylist_tool import generate_theme_from_image
+
+        return generate_theme_from_image(
+            image_path=body.get("image_path"),
+            image_base64=body.get("image_base64"),
+            name=body.get("name"),
+            mode=body.get("mode") or "auto",
+            preset=body.get("preset") or "balanced",
+            include_wallpaper=bool(body.get("include_wallpaper", True)),
+            include_sticker=bool(body.get("include_sticker", False)),
+            apply_now=bool(body.get("apply_now", True)),
+            material=body.get("material"),
+            corner_radius=body.get("corner_radius"),
+            pane_floating=body.get("pane_floating"),
+            motion_level=body.get("motion_level"),
+            pattern=body.get("pattern"),
+            pattern_opacity=body.get("pattern_opacity"),
+            stickers=body.get("stickers") if isinstance(body.get("stickers"), list) else None,
+            bbot_fx_preset=body.get("bbot_fx_preset"),
+        )
+
+    try:
+        return await config_scoped_to_thread(profile, _run)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Theme generation failed: {exc}")
+
+
+@router.post("/api/themes/studio-skin")
+async def create_studio_tui_skin(request: Request, profile: Optional[str] = None):
+    """Export & activate a complete Terminal Hermes TUI + Desktop skin from Visual Studio settings."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="Body must be a JSON object")
+
+    def _run():
+        from tools.theme_stylist_tool import customize_foolmoon_studio
+
+        return customize_foolmoon_studio(
+            name=str(body.get("name") or "foolmoon-studio"),
+            background=str(body.get("background") or "#f5efe6"),
+            accent=str(body.get("accent") or "#c94a38"),
+            foreground=body.get("foreground"),
+            sidebar_background=body.get("sidebar_background"),
+            material=str(body.get("material") or "warm-matte"),
+            corner_radius=int(body.get("corner_radius") if body.get("corner_radius") is not None else 18),
+            pane_floating=bool(body.get("pane_floating", True)),
+            motion_level=str(body.get("motion_level") or "fluid"),
+            pattern=str(body.get("pattern") or "none"),
+            pattern_opacity=float(body.get("pattern_opacity") if body.get("pattern_opacity") is not None else 0.09),
+            stickers=body.get("stickers") if isinstance(body.get("stickers"), list) else None,
+            bbot_fx_preset=body.get("bbot_fx_preset"),
+            preset=str(body.get("preset") or "balanced"),
+            apply_now=bool(body.get("apply_now", True)),
+        )
+
+    try:
+        return await config_scoped_to_thread(profile, _run)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Studio TUI skin sync failed: {exc}")
+
+
+@router.get("/api/themes/user-skins")
+async def list_custom_user_skins(profile: Optional[str] = None):
+    """List saved user-generated YAML skins in ~/.hermes/skins alongside active selection."""
+    def _run():
+        from tools.theme_stylist_tool import list_user_generated_skins
+        active = cfg_get(load_config(), "display", "skin", default="default")
+        skins = list_user_generated_skins()
+        for item in skins:
+            item["active"] = item["name"] == active
+        return {"ok": True, "active": active, "skins": skins}
+
+    return await config_scoped_to_thread(profile, _run)
+
+
+@router.delete("/api/themes/user-skins/{slug}")
+async def remove_custom_user_skin(slug: str, profile: Optional[str] = None):
+    """Delete a saved user-generated skin YAML from ~/.hermes/skins."""
+    def _run():
+        from tools.theme_stylist_tool import delete_user_generated_skin
+        deleted = delete_user_generated_skin(slug)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Custom skin not found")
+        return {"ok": True, "deleted": slug}
+
+    return await config_scoped_to_thread(profile, _run)
+
+
 @router.put("/api/dashboard/theme")
 async def set_dashboard_theme(body: ThemeSetBody, profile: Optional[str] = None):
     """Set the active dashboard theme (persists to config.yaml)."""

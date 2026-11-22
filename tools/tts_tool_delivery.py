@@ -55,6 +55,11 @@ PROVIDER_MAX_TEXT_LENGTH: dict[str, int] = {
     "neutts": 2000,       # local model, quality falls off on long text
     "kittentts": 2000,    # local 25MB model
     "piper": 5000,        # local VITS model, phoneme-based; practical cap
+    "chatterbox_turbo": 420,
+    "chatterbox": 340,
+    "xtts_v2": 320,
+    "f5_tts": 360,
+    "kokoro": 1200,
 }
 
 # ElevenLabs caps vary by model_id. https://elevenlabs.io/docs/overview/models

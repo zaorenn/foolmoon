@@ -147,9 +147,15 @@ export function useMicRecorder(copy: MicRecorderErrorCopy): {
   const silenceTriggeredRef = useRef(false)
   const silenceStartedAtRef = useRef<number | null>(null)
   const stopResolverRef = useRef<((recording: MicRecording | null) => void) | null>(null)
+  const stopTimeoutRef = useRef<number | null>(null)
   const generationRef = useRef(0)
 
   const cleanup = () => {
+    if (stopTimeoutRef.current !== null) {
+      window.clearTimeout(stopTimeoutRef.current)
+      stopTimeoutRef.current = null
+    }
+
     generationRef.current += 1
     stopMeterRef.current?.()
     stopMeterRef.current = null
@@ -169,7 +175,10 @@ export function useMicRecorder(copy: MicRecorderErrorCopy): {
     silenceTriggeredRef.current = false
   }
 
-  useEffect(() => () => cleanup(), [])
+  const cleanupRef = useRef(cleanup)
+  cleanupRef.current = cleanup
+
+  useEffect(() => () => cleanupRef.current(), [])
 
   const startMeter = async (stream: MediaStream, options: MicRecorderOptions) => {
     const audioWindow = window as Window & { webkitAudioContext?: BrowserAudioContext }
@@ -390,7 +399,7 @@ export function useMicRecorder(copy: MicRecorderErrorCopy): {
     checkCurrent()
 
     try {
-      recorder.start()
+      recorder.start(250)
       startedAtRef.current = Date.now()
       setRecording(true)
     } catch (error) {
@@ -410,7 +419,39 @@ export function useMicRecorder(copy: MicRecorderErrorCopy): {
         return
       }
 
+      if (stopTimeoutRef.current !== null) {
+        window.clearTimeout(stopTimeoutRef.current)
+        stopTimeoutRef.current = null
+      }
+
       stopResolverRef.current = resolve
+      stopTimeoutRef.current = window.setTimeout(() => {
+        if (stopResolverRef.current !== resolve) {
+          return
+        }
+
+        const chunks = chunksRef.current
+        const recordingType = recorder.mimeType || 'audio/webm'
+        const durationMs = Date.now() - startedAtRef.current
+        const heardSpeech = heardSpeechRef.current
+        const meterFailed = meterFailedRef.current
+
+        chunksRef.current = []
+        stopResolverRef.current = null
+        cleanup()
+
+        resolve(
+          chunks.length
+            ? {
+                audio: new Blob(chunks, { type: recordingType }),
+                durationMs,
+                heardSpeech,
+                meterFailed
+              }
+            : null
+        )
+      }, 3_000)
+
       recorder.stop()
     })
 

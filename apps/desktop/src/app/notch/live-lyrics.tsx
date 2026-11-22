@@ -1,0 +1,112 @@
+import { useEffect, useState } from 'react'
+
+import type { VoiceWordTiming } from '@/store/voice-playback'
+
+export interface LiveLyricsProps {
+  className?: string
+  compact?: boolean
+  fallbackText?: string
+  isSpeaking: boolean
+  sciFi?: boolean
+  sentence: string
+  sentenceStartTimeMs: number
+  words: VoiceWordTiming[]
+}
+
+const MAX_WINDOW_WORDS = 26
+
+export function LiveLyrics({
+  className = '',
+  compact = false,
+  fallbackText = '',
+  isSpeaking,
+  sciFi = false,
+  sentence,
+  sentenceStartTimeMs,
+  words
+}: LiveLyricsProps) {
+  const [elapsedMs, setElapsedMs] = useState(0)
+
+  useEffect(() => {
+    if (!isSpeaking || !sentenceStartTimeMs || words.length === 0) {
+      setElapsedMs(0)
+
+      return
+    }
+
+    let raf = 0
+
+    const loop = () => {
+      setElapsedMs(Math.max(0, performance.now() - sentenceStartTimeMs))
+      raf = window.requestAnimationFrame(loop)
+    }
+
+    raf = window.requestAnimationFrame(loop)
+
+    return () => window.cancelAnimationFrame(raf)
+  }, [isSpeaking, sentenceStartTimeMs, words])
+
+  if (!sentence && words.length === 0) {
+    return (
+      <span
+        className={`truncate text-xs ${sciFi ? 'font-medium tracking-wide text-slate-200/85' : 'text-muted-foreground'} ${className}`}
+      >
+        {fallbackText || 'Hermes ready'}
+      </span>
+    )
+  }
+
+  if (words.length === 0) {
+    return (
+      <div
+        className={`overflow-hidden text-ellipsis whitespace-nowrap text-xs font-medium ${sciFi ? 'text-slate-100 drop-shadow-[0_0_8px_rgba(56,189,248,0.4)]' : 'text-foreground'} ${className}`}
+      >
+        {sentence}
+      </div>
+    )
+  }
+
+  let activeIdx = words.findIndex(w => elapsedMs >= w.startMs && elapsedMs <= w.endMs)
+
+  if (activeIdx === -1) {
+    activeIdx = words.reduce((lastIdx, w, idx) => (elapsedMs >= w.startMs ? idx : lastIdx), 0)
+  }
+
+  const windowStart = Math.max(0, Math.min(words.length - MAX_WINDOW_WORDS, activeIdx - 8))
+  const windowEnd = Math.min(words.length, windowStart + MAX_WINDOW_WORDS)
+  const visible = words.slice(windowStart, windowEnd)
+
+  return (
+    <div
+      aria-live="polite"
+      className={`flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 leading-snug ${compact ? 'text-[11px]' : 'text-xs'} ${className}`}
+    >
+      {visible.map((item, offset) => {
+        const idx = windowStart + offset
+        const isDone = elapsedMs > item.endMs && idx < activeIdx
+        const isCurrent = idx === activeIdx && isSpeaking
+
+        return (
+          <span
+            className={
+              isCurrent
+                ? sciFi
+                  ? 'relative scale-[1.06] rounded-md bg-sky-400/25 px-1.5 py-0.5 font-semibold text-white shadow-[0_0_16px_rgba(56,189,248,0.65)] ring-1 ring-sky-300/60 transition-all duration-75'
+                  : 'relative rounded px-1 py-0.2 font-semibold text-foreground bg-primary/20 shadow-[0_0_12px_hsl(var(--primary)/0.35)] transition-all duration-75 scale-[1.03]'
+                : isDone
+                  ? sciFi
+                    ? 'text-slate-200 transition-colors duration-150'
+                    : 'text-foreground/65 transition-colors duration-150'
+                  : sciFi
+                    ? 'text-slate-400/75 transition-colors duration-150'
+                    : 'text-muted-foreground/75 transition-colors duration-150'
+            }
+            key={`${idx}-${item.word}`}
+          >
+            {item.word}
+          </span>
+        )
+      })}
+    </div>
+  )
+}

@@ -20,7 +20,7 @@ PICKERS = ("accent", "layout")
 # The bundled presets (apps/desktop/src/app/contrib/layout-presets.ts). Simple mode shows only the
 # first two; applying an Advanced preset switches the app to Advanced mode.
 SIMPLE_LAYOUTS = ("sidebar-left", "sidebar-right")
-ADVANCED_LAYOUTS = ("default", "basic", "focus", "terminal-deck", "quad")
+ADVANCED_LAYOUTS = ("default", "jarvis-command", "hermes-studio", "basic", "focus", "terminal-deck", "quad")
 
 _HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 
@@ -58,10 +58,10 @@ def set_theme_tool(accent: Optional[str] = None, mode: Optional[str] = None, lay
 SET_THEME_SCHEMA = {
     "name": "set_theme",
     "description": (
-        "Change how the Hermes desktop app looks: accent colour, light/dark mode, layout. Pass the values "
-        "to apply them now; the result says what was applied. Pass picker instead to show the user an "
-        "accent or layout picker card in the chat and wait for their pick. To reveal ONE pane, use "
-        "focus_pane instead."
+        "Change how the Hermes desktop app itself looks: accent colour, light/dark mode, layout. Only use "
+        "when explicitly asked to theme the Hermes/Foolmoon app itself — NEVER use when creating websites, "
+        "web apps, or dashboards. Pass picker instead to show an accent or layout picker card. To reveal "
+        "ONE pane, use focus_pane instead."
     ),
     "parameters": {
         "type": "object",

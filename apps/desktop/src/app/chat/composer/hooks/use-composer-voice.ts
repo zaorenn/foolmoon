@@ -18,6 +18,7 @@ import { $voiceConversationStartRequest, takeVoiceConversationStart } from '@/st
 import { resetBrowseState } from '@/store/composer-input-history'
 import { recordFeatureUse } from '@/store/desktop-metrics'
 import { $gateway } from '@/store/gateway'
+import { $notchVoiceRuntime, dispatchVoiceTranscriptToNotch } from '@/store/notch'
 import { notify, notifyError } from '@/store/notifications'
 import { $voiceLiveStatus, refreshVoiceLiveStatus, selectedVoiceChatMode } from '@/store/voice-live'
 import { $autoSpeakReplies, $voiceStopPhrase, setAutoSpeakReplies } from '@/store/voice-prefs'
@@ -26,7 +27,11 @@ import { resumeWakeAfterVoice } from '@/store/wake-word'
 
 import { pinFloatingComposerCapture } from '../floating-target'
 import type { ComposerTarget } from '../focus'
-import { onComposerDictationRequest, onComposerVoiceToggleRequest } from '../focus'
+import {
+  onComposerDictationRequest,
+  onComposerVoiceStopTurnRequest,
+  onComposerVoiceToggleRequest
+} from '../focus'
 import { useComposerScope, useComposerSurfaceId } from '../scope'
 import type { ChatBarProps } from '../types'
 
@@ -112,10 +117,25 @@ export function useComposerVoice({
     previousSessionIdRef.current = sessionId
   }, [sessionId])
 
+  const tryResolveVoiceApproval = useCallback((transcript: string): boolean => {
+    return dispatchVoiceTranscriptToNotch(transcript)
+  }, [])
+
+  const handleDictationTranscript = useCallback(
+    (transcript: string) => {
+      if (tryResolveVoiceApproval(transcript)) {
+        return
+      }
+
+      insertText(transcript)
+    },
+    [insertText, tryResolveVoiceApproval]
+  )
+
   const { dictate, voiceActivityState, voiceStatus } = useVoiceRecorder({
     focusInput,
     maxRecordingSeconds,
-    onTranscript: insertText,
+    onTranscript: handleDictationTranscript,
     onTranscribeAudio
   })
 
@@ -173,15 +193,21 @@ export function useComposerVoice({
     }
   }
 
-  const submitVoiceTurn = async (text: string) => {
+  const submitVoiceTurn = async (text: string): Promise<boolean> => {
+    if (tryResolveVoiceApproval(text)) {
+      return false
+    }
+
     if (busyRef.current) {
-      return
+      return false
     }
 
     triggerHaptic('submit')
     resetBrowseState(sessionId)
     clearDraft()
     await onSubmit(text, { voiceTurn: true })
+
+    return true
   }
 
   /** A GPT-Live delegation → Hermes turn. The bubble and the persisted row are
@@ -294,10 +320,24 @@ export function useComposerVoice({
       return
     }
 
+    const runtimeStatus: 'idle' | 'listening' | 'speaking' | 'thinking' | 'transcribing' = voiceConversationActive
+      ? conversation.status
+      : voiceStatus === 'recording'
+        ? 'listening'
+        : voiceStatus === 'transcribing'
+          ? 'transcribing'
+          : 'idle'
+
+    $notchVoiceRuntime.set({
+      active: voiceConversationActive || voiceStatus !== 'idle',
+      level: conversation.level,
+      status: runtimeStatus
+    })
+
     if (syncWakeIndicatorWithVoice(voiceConversationActive, conversation.status)) {
       ownsWakeIndicatorRef.current = voiceConversationActive
     }
-  }, [conversation.status, target, voiceConversationActive])
+  }, [conversation.level, conversation.status, target, voiceConversationActive, voiceStatus])
 
   useEffect(
     () => () => {
@@ -327,6 +367,16 @@ export function useComposerVoice({
   useEffect(
     () => onComposerVoiceToggleRequest(toggled => toggled === target && toggleVoiceConversation()),
     [target, toggleVoiceConversation]
+  )
+
+  useEffect(
+    () =>
+      onComposerVoiceStopTurnRequest(requested => {
+        if (requested === target && voiceConversationActive) {
+          conversation.stopTurn()
+        }
+      }),
+    [conversation, target, voiceConversationActive]
   )
 
   // The bindable `composer.dictate` action shares the mic button's callback,

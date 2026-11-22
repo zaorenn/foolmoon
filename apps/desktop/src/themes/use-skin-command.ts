@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 
 import { useTheme } from './context'
+import { applyStudioUniverse, STUDIO_UNIVERSE_PRESETS } from './studio-presets'
 
 // Old names land on a shipped theme so muscle memory works. `gold`/`hermes`
 // only ever meant the classic gold look, so they reach Classic Hermes; `default`
@@ -8,10 +9,22 @@ import { useTheme } from './context'
 // "the Desktop default" everywhere else (boot, backend sync, setTheme).
 const ALIASES: Record<string, string> = {
   ares: 'ember',
+  cyber: 'fm-night-city',
+  'cyber-lantern': 'fm-night-city',
   default: 'nous',
+  foolmoon: 'fm-foolmoon-warm',
+  'foolmoon-kitty': 'fm-hello-kitty',
+  'foolmoon-quest': 'fm-pixel-quest',
   gold: 'classic',
+  'hello-kitty': 'fm-hello-kitty',
   hermes: 'classic',
-  'nous-light': 'nous'
+  kitty: 'fm-hello-kitty',
+  'macos-frost': 'fm-macos-frost',
+  'night-city': 'fm-night-city',
+  'nous-light': 'nous',
+  'pixel-quest': 'fm-pixel-quest',
+  quest: 'fm-pixel-quest',
+  'warm-studio': 'fm-foolmoon-warm'
 }
 
 export function useSkinCommand() {
@@ -52,6 +65,14 @@ export function useSkinCommand() {
 
       if (!target) {
         return `Unknown desktop theme: ${arg}\nAvailable: ${availableThemes.map(t => t.name).join(', ')}`
+      }
+
+      const studioMatch = STUDIO_UNIVERSE_PRESETS.find(preset => preset.theme.name === target.name)
+
+      if (studioMatch) {
+        applyStudioUniverse(studioMatch.id)
+
+        return `Desktop & Studio Universe switched to ${target.label}.`
       }
 
       setTheme(target.name)

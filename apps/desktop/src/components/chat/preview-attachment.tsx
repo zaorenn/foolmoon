@@ -9,7 +9,7 @@ import { normalizeOrLocalPreviewTarget } from '@/lib/local-preview'
 import { downloadGatewayMediaFile } from '@/lib/media'
 import { previewName } from '@/lib/preview-targets'
 import { notifyError } from '@/store/notifications'
-import { $previewTabSources, closePreviewForSource, openPreview } from '@/store/preview'
+import { $previewTabSources, closePreviewForSource, openPreview, renderedHtmlTarget } from '@/store/preview'
 
 /** What the Electron main process said about this target's LOCAL filesystem
  * state (#101683). `null` keeps the stock card — remote-backend targets keep
@@ -176,7 +176,7 @@ export function PreviewAttachment({ target }: { target: string }) {
         throw new Error(`Could not open preview target: ${requestTarget}`)
       }
 
-      openPreview(preview)
+      openPreview(renderedHtmlTarget(preview))
     } catch (error) {
       if (
         !mountedRef.current ||

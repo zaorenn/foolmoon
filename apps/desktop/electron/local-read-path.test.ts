@@ -10,7 +10,12 @@ const { bridge } = vi.hoisted(() => ({ bridge: vi.fn() }))
 
 vi.mock('./wsl-path-bridge', () => ({ resolveLocalReadPath: bridge }))
 
-import { resolveIpcFileReadPath, resolveMediaStreamFile, resolvePreviewTargetPath } from './local-read-path'
+import {
+  resolveIpcFileReadPath,
+  resolveMediaStreamFile,
+  resolvePreviewTargetPath,
+  windowsFallbackPreviewCandidates
+} from './local-read-path'
 
 const BRIDGED = '\\\\wsl.localhost\\Ubuntu\\home\\alex\\file'
 
@@ -98,4 +103,23 @@ test('resolvePreviewTargetPath passes file: URLs through the bridge without expa
   assert.equal(expandUserPath.mock.calls.length, 0)
   assert.equal(bridge.mock.calls.length, 1)
   assert.equal(bridge.mock.calls[0][0], 'file:///home/alex/report.html')
+})
+
+test('windowsFallbackPreviewCandidates resolves leading-slash and relative targets against Windows dirs', () => {
+  assert.deepEqual(
+    windowsFallbackPreviewCandidates('/portfolio_site.html', ['C:\\work', 'C:\\Users\\alice'], 'win32'),
+    ['C:\\work\\portfolio_site.html', 'C:\\Users\\alice\\portfolio_site.html']
+  )
+
+  assert.deepEqual(
+    windowsFallbackPreviewCandidates('docs/report.pdf', ['C:\\Users\\alice', 'C:\\Users\\alice'], 'win32'),
+    ['C:\\Users\\alice\\docs\\report.pdf']
+  )
+})
+
+test('windowsFallbackPreviewCandidates rejects traversal, UNC, drive paths, and file URLs', () => {
+  assert.deepEqual(windowsFallbackPreviewCandidates('/../secret.txt', ['C:\\work'], 'win32'), [])
+  assert.deepEqual(windowsFallbackPreviewCandidates('\\\\server\\share\\a.html', ['C:\\work'], 'win32'), [])
+  assert.deepEqual(windowsFallbackPreviewCandidates('C:\\Users\\alice\\a.html', ['C:\\work'], 'win32'), [])
+  assert.deepEqual(windowsFallbackPreviewCandidates('file:///C:/a.html', ['C:\\work'], 'win32'), [])
 })

@@ -921,3 +921,17 @@ class TestDeferredCallSchemaProbe:
         }, calls)
 
         assert validate_deferred_call_args(name, {"payload": {"anything": True}}) is None
+
+
+def test_stem_fallback_without_snowballstemmer(monkeypatch):
+    from tools import tool_search_catalog
+
+    monkeypatch.setattr(tool_search_catalog, "snowballstemmer", None)
+    tool_search_catalog._stem.cache_clear()
+    try:
+        tokens = tool_search_catalog._tokenize("Create issues and stickers")
+        assert tokens == ["create", "issue", "and", "sticker"]
+        assert tool_search_catalog._stem("issues") == tool_search_catalog._stem("issue")
+        assert tool_search_catalog._stem("stickers") == tool_search_catalog._stem("sticker")
+    finally:
+        tool_search_catalog._stem.cache_clear()

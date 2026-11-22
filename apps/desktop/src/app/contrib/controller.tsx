@@ -119,6 +119,7 @@ import { $workspaceIsPage, WORKSPACE_PAGE_HEADER_AREA } from '../routes'
 import { Butterbar } from '../shell/butterbar'
 import { TermsButterbar } from '../shell/terms-butterbar'
 
+import { registerFoolmoonPaletteCommands } from './foolmoon-palette'
 import { BASIC_TREE, DEFAULT_TREE, registerLayoutPresets } from './layout-presets'
 import { bindLayoutSides } from './layout-sides'
 import { FilesPane, LogsPane, ReviewPaneContent } from './panes'
@@ -760,6 +761,8 @@ registry.register(
     set: enabled => void setYoloEnabled(enabled).catch(() => undefined)
   })
 )
+
+registerFoolmoonPaletteCommands()
 
 // Sessions/files Close = collapse their SIDE (⌘B/⌘J truthful, titlebar button
 // flips back) — but only while the pane actually lives in that root side

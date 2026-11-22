@@ -339,6 +339,152 @@ _BUILTIN_SKINS: dict[str, dict[str, Any]] = {
 [#F29C38]⠀⠀⠀⠀⠀⠀⠀⠀⣰⡿⢿⣆⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
 [#F29C38]⠀⠀⠀⠀⠀⠀⠀⣼⡟⠀⠀⢻⣧⠀⠀⠀⠀⠀⠀⠀⠀[/]
 [dim #7A3511]⠀⠀⠀⠀⠀⠀⠀tail flame lit⠀⠀⠀⠀⠀⠀⠀⠀[/]""",
+    },
+    "foolmoon": {
+        "name": "foolmoon",
+        "description": "Foolmoon Nocturne — terracotta coral, warm lunar cream & obsidian night",
+        "colors": {
+            "banner_border": "#C95B47", "banner_title": "#F5C28B", "banner_accent": "#EA745E",
+            "banner_dim": "#9B867A", "banner_text": "#F5EFE6", "ui_accent": "#EA745E",
+            "ui_label": "#F5C28B", "ui_ok": "#58C97E", "ui_error": "#F26D6D", "ui_warn": "#F2A949",
+            "prompt": "#F5EFE6", "input_rule": "#C95B47", "response_border": "#EA745E",
+            "status_bar_bg": "#1F1714", "status_bar_text": "#F5EFE6",
+            "status_bar_strong": "#F5C28B", "status_bar_dim": "#9B867A",
+            "status_bar_good": "#58C97E", "status_bar_warn": "#F2A949", "status_bar_bad": "#EA745E",
+            "status_bar_critical": "#F26D6D", "session_label": "#F5C28B",
+            "session_border": "#8F7C70", "completion_menu_bg": "#1F1714",
+            "completion_menu_current_bg": "#4D2C24", "selection_bg": "#593229",
+            "shell_dollar": "#EA745E", "voice_status_bg": "#1F1714"},
+        "light_colors": {
+            "banner_border": "#B85C48", "banner_title": "#9E3524", "banner_accent": "#C94A38",
+            "banner_dim": "#7A6C61", "banner_text": "#2C221E", "ui_accent": "#C94A38",
+            "ui_label": "#8C3A2B", "ui_ok": "#2E7D32", "ui_error": "#C62828", "ui_warn": "#B45309",
+            "prompt": "#2C221E", "input_rule": "#B85C48", "response_border": "#C94A38",
+            "status_bar_bg": "#EAE0D3", "status_bar_text": "#2C221E",
+            "status_bar_strong": "#9E3524", "status_bar_dim": "#7A6C61",
+            "status_bar_good": "#2E7D32", "status_bar_warn": "#B45309", "status_bar_bad": "#C94A38",
+            "status_bar_critical": "#B91C1C", "session_label": "#8C3A2B",
+            "session_border": "#8F7D6E", "completion_menu_bg": "#F5EFE6",
+            "completion_menu_current_bg": "#DFCEBC", "selection_bg": "#E8D5C4",
+            "shell_dollar": "#C94A38", "voice_status_bg": "#EAE0D3"},
+        "spinner": {
+            "waiting_faces": ["(☾)", "(✦)", "(◈)", "(◠)", "(◉)"],
+            "thinking_faces": ["(☾)", "(✦)", "(◈)", "(⌁)", "(✧)"],
+            "thinking_verbs": [
+                "aligning lunar optics", "calibrating CUDA voice clone", "synthesizing studio palette",
+                "scanning notch telemetry", "weaving live lyrics", "harmonizing shaders",
+                "consulting Jarvis core", "locking orbital focus"],
+            "wings": _wings("☾", "✦", "◈", "✧")},
+        "branding": _branding(
+            "Foolmoon", "☾", "Clear skies! ☾", prompt="☾❯",
+            help_header="(☾✦) Foolmoon Studio & TUI Commands"),
+        "tool_prefix": "☾",
+        "banner_logo": """[bold #FFF3E6]███████╗ ██████╗  ██████╗ ██╗     ███╗   ███╗ ██████╗  ██████╗ ███╗   ██╗       █████╗  ██████╗ ███████╗███╗   ██╗████████╗[/]
+[bold #F5C28B]██╔════╝██╔═══██╗██╔═══██╗██║     ████╗ ████║██╔═══██╗██╔═══██╗████╗  ██║      ██╔══██╗██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝[/]
+[#EA745E]█████╗  ██║   ██║██║   ██║██║     ██╔████╔██║██║   ██║██║   ██║██╔██╗ ██║█████╗███████║██║  ███╗█████╗  ██╔██╗ ██║   ██║[/]
+[#DC5E49]██╔══╝  ██║   ██║██║   ██║██║     ██║╚██╔╝██║██║   ██║██║   ██║██║╚██╗██║╚════╝██╔══██║██║   ██║██╔══╝  ██║╚██╗██║   ██║[/]
+[#C94A38]██║     ╚██████╔╝╚██████╔╝███████╗██║ ╚═╝ ██║╚██████╔╝╚██████╔╝██║ ╚████║      ██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║[/]
+[#9E3524]╚═╝      ╚═════╝  ╚═════╝ ╚══════╝╚═╝     ╚═╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═══╝      ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝[/]""",
+        "banner_hero": """[#F5C28B]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⣀⡀⠀⠀⠀✦⠀⠀⠀⠀⠀⠀⠀[/]
+[#F5C28B]⠀⠀⠀⠀⠀⠀⠀⠀⢀⣴⣿⣿⣿⣿⣧⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[#EA745E]⠀⠀⠀⠀⠀⠀⠀⢀⣾⣿⡿⠟⠛⠿⣿⣧⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[#EA745E]⠀⠀⠀⠀⠀⠀⠀⣾⣿⡟⠀⠀☾⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[#C94A38]⠀⠀⠀⠀⠀⠀⠀⣿⣿⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[#C94A38]⠀⠀⠀⠀⠀⠀⠀⢿⣿⣧⠀⠀⠀⠀⢀⣤⡄⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[#EA745E]⠀⠀⠀⠀⠀⠀⠀⠈⠻⣿⣿⣦⣤⣴⣿⣿⠃⠀⠀⠀✦⠀⠀⠀⠀[/]
+[#F5C28B]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⠛⠿⠿⠟⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[dim #9B867A]⠀⠀⠀⠀⠀⠀jarvis notch & lunar studio⠀⠀⠀⠀⠀⠀[/]""",
+    },
+    "foolmoon-kitty": {
+        "name": "foolmoon-kitty",
+        "description": "Hello Kitty Ribbon — pastel strawberry cloud, rose ink & kawaii bow",
+        "colors": {
+            "banner_border": "#D95B8A", "banner_title": "#FFB3D1", "banner_accent": "#FF7AA8",
+            "banner_dim": "#B08295", "banner_text": "#FFF0F5", "ui_accent": "#FF7AA8",
+            "ui_label": "#FFB3D1", "ui_ok": "#5ED196", "ui_error": "#FF6B8B", "ui_warn": "#FFB86C",
+            "prompt": "#FFF0F5", "input_rule": "#D95B8A", "response_border": "#FF7AA8",
+            "status_bar_bg": "#24131B", "status_bar_text": "#FFF0F5",
+            "status_bar_strong": "#FFB3D1", "status_bar_dim": "#B08295",
+            "status_bar_good": "#5ED196", "status_bar_warn": "#FFB86C", "status_bar_bad": "#FF7AA8",
+            "status_bar_critical": "#FF6B8B", "session_label": "#FFB3D1",
+            "session_border": "#9E7184", "completion_menu_bg": "#24131B",
+            "completion_menu_current_bg": "#52283B", "selection_bg": "#5E2E44",
+            "shell_dollar": "#FF7AA8", "voice_status_bg": "#24131B"},
+        "light_colors": {
+            "banner_border": "#D6457A", "banner_title": "#A81349", "banner_accent": "#E11D62",
+            "banner_dim": "#8C586C", "banner_text": "#301420", "ui_accent": "#E11D62",
+            "ui_label": "#A81349", "ui_ok": "#1F8A58", "ui_error": "#C81E45", "ui_warn": "#C46210",
+            "prompt": "#301420", "input_rule": "#D6457A", "response_border": "#E11D62",
+            "status_bar_bg": "#FBE3EB", "status_bar_text": "#301420",
+            "status_bar_strong": "#A81349", "status_bar_dim": "#8C586C",
+            "status_bar_good": "#1F8A58", "status_bar_warn": "#C46210", "status_bar_bad": "#E11D62",
+            "status_bar_critical": "#C81E45", "session_label": "#A81349",
+            "session_border": "#B87D93", "completion_menu_bg": "#FFF4F7",
+            "completion_menu_current_bg": "#F4C2D4", "selection_bg": "#F7CFE0",
+            "shell_dollar": "#E11D62", "voice_status_bg": "#FBE3EB"},
+        "spinner": {
+            "waiting_faces": ["(⋈)", "(♡)", "(✿)", "(◠)", "(☆)"],
+            "thinking_faces": ["(⋈)", "(♡)", "(✿)", "(⌁)", "(✧)"],
+            "thinking_verbs": [
+                "tying satin bows", "polishing strawberry glass", "sketching kawaii stickers",
+                "tuning sugarplum chimes", "weaving pastel shaders", "syncing ribbon telemetry"],
+            "wings": _wings("⋈", "♡", "✿", "✧")},
+        "branding": _branding(
+            "Foolmoon Kitty", "⋈", "Stay sweet! ⋈", prompt="⋈❯",
+            help_header="(⋈♡) Hello Kitty Studio Commands"),
+        "tool_prefix": "⋈",
+        "banner_logo": """[bold #FFF0F5]██╗  ██╗███████╗██╗     ██╗      ██████╗     ██╗  ██╗██╗████████╗████████╗██╗   ██╗[/]
+[bold #FFB3D1]██║  ██║██╔════╝██║     ██║     ██╔═══██╗    ██║ ██╔╝██║╚══██╔══╝╚══██╔══╝╚██╗ ██╔╝[/]
+[#FF7AA8]███████║█████╗  ██║     ██║     ██║   ██║    █████╔╝ ██║   ██║      ██║    ╚████╔╝ [/]
+[#EA5288]██╔══██║██╔══╝  ██║     ██║     ██║   ██║    ██╔═██╗ ██║   ██║      ██║     ╚██╔╝  [/]
+[#E11D62]██║  ██║███████╗███████╗███████╗╚██████╔╝    ██║  ██╗██║   ██║      ██║      ██║   [/]
+[#A81349]╚═╝  ╚═╝╚══════╝╚══════╝╚══════╝ ╚═════╝     ╚═╝  ╚═╝╚═╝   ╚═╝      ╚═╝      ╚═╝   [/]""",
+        "banner_hero": """[#FFB3D1]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣴⣆⠀⠀⠀⠀⠀⣰⣦⠀⠀⠀⋈⠀⠀⠀⠀[/]
+[#FF7AA8]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿⣷⣤⣤⣶⣾⣿⣿⠀⠀⠀⠀♡⠀⠀⠀⠀[/]
+[#FFF0F5]⠀⠀⠀⠀⠀⠀⠀⠀⠀⣾⡿⠛⠛⠛⠛⠛⠛⢿⣷⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[#FFF0F5]⠀⠀⠀⠀⠀⠀⠀⠀⢸⣿⠀●⠀⠀⠀⠀●⠀⣿⡇⠀⠀⠀⠀⠀⠀⠀[/]
+[#E11D62]⠀⠀⠀⠀⠀⠀⠀⠀⠀⢻⣷⡀⠀⠀●⠀⠀⢀⣾⡟⠀⠀⠀⠀⠀⠀⠀[/]
+[#FFB3D1]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⠻⠿⣶⣶⣶⠿⠟⠁⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[dim #B08295]⠀⠀⠀⠀⠀⠀strawberry plush kawaii tui⠀⠀⠀⠀⠀⠀[/]""",
+    },
+    "foolmoon-quest": {
+        "name": "foolmoon-quest",
+        "description": "RPG Pixel Quest — arcane emerald, mana gold & 16-bit cartridge HUD",
+        "colors": {
+            "banner_border": "#2EA86F", "banner_title": "#FACC15", "banner_accent": "#4ADE80",
+            "banner_dim": "#709488", "banner_text": "#ECFDF5", "ui_accent": "#4ADE80",
+            "ui_label": "#FACC15", "ui_ok": "#4ADE80", "ui_error": "#F87171", "ui_warn": "#FACC15",
+            "prompt": "#ECFDF5", "input_rule": "#2EA86F", "response_border": "#4ADE80",
+            "status_bar_bg": "#0F1D19", "status_bar_text": "#ECFDF5",
+            "status_bar_strong": "#FACC15", "status_bar_dim": "#709488",
+            "status_bar_good": "#4ADE80", "status_bar_warn": "#FACC15", "status_bar_bad": "#FB923C",
+            "status_bar_critical": "#F87171", "session_label": "#FACC15",
+            "session_border": "#588274", "completion_menu_bg": "#0F1D19",
+            "completion_menu_current_bg": "#1F4237", "selection_bg": "#244D40",
+            "shell_dollar": "#38BDF8", "voice_status_bg": "#0F1D19"},
+        "spinner": {
+            "waiting_faces": ["(⚔)", "(★)", "(♦)", "(◈)", "(🛡)"],
+            "thinking_faces": ["(⚔)", "(★)", "(♦)", "(⌁)", "(🔮)"],
+            "thinking_verbs": [
+                "rolling initiative", "charging mana crystal", "scanning dungeon map",
+                "forging pixel shader", "saving quest log", "buffing CUDA voice party"],
+            "wings": _wings("⚔", "★", "♦", "◈")},
+        "branding": _branding(
+            "Foolmoon Quest", "⚔", "Quest saved! ⚔", prompt="⚔❯",
+            help_header="[LV.99] Pixel Quest Commands"),
+        "tool_prefix": "⚔",
+        "banner_logo": """[bold #ECFDF5]██████╗ ██╗██╗  ██╗███████╗██╗          ██████╗ ██╗   ██╗███████╗███████╗████████╗[/]
+[bold #FACC15]██╔══██╗██║╚██╗██╔╝██╔════╝██║         ██╔═══██╗██║   ██║██╔════╝██╔════╝╚══██╔══╝[/]
+[#4ADE80]██████╔╝██║ ╚███╔╝ █████╗  ██║         ██║   ██║██║   ██║█████╗  ███████╗   ██║   [/]
+[#2EA86F]██╔═══╝ ██║ ██╔██╗ ██╔══╝  ██║         ██║▄▄ ██║██║   ██║██╔══╝  ╚════██║   ██║   [/]
+[#10B981]██║     ██║██╔╝ ██╗███████╗███████╗    ╚██████╔╝╚██████╔╝███████╗███████║   ██║   [/]
+[#047857]╚═╝     ╚═╝╚═╝  ╚═╝╚══════╝╚══════╝     ╚══▀▀═╝  ╚═════╝ ╚══════╝╚══════╝   ╚═╝   [/]""",
+        "banner_hero": """[#FACC15]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⣤⣤⣀⠀⠀⠀★⠀⠀⠀⠀⠀⠀⠀[/]
+[#4ADE80]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣼⣿⣿⣿⣿⣧⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[#2EA86F]⠀⠀⠀⠀⠀⠀⠀⠀⠀⢰⣿⡿⠋⠉⠹⣿⡆⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[#4ADE80]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠻⣧⡀⚔⢀⣼⠟⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[#FACC15]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠛⠛⠋⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[dim #709488]⠀⠀⠀⠀⠀⠀⠀hp 99/99 · mp 64/64 · quest on⠀⠀⠀⠀⠀[/]""",
     }}
 
 _active_skin: Optional[SkinConfig] = None

@@ -207,6 +207,7 @@ export function installZoomReassertOnNavigation(webContents, reassert) {
  */
 export const ZOOM_WINDOW_CONFIG = {
   chat: { zoom: true },
+  notch: { zoom: false },
   petOverlay: { zoom: false },
   quickEntry: { zoom: false },
   wakeIndicator: { zoom: false }

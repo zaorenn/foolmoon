@@ -45,7 +45,10 @@ from tools.tts_tool_delivery import (
 from tools.tts_tool_providers import (
     _generate_edge_tts, _generate_elevenlabs, _generate_gemini_tts, _generate_minimax_tts,
     _generate_mistral_tts, _generate_xai_tts, _resolve_minimax_tts_runtime)
-from tools.tts_tool_local import _generate_kittentts, _generate_neutts, _generate_piper_tts
+from tools.tts_tool_local import (
+    _generate_chatterbox, _generate_chatterbox_turbo, _generate_f5_tts,
+    _generate_kittentts, _generate_kokoro, _generate_neutts, _generate_piper_tts,
+    _generate_xtts_v2)
 from tools.tts_tool_plugins import (
     _dispatch_to_plugin_provider, _plugin_provider_is_available,
     _plugin_provider_is_voice_compatible)
@@ -106,6 +109,12 @@ def _package_installed(name: str) -> bool:
 def _check_neutts_available() -> bool: return _package_installed("neutts")
 def _check_kittentts_available() -> bool: return _package_installed("kittentts")
 def _check_piper_available() -> bool: return _package_installed("piper")
+def _check_cuda_cloning_available(engine: str) -> bool:
+    try:
+        from tools.tts_cloning_cuda import is_cuda_engine_installed
+        return is_cuda_engine_installed(engine)
+    except Exception:
+        return False
 
 
 # --- Defaults / config ---
@@ -152,7 +161,10 @@ _MEDIA_DIRECTIVE_RE = re.compile(r"media:\s*[`'\"*_]*(?:[`'\"]|[a-z]:[/\\]|~?/)"
 
 # Built-ins that emit Opus natively when asked for .ogg; the rest need ffmpeg for voice bubbles.
 _NATIVE_OPUS_PROVIDERS = frozenset({"openai", "elevenlabs", "mistral", "gemini"})
-_FFMPEG_OPUS_PROVIDERS = frozenset({"edge", "neutts", "minimax", "xai", "kittentts", "piper"})
+_FFMPEG_OPUS_PROVIDERS = frozenset({
+    "edge", "neutts", "minimax", "xai", "kittentts", "piper",
+    "chatterbox_turbo", "chatterbox", "xtts_v2", "f5_tts", "kokoro",
+})
 
 
 # --- Built-in provider dispatch ---
@@ -180,7 +192,17 @@ _BUILTIN_DISPATCH: dict[str, tuple] = {
                   "Run 'hermes setup tts' and choose KittenTTS."),
     "piper": (lambda: _importable(_import_piper), "Piper (local)", "_generate_piper_tts",
               "Piper provider selected but 'piper-tts' package not installed. "
-              "Run 'hermes tools' and select Piper under TTS.")}
+              "Run 'hermes tools' and select Piper under TTS."),
+    "chatterbox_turbo": (lambda: _check_cuda_cloning_available("chatterbox_turbo"), "Chatterbox Turbo (CUDA cloning)", "_generate_chatterbox_turbo",
+                         "Chatterbox Turbo CUDA venv not found in ~/.hermes/voice/voice-venv/chatterbox."),
+    "chatterbox": (lambda: _check_cuda_cloning_available("chatterbox"), "Chatterbox Multilingual (CUDA cloning)", "_generate_chatterbox",
+                   "Chatterbox CUDA venv not found in ~/.hermes/voice/voice-venv/chatterbox."),
+    "xtts_v2": (lambda: _check_cuda_cloning_available("xtts_v2"), "Coqui XTTS-v2 (CUDA cloning)", "_generate_xtts_v2",
+                "XTTS-v2 CUDA venv not found in ~/.hermes/voice/voice-venv/xtts_v2."),
+    "f5_tts": (lambda: _check_cuda_cloning_available("f5_tts"), "F5-TTS (CUDA cloning)", "_generate_f5_tts",
+               "F5-TTS CUDA venv not found in ~/.hermes/voice/voice-venv/f5_tts."),
+    "kokoro": (lambda: _check_cuda_cloning_available("kokoro"), "Kokoro (local)", "_generate_kokoro",
+               "Kokoro local runtime not found in ~/.hermes/voice/voice-venv/kokoro.")}
 
 
 def _error_json(message: str) -> str:
@@ -575,7 +597,12 @@ _BUILTIN_REQUIREMENTS: dict[str, Callable[[], bool]] = {
     "mistral": lambda: _pm_extra_available(_SDK_ON_DEMAND["mistral"][0]) and bool(_resolve_provider_key("MISTRAL_API_KEY", "mistral")),
     "neutts": lambda: _check_neutts_available(),
     "kittentts": lambda: _check_kittentts_available(),
-    "piper": lambda: _check_piper_available()}
+    "piper": lambda: _check_piper_available(),
+    "chatterbox_turbo": lambda: _check_cuda_cloning_available("chatterbox_turbo"),
+    "chatterbox": lambda: _check_cuda_cloning_available("chatterbox"),
+    "xtts_v2": lambda: _check_cuda_cloning_available("xtts_v2"),
+    "f5_tts": lambda: _check_cuda_cloning_available("f5_tts"),
+    "kokoro": lambda: _check_cuda_cloning_available("kokoro")}
 
 
 def _pm_extra_available(extra: str) -> bool:

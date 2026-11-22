@@ -22,6 +22,7 @@ import {
   patchMainComposerAttachmentOccurrence,
   revokeDiscardedAttachmentPreviews
 } from '@/store/composer'
+import { $composerPersona } from '@/store/composer-persona'
 import { serverOwnsComposerQueue } from '@/store/composer-queue'
 import { noteMessageSent } from '@/store/desktop-metrics'
 import { $hudMode } from '@/store/hud'
@@ -1094,6 +1095,7 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
           // rather than at Hermes. The gateway turns this into a per-turn hint
           // to read the window underneath and work in it.
           ...($hudMode.get() && { surface: 'hud' }),
+          ...($composerPersona.get() === 'architect' && { persona: 'architect' }),
           // A GPT-Live delegation: the text is a voice transcript and the reply
           // will be spoken by the voice model. Wins over HUD for this turn.
           ...(options?.surface && { surface: options.surface }),

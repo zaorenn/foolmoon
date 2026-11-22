@@ -19,7 +19,7 @@ import { ensureContrast, mix } from '@hermes/shared/color'
 import type { HermesSkin, SkinColors } from '@hermes/shared/skin'
 
 import { luminance, normalizeHex, readableInk } from './color'
-import type { DesktopTheme, DesktopThemeColors } from './types'
+import type { DesktopTerminalPalette, DesktopTheme, DesktopThemeColors } from './types'
 
 // The accent labels the sidebar in small uppercase text, so it must clear WCAG AA
 // for normal text or section headers go invisible — mirrors the VS Code importer.
@@ -76,6 +76,32 @@ export function skinToDesktopTheme(skin: HermesSkin): DesktopTheme | null {
     pick(colors, ['banner_dim', 'session_border'], background) ?? mix(foreground, background, 0.45)
 
   const destructive = pick(colors, ['ui_error'], background) ?? '#e25563'
+  const okColor = pick(colors, ['ui_ok', 'status_bar_good'], background) ?? (dark ? '#4ade80' : '#15803d')
+  const warnColor = pick(colors, ['ui_warn', 'status_bar_warn'], background) ?? (dark ? '#fbbf24' : '#b45309')
+  const labelColor = pick(colors, ['ui_label', 'banner_title'], background) ?? accent
+  const selectionBg = pick(colors, ['selection_bg'], background)
+
+  const terminalPalette: DesktopTerminalPalette = {
+    black: dark ? mix(background, foreground, 0.14) : '#27272a',
+    blue: labelColor,
+    brightBlack: mutedForeground,
+    brightBlue: ensureContrast(mix(labelColor, foreground, 0.2), background, 3.5),
+    brightCyan: ensureContrast(mix(accent, foreground, 0.25), background, 3.5),
+    brightGreen: ensureContrast(mix(okColor, foreground, 0.2), background, 3.5),
+    brightMagenta: ensureContrast(mix(accent, labelColor, 0.4), background, 3.5),
+    brightRed: ensureContrast(mix(destructive, foreground, 0.2), background, 3.5),
+    brightWhite: dark ? foreground : '#52525b',
+    brightYellow: ensureContrast(mix(warnColor, foreground, 0.2), background, 3.5),
+    cursor: accent,
+    cyan: ensureContrast(pick(colors, ['shell_dollar'], background) ?? accent, background, 3.5),
+    foreground,
+    green: okColor,
+    magenta: accent,
+    red: destructive,
+    selectionBackground: `${selectionBg ?? accent}55`,
+    white: dark ? mix(foreground, background, 0.15) : foreground,
+    yellow: warnColor
+  }
 
   const palette: DesktopThemeColors = {
     background,
@@ -114,6 +140,8 @@ export function skinToDesktopTheme(skin: HermesSkin): DesktopTheme | null {
     // shouldn't invert it. renderedModeFor still paints `.dark` from luminance.
     colors: palette,
     darkColors: palette,
+    darkTerminal: terminalPalette,
+    terminal: terminalPalette,
     // Pass through raw CSS so the desktop can inject it as a scoped <style>
     // tag — users put CSS in their skin YAML instead of hacking app.asar.
     customCSS: skin.customCSS?.trim() || undefined

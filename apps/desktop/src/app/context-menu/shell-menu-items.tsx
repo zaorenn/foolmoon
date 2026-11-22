@@ -4,8 +4,10 @@ import { useNavigate } from 'react-router'
 import { toggleTargetZoneTabStrip } from '@/components/pane-shell/tree/store'
 import { type MenuKit, renderActionItem } from '@/components/ui/actions-menu'
 import { type Translations, useI18n } from '@/i18n'
+import { Mic, Palette, PanelTop } from '@/lib/icons'
 import { cloudOwnsUpdates } from '@/store/cloud-updates'
 import { openCommandPalette } from '@/store/command-palette'
+import { toggleJarvisHandsFree, toggleNotch } from '@/store/notch'
 import { toggleProfileRailVisible } from '@/store/profile-rail-prefs'
 import { toggleStatusbarVisible } from '@/store/statusbar-prefs'
 import { requestActiveUpdate } from '@/store/updates'
@@ -92,6 +94,26 @@ function shellSections(
         onSelect: () => void toggleTargetZoneTabStrip()
       }),
       settings
+    ],
+    [
+      renderActionItem(kit, {
+        iconNode: <PanelTop className="size-3.5" />,
+        key: 'shell-foolmoon-notch',
+        label: 'Toggle Hardware Notch',
+        onSelect: () => void toggleNotch()
+      }),
+      renderActionItem(kit, {
+        iconNode: <Mic className="size-3.5" />,
+        key: 'shell-foolmoon-jarvis',
+        label: 'Toggle Jarvis Hands-Free',
+        onSelect: () => toggleJarvisHandsFree()
+      }),
+      renderActionItem(kit, {
+        iconNode: <Palette className="size-3.5" />,
+        key: 'shell-foolmoon-studio',
+        label: 'Visual & Material Studio',
+        onSelect: () => navigateToWorkspacePage(navigate, `${SETTINGS_ROUTE}?tab=config:appearance&page=theme`)
+      })
     ],
     ...(update ? [[update]] : [])
   ]

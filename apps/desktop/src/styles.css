@@ -494,11 +494,11 @@
     --dt-spacing-mul: 1;
 
     --radius: 0.75rem;
-    /* Effective value everywhere: the chat backdrop used to force 0.2 onto the
-       root element at runtime (an ungated leva slider default), so this 0.6
-       only ever applied to the windows that don't mount the backdrop. Pinned
-       to the value the app actually renders at. */
-    --radius-scalar: 0.2;
+    /* Sculpted macOS squircle scale, dynamically tuned live by Foolmoon Appearance Studio (default 18px). */
+    --radius-scalar: 1.125;
+    --fm-radius-px: 18px;
+    --fm-pattern-opacity: 0.09;
+    --fm-spring: cubic-bezier(0.22, 1, 0.36, 1);
 
     /* Space under last message vs overlay composer — driven by the measured composer DOCK height (see
        composer/index.tsx), which covers the micro-action strip, the status stack, the composer, and the
@@ -4266,4 +4266,194 @@ html[data-hermes-desktop-host='browser'] [data-slot='sidebar-container'] {
 .aui-error-details .aui-error-details-link:hover {
   background: none;
   color: var(--err-ink);
+}
+
+/* ── Foolmoon Studio Craft: Materials, Squircles, Floating Panes & Motion ────────────────── */
+:root {
+  interpolate-size: allow-keywords;
+}
+
+@supports (corner-shape: squircle) {
+  [data-slot='composer-root'],
+  [data-tree-group],
+  [data-slot='card'],
+  [data-fm-surface] {
+    corner-shape: squircle;
+  }
+}
+
+/* Plump floating card layout inside main workspace shell */
+:root[data-fm-floating='true'] .flex:has(> [data-tree-group]) {
+  background: color-mix(in srgb, var(--ui-bg-chrome, var(--background)) 90%, var(--dt-foreground, #000000) 4%);
+}
+
+:root[data-fm-floating='true'] [data-tree-group]:not([data-pane-host]) {
+  margin: 5px;
+  border-radius: calc(var(--fm-radius-px, 18px) * 1.05);
+  border: 1px solid color-mix(in srgb, var(--dt-border, currentColor) 72%, transparent);
+  overflow: hidden;
+  box-shadow:
+    0 1px 0 color-mix(in srgb, white 58%, transparent) inset,
+    0 12px 32px -14px rgb(15 12 10 / 12%),
+    0 2px 8px -4px rgb(15 12 10 / 7%);
+}
+
+/* Surface Materials — applied across split panes, chat composer & studio panels */
+:root[data-fm-material='warm-matte'] [data-slot='composer-root'],
+:root[data-fm-material='warm-matte'] [data-fm-surface] {
+  border-radius: var(--fm-radius-px, 18px);
+  box-shadow:
+    0 1px 0 color-mix(in srgb, white 75%, transparent) inset,
+    0 14px 34px -16px rgb(44 34 30 / 16%),
+    0 2px 8px -2px rgb(44 34 30 / 7%);
+}
+
+:root[data-fm-material='liquid-glass'] [data-tree-group]:not([data-pane-host]),
+:root[data-fm-material='liquid-glass'] [data-slot='composer-root'],
+:root[data-fm-material='liquid-glass'] [data-fm-surface] {
+  border-radius: var(--fm-radius-px, 18px);
+  background: color-mix(in srgb, var(--dt-card, #ffffff) 76%, transparent) !important;
+  backdrop-filter: blur(22px) saturate(1.45);
+  -webkit-backdrop-filter: blur(22px) saturate(1.45);
+  box-shadow:
+    0 1px 0 color-mix(in srgb, white 72%, transparent) inset,
+    0 0 0 1px color-mix(in srgb, white 28%, transparent) inset,
+    0 18px 42px -18px rgb(10 20 42 / 22%);
+}
+
+:root[data-fm-material='brushed-metal'] [data-tree-group]:not([data-pane-host]),
+:root[data-fm-material='brushed-metal'] [data-slot='composer-root'],
+:root[data-fm-material='brushed-metal'] [data-fm-surface] {
+  border-radius: var(--fm-radius-px, 18px);
+  background-image: linear-gradient(
+    145deg,
+    color-mix(in srgb, white 9%, transparent) 0%,
+    transparent 42%,
+    color-mix(in srgb, black 9%, transparent) 100%
+  );
+  box-shadow:
+    0 1px 0 color-mix(in srgb, white 35%, transparent) inset,
+    0 -1px 0 color-mix(in srgb, black 25%, transparent) inset,
+    0 16px 38px -16px rgb(0 0 0 / 34%);
+}
+
+:root[data-fm-material='plush-pastel'] [data-tree-group]:not([data-pane-host]),
+:root[data-fm-material='plush-pastel'] [data-slot='composer-root'],
+:root[data-fm-material='plush-pastel'] [data-fm-surface] {
+  border-radius: calc(var(--fm-radius-px, 22px) * 1.1);
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, white 52%, transparent) 0%,
+    transparent 55%
+  );
+  box-shadow:
+    0 2px 0 color-mix(in srgb, white 88%, transparent) inset,
+    0 0 0 1.5px color-mix(in srgb, var(--dt-primary, #e11d62) 18%, transparent),
+    0 18px 36px -14px color-mix(in srgb, var(--dt-primary, #e11d62) 20%, transparent);
+}
+
+:root[data-fm-material='cyber-grid'] [data-tree-group]:not([data-pane-host]),
+:root[data-fm-material='cyber-grid'] [data-slot='composer-root'],
+:root[data-fm-material='cyber-grid'] [data-fm-surface] {
+  border-radius: var(--fm-radius-px, 16px);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--dt-primary, #22d3ee) 26%, transparent),
+    0 0 28px -8px color-mix(in srgb, var(--dt-primary, #22d3ee) 28%, transparent),
+    0 18px 40px -16px rgb(0 0 0 / 60%);
+}
+
+/* Gentle organic sticker bobbing + spring micro-interactions */
+@keyframes fm-sticker-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(-1deg);
+  }
+  50% {
+    transform: translate3d(0, -6px, 0) rotate(1.5deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-fm-motion='fluid'] .fm-sticker-float {
+    animation: fm-sticker-float 5.2s var(--fm-spring, cubic-bezier(0.22, 1, 0.36, 1)) infinite;
+    will-change: transform;
+  }
+
+  :root[data-fm-motion='gentle'] .fm-sticker-float {
+    animation: fm-sticker-float 8.5s ease-in-out infinite;
+    will-change: transform;
+  }
+
+  :root:not([data-fm-motion='reduced']) [data-slot='composer-root'],
+  :root:not([data-fm-motion='reduced']) [data-tree-group],
+  :root:not([data-fm-motion='reduced']) [data-fm-surface] {
+    transition:
+      border-radius 280ms var(--fm-spring, cubic-bezier(0.22, 1, 0.36, 1)),
+      box-shadow 260ms var(--fm-spring, cubic-bezier(0.22, 1, 0.36, 1)),
+      transform 240ms var(--fm-spring, cubic-bezier(0.22, 1, 0.36, 1)),
+      background-color 220ms ease-out;
+  }
+
+  :root[data-fm-motion='fluid'] [data-slot='composer-root']:focus-within {
+    transform: translateY(-1px);
+  }
+}
+
+/* Harmonize all range sliders (Voice Cloning prosody + Studio controls) with active Foolmoon primary */
+input[type='range'] {
+  accent-color: var(--dt-primary, #c94a38);
+  cursor: pointer;
+}
+
+/* Foolmoon Sci-Fi Notch Orbital & Waveform Keyframes */
+@keyframes fm-scifi-orbit {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes fm-scifi-orbit-rev {
+  0% {
+    transform: rotate(360deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes fm-scifi-pulse {
+  0%,
+  100% {
+    opacity: 0.65;
+    transform: scale(0.98);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .fm-scifi-orbit {
+    animation: fm-scifi-orbit 7.5s linear infinite;
+  }
+
+  .fm-scifi-orbit-rev {
+    animation: fm-scifi-orbit-rev 11s linear infinite;
+  }
+
+  .fm-scifi-pulse {
+    animation: fm-scifi-pulse 2.2s ease-in-out infinite;
+  }
+}
+
+/* macOS + Claude centered breathable reading column when enabled or in Simple Mode */
+:root[data-fm-chat-layout='claude-centered'] [data-slot='thread'] [data-slot='message-group'],
+:root[data-fm-chat-layout='claude-centered'] [data-slot='composer-root'] {
+  max-width: min(760px, 92vw);
+  margin-left: auto;
+  margin-right: auto;
 }

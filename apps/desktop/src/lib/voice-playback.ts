@@ -8,8 +8,10 @@ import { RECONNECT_ATTEMPT_TIMEOUT_MS, withTimeout } from '@/lib/with-timeout'
 import {
   $voicePlayback,
   setVoicePlaybackState,
+  updateVoicePlaybackMetrics,
   type VoicePlaybackSource,
-  type VoicePlaybackState
+  type VoicePlaybackState,
+  type VoiceWordTiming
 } from '@/store/voice-playback'
 
 import { cutSentences, sanitizeTextForSpeech } from './speech-text'
@@ -62,17 +64,183 @@ async function unlockAutoplay(): Promise<void> {
   }
 }
 
+function estimateWordTimings(text: string, durationMs = 0): VoiceWordTiming[] {
+  const tokens = text
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+
+  if (!tokens.length) {
+    return []
+  }
+
+  const totalMs =
+    durationMs > 0
+      ? durationMs
+      : Math.max(850, tokens.length * 360 + text.length * 24)
+
+  const weights = tokens.map(tok => Math.max(1, tok.replace(/[^\p{L}\p{N}]/gu, '').length) + 1)
+  const totalWeight = weights.reduce((acc, w) => acc + w, 0) || 1
+  const out: VoiceWordTiming[] = []
+  let cursor = 0
+
+  for (let i = 0; i < tokens.length; i += 1) {
+    const span = (weights[i] / totalWeight) * totalMs
+    out.push({
+      endMs: Math.round(cursor + span),
+      startMs: Math.round(cursor),
+      word: tokens[i]
+    })
+    cursor += span
+  }
+
+  return out
+}
+
+function measureAnalyserFrame(
+  analyser: AnalyserNode,
+  timeBuf: Float32Array<ArrayBuffer>,
+  freqBuf: Uint8Array<ArrayBuffer>
+): { audioLevel: number; mouthRound: number; mouthWide: number } {
+  analyser.getFloatTimeDomainData(timeBuf)
+  let sumSq = 0
+
+  for (let i = 0; i < timeBuf.length; i += 1) {
+    const s = timeBuf[i]
+    sumSq += s * s
+  }
+
+  const rms = Math.sqrt(sumSq / Math.max(1, timeBuf.length))
+  const audioLevel = rms <= 0.015 ? 0 : Math.min(1, Math.pow((rms - 0.015) * 5.2, 1.05))
+
+  analyser.getByteFrequencyData(freqBuf)
+  let lo = 0
+  let mid = 0
+  let hi = 0
+
+  for (let i = 1; i < Math.min(8, freqBuf.length); i += 1) {
+    lo += freqBuf[i]
+  }
+
+  for (let i = 8; i < Math.min(20, freqBuf.length); i += 1) {
+    mid += freqBuf[i]
+  }
+
+  for (let i = 20; i < Math.min(44, freqBuf.length); i += 1) {
+    hi += freqBuf[i]
+  }
+
+  const total = lo + mid + hi || 1
+
+  return {
+    audioLevel,
+    mouthRound: lo / total,
+    mouthWide: hi / total
+  }
+}
+
+function attachAudioElementMeter(audio: HTMLAudioElement): () => void {
+  if (typeof window === 'undefined' || typeof audio.addEventListener !== 'function') {
+    return () => undefined
+  }
+
+  let rafId = 0
+  let stopped = false
+  const startedAt = performance.now()
+  let ctx: AudioContext | null = null
+  let analyser: AnalyserNode | null = null
+  let timeBuf: Float32Array<ArrayBuffer> | null = null
+  let freqBuf: Uint8Array<ArrayBuffer> | null = null
+
+  try {
+    const Ctor =
+      window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+
+    if (Ctor && typeof Ctor === 'function') {
+      ctx = new Ctor()
+
+      if (typeof ctx.createMediaElementSource === 'function' && typeof ctx.createAnalyser === 'function') {
+        const source = ctx.createMediaElementSource(audio)
+        analyser = ctx.createAnalyser()
+        analyser.fftSize = 512
+        source.connect(analyser)
+        analyser.connect(ctx.destination)
+        timeBuf = new Float32Array(new ArrayBuffer(analyser.fftSize * 4))
+        freqBuf = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount))
+
+        if (ctx.state === 'suspended') {
+          void ctx.resume().catch(() => undefined)
+        }
+      }
+    }
+  } catch {
+    ctx = null
+    analyser = null
+  }
+
+  let lastEmit = 0
+
+  const step = () => {
+    if (stopped) {
+      return
+    }
+
+    const now = performance.now()
+
+    if (now - lastEmit >= 30) {
+      lastEmit = now
+
+      if (analyser && timeBuf && freqBuf) {
+        updateVoicePlaybackMetrics(measureAnalyserFrame(analyser, timeBuf, freqBuf))
+      } else {
+        // Fallback speech envelope synced to HTMLAudioElement playback when WebAudio media capture is unavailable.
+        const t = (now - startedAt) / 1000
+        const paused = audio.paused
+
+        updateVoicePlaybackMetrics({
+          audioLevel: paused ? 0 : 0.25 + 0.35 * Math.abs(Math.sin(t * 9.5) * Math.cos(t * 3.7)),
+          mouthRound: paused ? 0 : 0.22 + 0.15 * Math.sin(t * 4.1),
+          mouthWide: paused ? 0 : 0.28 + 0.18 * Math.cos(t * 5.3)
+        })
+      }
+    }
+
+    rafId = window.requestAnimationFrame(step)
+  }
+
+  if (typeof window.requestAnimationFrame === 'function') {
+    rafId = window.requestAnimationFrame(step)
+  }
+
+  return () => {
+    stopped = true
+
+    if (rafId && typeof window.cancelAnimationFrame === 'function') {
+      window.cancelAnimationFrame(rafId)
+    }
+
+    updateVoicePlaybackMetrics({ audioLevel: 0, mouthRound: 0, mouthWide: 0 })
+
+    if (ctx) {
+      void ctx.close().catch(() => undefined)
+      ctx = null
+    }
+  }
+}
+
 function currentState(
   status: VoicePlaybackState['status'],
   options?: VoicePlaybackOptions,
-  audioElement: HTMLAudioElement | null = null
+  audioElement: HTMLAudioElement | null = null,
+  extra?: Partial<VoicePlaybackState>
 ): VoicePlaybackState {
   return {
     audioElement,
     messageId: options?.messageId ?? null,
     sequence,
     source: options?.source ?? null,
-    status
+    status,
+    ...extra
   }
 }
 
@@ -302,8 +470,16 @@ function openClientDirectSpeechSession(tts: DirectTtsConfig, options: VoicePlayb
 
         if (!started) {
           started = true
-          setVoicePlaybackState(currentState('speaking', options))
         }
+
+        const sentenceWords = estimateWordTimings(sentence)
+        setVoicePlaybackState(
+          currentState('speaking', options, null, {
+            sentence,
+            sentenceStartTimeMs: typeof performance !== 'undefined' ? performance.now() : 0,
+            words: sentenceWords
+          })
+        )
 
         const url = URL.createObjectURL(new Blob([bytes], { type: 'audio/mpeg' }))
 
@@ -311,9 +487,40 @@ function openClientDirectSpeechSession(tts: DirectTtsConfig, options: VoicePlayb
           await new Promise<void>((resolve, reject) => {
             const audio = new Audio(url)
             playing = audio
-            audio.addEventListener('ended', () => resolve(), { once: true })
-            audio.addEventListener('error', () => reject(new Error('Playback failed')), { once: true })
-            void audio.play().catch(reject)
+            const stopMeter = attachAudioElementMeter(audio)
+            audio.addEventListener(
+              'loadedmetadata',
+              () => {
+                if (Number.isFinite(audio.duration) && audio.duration > 0) {
+                  updateVoicePlaybackMetrics({
+                    sentence,
+                    sentenceStartTimeMs: typeof performance !== 'undefined' ? performance.now() : 0,
+                    words: estimateWordTimings(sentence, audio.duration * 1_000)
+                  })
+                }
+              },
+              { once: true }
+            )
+            audio.addEventListener(
+              'ended',
+              () => {
+                stopMeter()
+                resolve()
+              },
+              { once: true }
+            )
+            audio.addEventListener(
+              'error',
+              () => {
+                stopMeter()
+                reject(new Error('Playback failed'))
+              },
+              { once: true }
+            )
+            void audio.play().catch(err => {
+              stopMeter()
+              reject(err)
+            })
           })
         } catch {
           settle(started ? 'done' : 'fallback')
@@ -394,6 +601,10 @@ function openSpeechStream(wsUrl: string, options: VoicePlaybackOptions): SpeechS
   ws.binaryType = 'arraybuffer'
 
   let context: AudioContext | null = null
+  let analyser: AnalyserNode | null = null
+  let analyserTimeBuf: Float32Array<ArrayBuffer> | null = null
+  let analyserFreqBuf: Uint8Array<ArrayBuffer> | null = null
+  let meterRafId = 0
   let streamRate = 24_000
   let nextStartAt = 0
   let carry: null | Uint8Array = null
@@ -401,6 +612,13 @@ function openSpeechStream(wsUrl: string, options: VoicePlaybackOptions): SpeechS
   let settled = false
   let finished = false
   const pendingSends: string[] = []
+
+  const sentenceCues: Array<{
+    activated: boolean
+    sentence: string
+    startAudioTime: number
+    words: VoiceWordTiming[]
+  }> = []
 
   let settle: (value: 'done' | 'fallback') => void = () => undefined
 
@@ -419,6 +637,11 @@ function openSpeechStream(wsUrl: string, options: VoicePlaybackOptions): SpeechS
       settled = true
       liveStops.delete(stop)
 
+      if (meterRafId && typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
+        window.cancelAnimationFrame(meterRafId)
+        meterRafId = 0
+      }
+
       try {
         ws.close()
       } catch {
@@ -427,9 +650,56 @@ function openSpeechStream(wsUrl: string, options: VoicePlaybackOptions): SpeechS
 
       void context?.close().catch(() => undefined)
       context = null
+      analyser = null
       resolve(value)
     }
   })
+
+  const startMeterLoop = () => {
+    if (
+      meterRafId ||
+      !analyser ||
+      !analyserTimeBuf ||
+      !analyserFreqBuf ||
+      typeof window === 'undefined' ||
+      typeof window.requestAnimationFrame !== 'function'
+    ) {
+      return
+    }
+
+    let lastEmit = 0
+
+    const tick = () => {
+      if (settled || !context || !analyser || !analyserTimeBuf || !analyserFreqBuf) {
+        return
+      }
+
+      const audioNow = context.currentTime
+      const perfNow = performance.now()
+
+      // Activate queued sentence karaoke cues right when their scheduled audio reaches speakers.
+      for (const cue of sentenceCues) {
+        if (!cue.activated && audioNow >= cue.startAudioTime - 0.04) {
+          cue.activated = true
+          const offsetMs = Math.max(0, (audioNow - cue.startAudioTime) * 1_000)
+          updateVoicePlaybackMetrics({
+            sentence: cue.sentence,
+            sentenceStartTimeMs: perfNow - offsetMs,
+            words: cue.words
+          })
+        }
+      }
+
+      if (perfNow - lastEmit >= 30) {
+        lastEmit = perfNow
+        updateVoicePlaybackMetrics(measureAnalyserFrame(analyser, analyserTimeBuf, analyserFreqBuf))
+      }
+
+      meterRafId = window.requestAnimationFrame(tick)
+    }
+
+    meterRafId = window.requestAnimationFrame(tick)
+  }
 
   const send = (frame: object) => {
     const data = JSON.stringify(frame)
@@ -484,7 +754,7 @@ function openSpeechStream(wsUrl: string, options: VoicePlaybackOptions): SpeechS
 
     const source = context.createBufferSource()
     source.buffer = buffer
-    source.connect(context.destination)
+    source.connect(analyser ?? context.destination)
 
     const startAt = Math.max(context.currentTime + 0.05, nextStartAt)
     source.start(startAt)
@@ -493,6 +763,7 @@ function openSpeechStream(wsUrl: string, options: VoicePlaybackOptions): SpeechS
     if (!started) {
       started = true
       setVoicePlaybackState(currentState('speaking', options))
+      startMeterLoop()
     }
   }
 
@@ -507,7 +778,17 @@ function openSpeechStream(wsUrl: string, options: VoicePlaybackOptions): SpeechS
       return
     }
 
-    let frame: { channels?: number; sample_rate?: number; type?: string }
+    let frame: {
+      channels?: number
+      durationMs?: number
+      duration_ms?: number
+      sampleRate?: number
+      sample_rate?: number
+      sentence?: string
+      text?: string
+      type?: string
+      words?: VoiceWordTiming[]
+    }
 
     try {
       frame = JSON.parse(event.data) as typeof frame
@@ -516,8 +797,16 @@ function openSpeechStream(wsUrl: string, options: VoicePlaybackOptions): SpeechS
     }
 
     if (frame.type === 'start') {
-      streamRate = frame.sample_rate || 24_000
+      streamRate = frame.sample_rate || frame.sampleRate || 24_000
       context = new AudioContext()
+
+      if (typeof context.createAnalyser === 'function') {
+        analyser = context.createAnalyser()
+        analyser.fftSize = 512
+        analyser.connect(context.destination)
+        analyserTimeBuf = new Float32Array(new ArrayBuffer(analyser.fftSize * 4))
+        analyserFreqBuf = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount))
+      }
 
       // Autoplay policy can hand back a suspended context when playback wasn't
       // started by a user gesture (e.g. a wake-word-started voice turn). Resume
@@ -529,6 +818,39 @@ function openSpeechStream(wsUrl: string, options: VoicePlaybackOptions): SpeechS
       }
 
       nextStartAt = 0
+    } else if (frame.type === 'sentence') {
+      const sentenceText =
+        typeof frame.text === 'string' ? frame.text : typeof frame.sentence === 'string' ? frame.sentence : ''
+
+      if (!sentenceText) {
+        return
+      }
+
+      const words =
+        Array.isArray(frame.words) && frame.words.length > 0
+          ? frame.words
+          : estimateWordTimings(sentenceText, frame.durationMs ?? frame.duration_ms ?? 0)
+
+      const scheduledAt = context ? Math.max(context.currentTime + 0.05, nextStartAt) : 0
+
+      sentenceCues.push({
+        activated: false,
+        sentence: sentenceText,
+        startAudioTime: scheduledAt,
+        words
+      })
+
+      if (sentenceCues.length === 1 && context) {
+        sentenceCues[0].activated = true
+        updateVoicePlaybackMetrics({
+          sentence: sentenceText,
+          sentenceStartTimeMs:
+            typeof performance !== 'undefined'
+              ? performance.now() + Math.max(0, scheduledAt - context.currentTime) * 1_000
+              : 0,
+          words
+        })
+      }
     } else if (frame.type === 'end') {
       finishWhenDrained()
     } else if (frame.type === 'fallback') {
@@ -650,7 +972,22 @@ async function playSpeechDataUrl(
 
   const audio = new Audio(response.data_url)
   currentAudio = audio
-  setVoicePlaybackState(currentState('speaking', options, audio))
+  const sentence = response.sentence || speakableText
+
+  const words =
+    Array.isArray(response.word_timings) && response.word_timings.length > 0
+      ? response.word_timings
+      : estimateWordTimings(sentence)
+
+  const stopMeter = attachAudioElementMeter(audio)
+
+  setVoicePlaybackState(
+    currentState('speaking', options, audio, {
+      sentence,
+      sentenceStartTimeMs: typeof performance !== 'undefined' ? performance.now() : 0,
+      words
+    })
+  )
 
   await new Promise<void>((resolve, reject) => {
     let stall: number | null = null
@@ -663,6 +1000,8 @@ async function playSpeechDataUrl(
     }
 
     const cleanup = () => {
+      stopMeter()
+
       if (stall !== null) {
         window.clearTimeout(stall)
         stall = null
@@ -671,7 +1010,17 @@ async function playSpeechDataUrl(
       audio.removeEventListener('ended', onEnded)
       audio.removeEventListener('error', onError)
       audio.removeEventListener('timeupdate', armStall)
+      audio.removeEventListener('loadedmetadata', syncTiming)
       liveStops.delete(stop)
+    }
+
+    const syncTiming = () => {
+      if ((!response.word_timings || response.word_timings.length === 0) && Number.isFinite(audio.duration) && audio.duration > 0) {
+        updateVoicePlaybackMetrics({
+          sentenceStartTimeMs: typeof performance !== 'undefined' ? performance.now() : 0,
+          words: estimateWordTimings(sentence, audio.duration * 1_000)
+        })
+      }
     }
 
     const armStall = () => {
@@ -697,6 +1046,7 @@ async function playSpeechDataUrl(
 
     liveStops.add(stop)
 
+    audio.addEventListener('loadedmetadata', syncTiming, { once: true })
     audio.addEventListener('ended', onEnded, { once: true })
     audio.addEventListener('error', onError, { once: true })
     audio.addEventListener('timeupdate', armStall)

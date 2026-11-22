@@ -8,7 +8,7 @@
     <link rel="icon" type="image/png" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="shortcut icon" href="/apple-touch-icon.png" />
-    <title>Hermes</title>
+    <title>Foolmoon</title>
     <script>
       // Pre-paint the themed background before the app bundle loads. Without
       // this, the first frame (which is what `ready-to-show` waits for) is the
@@ -25,7 +25,7 @@
       // pre-paint.
       try {
         const win = new URLSearchParams(window.location.search).get('win')
-        if (!win || ['hud', 'overlay', 'quick', 'wake'].indexOf(win) === -1) {
+        if (!win || ['hud', 'notch', 'overlay', 'quick', 'wake'].indexOf(win) === -1) {
           let bg = localStorage.getItem('hermes-boot-background')
           let scheme = localStorage.getItem('hermes-boot-color-scheme')
           if (!bg) {

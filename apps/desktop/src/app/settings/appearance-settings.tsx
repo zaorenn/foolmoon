@@ -81,6 +81,7 @@ import type { AppearanceSubpageId } from './appearance-subpages'
 import { ChatFontSetting } from './chat-font-setting'
 import { MODE_OPTIONS } from './constants'
 import { setNested } from './helpers'
+import { ImageThemeStudio } from './image-theme-studio'
 import { MinimizeToTraySetting } from './minimize-to-tray-setting'
 import { PetSettings } from './pet-settings'
 import { ListRow, RowFootnoteAction, SectionHeading, SettingsContent, ToggleRow } from './primitives'
@@ -584,6 +585,7 @@ export function AppearanceSettings({ subpage }: AppearanceSettingsProps = {}) {
               }
               below={
                 <>
+                  <ImageThemeStudio />
                   {/* One search box: filters your installed themes (the grid)
                       and live-searches the VS Code Marketplace below. */}
                   <SearchField

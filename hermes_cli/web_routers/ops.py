@@ -26,7 +26,8 @@ from hermes_cli.web_server_files import _path_is_under
 from hermes_cli.web_server_gateway import _restart_gateway_after
 from hermes_cli.web_server_memory import _normalize_memory_provider_name, _require_memory_provider_ready
 from hermes_cli.web_models import (
-    BackupRequest, CredentialPoolAdd, HookCreate, HookDelete, ImportRequest, MemoryProviderSelect,
+    BackupRequest, CredentialPoolAdd, HookCreate, HookDelete, ImportRequest,
+    MemoryFileUpdate, MemoryProfileSeed, MemoryProviderSelect,
     MemoryReset, PairingApprove, PairingRevoke, WebhookCreate, WebhookEnabledToggle,
 )
 from hermes_cli.web_routers._common import (
@@ -511,6 +512,142 @@ async def remove_credential_pool_entry(provider: str, index: int, profile: Optio
 # to be discoverable, available and fully configured.
 
 _MEMORY_FILES = (("MEMORY.md", "memory"), ("USER.md", "user"))
+_MEMORY_TARGET_MAP = {"memory": "MEMORY.md", "user": "USER.md"}
+
+
+def _atomic_write_memory_file(path: Path, text: str) -> None:
+    from hermes_constants import mkdir_under_hermes_home
+    from utils import atomic_write_text
+
+    mkdir_under_hermes_home(path.parent)
+    atomic_write_text(path, text, mode=0o600)
+
+
+@router.get("/api/memory/files")
+async def get_memory_files(profile: Optional[str] = None):
+    def _run():
+        from tools.memory_tool import ENTRY_DELIMITER, load_on_disk_store
+
+        cfg = load_config() or {}
+        store = load_on_disk_store()
+        comp_cfg = cfg.get("compression") if isinstance(cfg.get("compression"), dict) else {}
+
+        def _payload(entries: list[str], limit: int) -> dict[str, Any]:
+            content = ENTRY_DELIMITER.join(entries)
+            return {
+                "content": content,
+                "entries": list(entries),
+                "chars": len(content),
+                "limit": int(limit),
+            }
+
+        return {
+            "memory_enabled": bool(store.memory_enabled),
+            "user_profile_enabled": bool(store.user_profile_enabled),
+            "memory": _payload(store.memory_entries, store.memory_char_limit),
+            "user": _payload(store.user_entries, store.user_char_limit),
+            "delimiter": ENTRY_DELIMITER,
+            "compression": {
+                "enabled": comp_cfg.get("enabled", True) is not False,
+                "threshold": float(comp_cfg.get("threshold", 0.5) or 0.5),
+            },
+        }
+
+    return await config_scoped_to_thread(profile, _run)
+
+
+@router.put("/api/memory/files")
+async def update_memory_file(body: MemoryFileUpdate, profile: Optional[str] = None):
+    filename = _MEMORY_TARGET_MAP.get(body.target)
+    if not filename:
+        raise HTTPException(status_code=400, detail="target must be 'memory' or 'user'")
+
+    raw = (body.content or "").replace("\r\n", "\n").strip()
+    if len(raw) > 50000:
+        raise HTTPException(status_code=400, detail="Memory content exceeds 50,000 characters")
+
+    def _run():
+        from tools.memory_tool import ENTRY_DELIMITER, _scan_memory_content
+
+        entries = [e.strip() for e in raw.split(ENTRY_DELIMITER) if e.strip()] if raw else []
+        for entry in entries:
+            if err := _scan_memory_content(entry):
+                raise HTTPException(status_code=400, detail=err)
+        normalized = ENTRY_DELIMITER.join(entries)
+        with config_write_scope(profile):
+            target_path = get_hermes_home() / "memories" / filename
+            _atomic_write_memory_file(target_path, normalized)
+        return {"ok": True, "target": body.target, "chars": len(normalized), "entries": entries}
+
+    return await asyncio.to_thread(_run)
+
+
+@router.post("/api/memory/profile-seed")
+async def seed_memory_profile(body: MemoryProfileSeed, profile: Optional[str] = None):
+    def _run():
+        from tools.memory_tool import ENTRY_DELIMITER, _scan_memory_content, load_on_disk_store
+
+        name = body.name.strip()
+        address_as = body.address_as.strip()
+        language = body.language.strip()
+        style = body.style.strip()
+        role = body.role.strip()
+        rules = body.rules.strip()
+
+        managed_entries: list[str] = []
+        if name or address_as:
+            if name and address_as and address_as.lower() != name.lower():
+                managed_entries.append(f"Kullanici adi: {name} | Hitap sekli: {address_as}")
+            else:
+                managed_entries.append(f"Kullanici hitap sekli: {address_as or name}")
+        if language:
+            managed_entries.append(f"Tercih edilen dil: {language}")
+        if style:
+            managed_entries.append(f"Iletisim ve yanit tarzi: {style}")
+        if role:
+            managed_entries.append(f"Calisma alani ve rol: {role}")
+        if rules:
+            for line in [ln.strip("-* \t") for ln in rules.splitlines() if ln.strip()]:
+                managed_entries.append(f"Ozel kural: {line}")
+
+        for entry in managed_entries:
+            if err := _scan_memory_content(entry):
+                raise HTTPException(status_code=400, detail=err)
+
+        managed_prefixes = (
+            "Kullanici adi:",
+            "Kullanici hitap sekli:",
+            "Tercih edilen dil:",
+            "Iletisim ve yanit tarzi:",
+            "Calisma alani ve rol:",
+            "Ozel kural:",
+        )
+
+        with config_write_scope(profile):
+            store = load_on_disk_store()
+            kept_existing = [
+                e for e in store.user_entries if not e.startswith(managed_prefixes)
+            ]
+            combined = [*managed_entries, *kept_existing]
+            normalized = ENTRY_DELIMITER.join(combined)
+            target_path = get_hermes_home() / "memories" / "USER.md"
+            _atomic_write_memory_file(target_path, normalized)
+
+            if body.apply_personality and style:
+                from hermes_cli.config_backend import CONFIG_MUTATION_LOCK
+
+                with CONFIG_MUTATION_LOCK:
+                    cfg = load_config() or {}
+                    display_cfg = cfg.get("display")
+                    if not isinstance(display_cfg, dict):
+                        display_cfg = {}
+                        cfg["display"] = display_cfg
+                    display_cfg["personality"] = style
+                    save_config(cfg)
+
+        return {"ok": True, "entries": combined, "chars": len(normalized)}
+
+    return await asyncio.to_thread(_run)
 
 
 @router.get("/api/memory")

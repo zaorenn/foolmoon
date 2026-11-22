@@ -28,11 +28,167 @@ export interface AudioTranscriptionResponse {
   transcript: string
 }
 
+export interface VoiceWordTiming {
+  endMs: number
+  startMs: number
+  word: string
+}
+
 export interface AudioSpeakResponse {
   ok: boolean
   data_url: string
   mime_type: string
   provider?: string
+  sentence?: string
+  word_timings?: VoiceWordTiming[]
+}
+
+export interface VoiceCloneEntry {
+  cached_providers?: string[]
+  created_at?: string
+  durationSec?: number
+  duration_s?: number
+  exists?: boolean
+  id: string
+  language?: string
+  name: string
+  notes?: string
+  refText?: string
+  ref_audio?: string
+  ref_text?: string
+  sampleRate?: number
+  wavPath?: string
+}
+
+export interface VoiceCloneEngineInfo {
+  id: string
+  installed: boolean
+  running: boolean
+  supportsCloning: boolean
+}
+
+export interface VoiceCloneListResponse {
+  activeCloneId?: string | null
+  activeEngine?: string | null
+  active_id?: string | null
+  clones: VoiceCloneEntry[]
+  cuda?: boolean
+  engines?: VoiceCloneEngineInfo[]
+  gpu_name?: string | null
+  ok: boolean
+  voiceRoot?: string
+}
+
+export interface VoiceCloneCreateResponse {
+  clone: VoiceCloneEntry
+  ok: boolean
+}
+
+export interface VoiceCloneAudioResponse {
+  audio_base64: string
+  data_url: string
+  id: string
+  mime_type: string
+  name: string
+  ok: boolean
+}
+
+export type ThemeStylePreset =
+  | 'balanced'
+  | 'editorial-ink'
+  | 'monochrome-noir'
+  | 'neon-cyber'
+  | 'pastel-glass'
+
+export interface ThemeFromImageRequest {
+  apply_now?: boolean
+  bbot_fx_preset?: string
+  corner_radius?: number
+  image_base64?: string
+  image_path?: string
+  include_sticker?: boolean
+  include_wallpaper?: boolean
+  material?: string
+  mode?: 'auto' | 'dark' | 'light'
+  motion_level?: string
+  name?: string
+  pane_floating?: boolean
+  pattern?: string
+  pattern_opacity?: number
+  preset?: ThemeStylePreset
+  stickers?: Array<Record<string, unknown>>
+}
+
+export interface ThemeFromImageResponse {
+  applied: boolean
+  css_path?: string | null
+  ok: boolean
+  palette?: Record<string, string>
+  skin: string
+  skin_path: string
+  skin_payload?: Record<string, unknown>
+  studio_config?: Record<string, unknown>
+}
+
+export interface UserSkinEntry {
+  accent?: string
+  active?: boolean
+  background?: string
+  description: string
+  foreground?: string
+  name: string
+  path: string
+  preset?: string
+}
+
+export interface UserSkinsResponse {
+  active: string
+  ok: boolean
+  skins: UserSkinEntry[]
+}
+
+export interface StudioSkinSyncRequest {
+  accent?: string
+  apply_now?: boolean
+  background?: string
+  bbot_fx_preset?: string
+  corner_radius?: number
+  foreground?: string
+  material?: string
+  motion_level?: string
+  name: string
+  pane_floating?: boolean
+  pattern?: string
+  pattern_opacity?: number
+  preset?: ThemeStylePreset
+  sidebar_background?: string
+  stickers?: Array<Record<string, unknown>>
+}
+
+export interface StudioSkinSyncResponse {
+  applied: boolean
+  ok: boolean
+  skin: string
+  skin_path: string
+  skin_payload?: Record<string, unknown>
+  studio_config?: Record<string, unknown>
+}
+
+export interface LmStudioModelEntry {
+  id: string
+  is_embedding?: boolean
+  loaded?: boolean
+  owned_by?: string
+}
+
+export interface LmStudioModelsResponse {
+  active_model: string
+  active_provider: string
+  base_url: string
+  error?: string
+  models: LmStudioModelEntry[]
+  ok: boolean
+  online: boolean
 }
 
 /** `POST /api/audio/tts-lease` — TTS engine warm-up / release driven by speech toggles. */

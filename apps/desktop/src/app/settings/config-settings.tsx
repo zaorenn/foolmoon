@@ -56,6 +56,7 @@ import {
   voiceFieldVisible
 } from './helpers'
 import { MemoryConnect } from './memory/connect'
+import { MemoryEditorPanel } from './memory/memory-editor-panel'
 import { MemoryLayersSlot } from './memory/memory-layers'
 import { ProviderConfigPanel } from './memory/provider-config-panel'
 import { ModelSettings, ModelSettingsSkeleton } from './model-settings'
@@ -66,6 +67,7 @@ import { QuickEntrySettings } from './quick-entry-settings'
 import { SETTING_IDS, settingElementId } from './settings-manifest'
 import { SharedMetricsSettings } from './shared-metrics-settings'
 import { useSettingDeepLink } from './use-setting-deep-link'
+import { VoiceCloningStudio } from './voice-cloning-studio'
 
 export function ConfigSettings({
   activeSectionId,
@@ -525,6 +527,17 @@ function ConfigSettingsInner({
         sectionId={activeSectionId}
         subpage={subpage}
       />
+      {activeSectionId === 'memory' && (subpage === undefined || subpage === 'persistent') ? (
+        <MemoryEditorPanel
+          memoryEnabled={getNested(config, 'memory.memory_enabled') !== false}
+          onToggleMemoryEnabled={checked => updateConfig(setConfigField(config, 'memory.memory_enabled', checked))}
+          onToggleUserProfileEnabled={checked =>
+            updateConfig(setConfigField(config, 'memory.user_profile_enabled', checked))
+          }
+          profile={scopeProfile}
+          userProfileEnabled={getNested(config, 'memory.user_profile_enabled') !== false}
+        />
+      ) : null}
       {/* Routing picks the strategy and owns its routes; the subagent model row below is the
           Default strategy's route and goes inert while another strategy decides. */}
       <DelegationRoutingSlot
@@ -535,6 +548,7 @@ function ConfigSettingsInner({
       />
       {activeSectionId === 'voice' ? (
         <>
+          <VoiceCloningStudio scopeProfile={scopeProfile} />
           {/* Desktop's own read-aloud switch: the same preference as the composer's toggle, for
               every window and profile. voice.auto_tts below stays the messaging/CLI setting of
               the profile being edited (#119885). */}

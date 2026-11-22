@@ -57,9 +57,25 @@ _keep_warm_generation = 0
 
 def _local_tts_warmers() -> dict[str, Callable[[dict[str, Any]], Any]]:
     """Provider name → loader populating that engine's cache slot (same key synthesis uses)."""
+    def _warm_cuda(engine: str):
+        def _loader(_cfg: dict[str, Any]):
+            from tools.tts_cloning_cuda import _get_worker, get_active_voice_clone
+            w = _get_worker(engine)
+            w.ensure_started(timeout_s=90.0)
+            active = get_active_voice_clone()
+            if active and active.get("wavPath") and w.engine in ("chatterbox", "chatterbox_turbo"):
+                w.request({"cmd": "prepare_clone", "cloneWavPath": active["wavPath"]}, timeout_s=30.0)
+            return w
+        return _loader
+
     return {
         "piper": lambda cfg: _load_piper_voice_for_config(cfg)[0],
-        "kittentts": lambda cfg: _load_kittentts_model_for_config(cfg)[0]}
+        "kittentts": lambda cfg: _load_kittentts_model_for_config(cfg)[0],
+        "chatterbox_turbo": _warm_cuda("chatterbox_turbo"),
+        "chatterbox": _warm_cuda("chatterbox"),
+        "xtts_v2": _warm_cuda("xtts_v2"),
+        "f5_tts": _warm_cuda("f5_tts"),
+    }
 
 
 def _signal_user_tts_provider(name: str, tts_config: dict[str, Any], hook: str) -> Optional[str]:

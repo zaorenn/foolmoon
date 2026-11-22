@@ -257,3 +257,20 @@ class TestCliBrandingHelpers:
         overrides = get_prompt_toolkit_style_overrides()
         assert overrides["status-bar"] == f"bg:{skin.get_color('status_bar_bg')} {skin.get_color('banner_text')}"
         assert overrides["voice-status"] == f"bg:{skin.get_color('voice_status_bg')} {skin.get_color('ui_label')}"
+
+    @pytest.mark.parametrize(
+        ("skin_name", "expected_prefix"),
+        [("foolmoon", "☾"), ("foolmoon-kitty", "⋈"), ("foolmoon-quest", "⚔")],
+    )
+    def test_foolmoon_builtin_tui_skins_have_banners_and_prompt(self, skin_name, expected_prefix):
+        from hermes_cli.skin_engine import get_active_prompt_symbol, get_prompt_toolkit_style_overrides, set_active_skin
+
+        skin = set_active_skin(skin_name)
+        assert skin.name == skin_name
+        assert skin.tool_prefix == expected_prefix
+        assert skin.banner_logo
+        assert skin.banner_hero
+        assert get_active_prompt_symbol().startswith(expected_prefix)
+        overrides = get_prompt_toolkit_style_overrides()
+        assert overrides["status-bar-strong"]
+        assert overrides["input-rule"]

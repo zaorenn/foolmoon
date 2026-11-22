@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { luminance, normalizeHex } from './color'
 import { skinToDesktopTheme } from './skin'
+import { STUDIO_UNIVERSE_PRESETS } from './studio-presets'
 
 const withColors = (name: string, colors: Record<string, string>) => skinToDesktopTheme({ name, colors })
 
@@ -46,5 +47,25 @@ describe('skinToDesktopTheme', () => {
     const theme = withColors('e', { background: '#101010', ui_error: '#ff5566' })!
 
     expect(theme.colors.destructive).toBe(normalizeHex('#ff5566'))
+  })
+
+  it('derives embedded xterm terminal ANSI palettes for skins and Studio presets', () => {
+    const theme = withColors('foolmoon', {
+      background: '#1f1714',
+      banner_text: '#f5efe6',
+      banner_title: '#f5c28b',
+      ui_accent: '#ea745e',
+      ui_error: '#f26d6d',
+      ui_ok: '#58c97e',
+      ui_warn: '#f2a949'
+    })!
+
+    expect(theme.terminal?.cursor).toBe(theme.colors.primary)
+    expect(theme.darkTerminal?.foreground).toBe(theme.colors.foreground)
+
+    for (const preset of STUDIO_UNIVERSE_PRESETS) {
+      expect(preset.theme.terminal?.cursor).toBeTruthy()
+      expect(preset.theme.darkTerminal?.cursor).toBeTruthy()
+    }
   })
 })

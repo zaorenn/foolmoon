@@ -396,3 +396,27 @@ test('persistence, disabling, failed tray creation, and handoff never strand hid
   disabled.main.close()
   expect(disabled.main.destroyed).toBe(true)
 })
+
+test('defaultEnabled starts active on fresh launch and honors explicit disable', async () => {
+  const main = new Window()
+  native.windows.push(main)
+
+  const controller = createMinimizeToTray({
+    preferencesPath: path.join(home, 'minimize-to-tray.json'),
+    defaultEnabled: true,
+    getIconPath: () => 'icon.png',
+    restoreMainWindow: () => main.showInactive(),
+    isQuittingForHandoff: () => false,
+    log: vi.fn()
+  })
+
+  controller.registerWindow(main as unknown as BrowserWindow, { closeToTray: true })
+  expect(await controller.start()).toEqual({ enabled: true, available: true })
+
+  const closeEvent = main.close()
+  expect(closeEvent.preventDefault).toHaveBeenCalledOnce()
+  expect(main.visible).toBe(false)
+
+  expect(await controller.setEnabled(false)).toEqual({ enabled: false, available: false })
+  expect(main.visible).toBe(true)
+})

@@ -461,6 +461,26 @@ def _require_own_dependencies(project_root: Path) -> None:
         raise NoCommittedEnvironment("no dependency environment is committed for this install")
 
 
+def _venv_matches_running_python(venv_dir: Path) -> bool:
+    """True when *venv_dir* targets this interpreter's major.minor ABI (or store Python)."""
+    import sys
+
+    if sys.prefix == sys.base_prefix:
+        return True
+
+    cfg = venv_dir / "pyvenv.cfg"
+    try:
+        for line in cfg.read_text(encoding="utf-8", errors="replace").splitlines():
+            key, sep, val = line.partition("=")
+            if sep and key.strip().lower() == "version_info":
+                running_mm = f"{sys.version_info.major}.{sys.version_info.minor}."
+                return val.strip().startswith(running_mm)
+    except OSError:
+        return True
+
+    return True
+
+
 def activate_dependencies(project_root: Path) -> None:
     """Select the committed tree at process boot, before third-party imports.
 
@@ -481,12 +501,25 @@ def activate_dependencies(project_root: Path) -> None:
             environment = committed_venv(project_root)
             if environment is None:
                 return _require_own_dependencies(project_root)
+            if not _venv_matches_running_python(environment):
+                root_str = str(project_root.resolve())
+                if root_str not in sys.path:
+                    sys.path.insert(0, root_str)
+                os.environ["PYTHONPATH"] = root_str
+                return
             release = lease_generation(environment)
             # Without the lock, an installer may commit a new generation between the
             # read and the lease, leaving the leased one unselected and collectable.
             while not held and (current := committed_venv(project_root)) not in (None, environment):
                 release()
                 environment, release = current, lease_generation(current)
+            if not _venv_matches_running_python(environment):
+                release()
+                root_str = str(project_root.resolve())
+                if root_str not in sys.path:
+                    sys.path.insert(0, root_str)
+                os.environ["PYTHONPATH"] = root_str
+                return
             selected = site_packages(environment)
             if not selected.is_dir() and not runtime_facts_path(project_root).is_file():
                 return
@@ -496,6 +529,12 @@ def activate_dependencies(project_root: Path) -> None:
         environment = payload_venv(project_root)
         if environment is None:
             return _require_own_dependencies(project_root)
+        if not _venv_matches_running_python(environment):
+            root_str = str(project_root.resolve())
+            if root_str not in sys.path:
+                sys.path.insert(0, root_str)
+            os.environ["PYTHONPATH"] = root_str
+            return
         selected = site_packages(environment)
         if not selected.is_dir():
             return  # External/Nix interpreter owns its original sys.path.

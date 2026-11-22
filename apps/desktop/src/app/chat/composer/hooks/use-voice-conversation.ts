@@ -16,6 +16,7 @@ import {
 } from '@/lib/voice-playback'
 import { isVoiceStopCommand } from '@/lib/voice-stop-word'
 import { isTtsEcho } from '@/lib/voice-tts-echo'
+import { $notchVoiceRuntime } from '@/store/notch'
 import { notify, notifyError } from '@/store/notifications'
 import { $voicePlayback } from '@/store/voice-playback'
 import { $autoSpeakReplies, $bargeInEnabled, $bargeInThresholdMultiplier, $voiceSilenceMs } from '@/store/voice-prefs'
@@ -35,7 +36,7 @@ interface VoiceConversationOptions {
    *  Fired when the user speaks while the model is still generating. */
   onInterrupt?: () => Promise<void> | void
   onStopWord?: () => void
-  onSubmit: (text: string) => Promise<void> | void
+  onSubmit: (text: string) => Promise<boolean | void> | boolean | void
   onTranscribeAudio?: (audio: Blob, owner?: ResolvedOwner) => Promise<string>
   pendingResponse: () => PendingVoiceResponse | null
   consumePendingResponse: () => void
@@ -125,12 +126,18 @@ export function useVoiceConversation({
   const wasEnabledRef = useRef(enabled)
   const onStopWordRef = useRef(onStopWord)
   const onInterruptRef = useRef(onInterrupt)
+  const consumePendingResponseRef = useRef(consumePendingResponse)
   // `submitVoiceTurn` (the composer's real `onSubmit`) re-creates per render
   // and its busy guard captures THAT render's state; the barge monitor arms
   // once per turn, so `submitCapturedUtterance` can outlive the render that
   // created it and would otherwise hold that stale submit forever. Read the
   // latest callback at call time, mirroring `onInterruptRef` (#123357).
   const onSubmitRef = useRef(onSubmit)
+
+  // eslint-disable-next-line no-restricted-syntax -- legitimate non-atom ref write (see eslint rule comment)
+  useEffect(() => {
+    consumePendingResponseRef.current = consumePendingResponse
+  }, [consumePendingResponse])
 
   // eslint-disable-next-line no-restricted-syntax -- legitimate non-atom ref write (see eslint rule comment)
   useEffect(() => {
@@ -311,10 +318,18 @@ export function useVoiceConversation({
           // the model is still thinking — the old answer plays until the new
           // one arrives and barges in.
           consumePendingResponse()
-          await onSubmit(transcript)
+          const submitted = await onSubmit(transcript)
 
           if (live()) {
-            setStatus('thinking')
+            if (submitted === false) {
+              // Locally handled (e.g. voice approval "Onayla"/"Reddet") or busy skip:
+              // re-arm listening immediately instead of stranding in 'thinking'.
+              awaitingSpokenResponseRef.current = false
+              pendingStartRef.current = true
+              setStatus('idle')
+            } else {
+              setStatus('thinking')
+            }
           }
         } catch (error) {
           if (!live()) {
@@ -383,9 +398,16 @@ export function useVoiceConversation({
       // user-set value overrides the desktop's tuned 1.25 s hold, which every turn sits
       // through as dead air.
       await handle.start({
-        silenceLevel: 0.075,
+        silenceLevel: 0.032,
         silenceMs: $voiceSilenceMs.get(),
         idleSilenceMs: 12_000,
+        onLevel: normalized => {
+          const cur = $notchVoiceRuntime.get()
+
+          if (cur.active && Math.abs(cur.level - normalized) >= 0.015) {
+            $notchVoiceRuntime.set({ ...cur, level: normalized, status: 'listening' })
+          }
+        },
         onError: error => {
           notifyError(error, voiceCopy.microphoneFailed)
           pendingStartRef.current = false
@@ -580,10 +602,16 @@ export function useVoiceConversation({
         awaitingSpokenResponseRef.current = true
         dropSpeechSession()
         consumePendingResponse()
-        await onSubmitRef.current(transcript)
+        const submitted = await onSubmitRef.current(transcript)
 
         if (live()) {
-          setStatus('thinking')
+          if (submitted === false) {
+            awaitingSpokenResponseRef.current = false
+            pendingStartRef.current = true
+            setStatus('idle')
+          } else {
+            setStatus('thinking')
+          }
         }
       } catch (error) {
         if (live()) {
@@ -1070,7 +1098,7 @@ export function useVoiceConversation({
       if (response && !$autoSpeakReplies.get()) {
         awaitingSpokenResponseRef.current = false
         dropSpeechSession()
-        consumePendingResponse()
+        consumePendingResponseRef.current()
         pendingStartRef.current = true
         setStatus('idle')
 
@@ -1103,6 +1131,44 @@ export function useVoiceConversation({
       void startListening()
     }
   }, [busy, enabled, muted, ensureBargeMonitor, openLiveSpeech, pendingResponse, startListening, status])
+
+  // Self-healing watchdog callback kept outside useEffect to avoid direct ref writes in effect scope.
+  const recoverStalledTurn = useCallback(() => {
+    if (!enabledRef.current || mutedRef.current || busyRef.current) {
+      return
+    }
+
+    if (
+      statusRef.current === 'idle' &&
+      conversationRef.current !== null &&
+      !turnClosingRef.current &&
+      !bargeCapturePendingRef.current
+    ) {
+      pendingStartRef.current = true
+      void startListening()
+    } else if (statusRef.current === 'thinking' && !bargeCapturePendingRef.current && !pendingResponse()) {
+      awaitingSpokenResponseRef.current = false
+      dropSpeechSession()
+      pendingStartRef.current = true
+      setStatus('idle')
+    }
+  }, [pendingResponse, startListening])
+
+  useEffect(() => {
+    if (!enabled || muted || busy) {
+      return
+    }
+
+    const delayMs = status === 'idle' ? 1_200 : status === 'thinking' ? 2_500 : 0
+
+    if (!delayMs) {
+      return
+    }
+
+    const id = window.setTimeout(recoverStalledTurn, delayMs)
+
+    return () => window.clearTimeout(id)
+  }, [busy, enabled, muted, recoverStalledTurn, status])
 
   // eslint-disable-next-line no-restricted-syntax -- legitimate non-atom ref write (see eslint rule comment)
   useEffect(() => {

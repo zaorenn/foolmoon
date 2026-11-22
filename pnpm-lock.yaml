@@ -163,6 +163,9 @@ importers:
       '@audiowave/react':
         specifier: 0.6.2
         version: 0.6.2(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@bwnd/bbot':
+        specifier: ^0.6.1
+        version: 0.6.1(react@19.3.0)
       '@chenglou/pretext':
         specifier: 0.0.9
         version: 0.0.9
@@ -1070,6 +1073,14 @@ packages:
   '@bramus/specificity@2.4.3':
     resolution: {integrity: sha512-0GEz8qJWokkUVYQYRukmkSHIFNoBH8QTreeHrAFbvz1XFYc3Y+puhMs8PQ5x8GNugiC2l5jvDBXKLbBIByeSBw==}
     hasBin: true
+
+  '@bwnd/bbot@0.6.1':
+    resolution: {integrity: sha512-uBdqGQ6FmV0yX95thyEiPqRmV7FjCjVbiZrAPRMNPkUC5MQDVlSpqKxkPV0IfTr+Fg7La90ngdm4Fd+Yxn5G6Q==}
+    peerDependencies:
+      react: '>=17'
+    peerDependenciesMeta:
+      react:
+        optional: true
 
   '@cacheable/memory@2.2.0':
     resolution: {integrity: sha512-CTLKqLItRCEixEAewD3/j9DB3/o96gpTPD4eJ1v+DGOlxZRZncRQkGYqqnAGCscYd6RNeXfGeiuCphsPtqyIfQ==}
@@ -6794,6 +6805,10 @@ snapshots:
   '@bramus/specificity@2.4.3':
     dependencies:
       css-tree: 3.2.1
+
+  '@bwnd/bbot@0.6.1(react@19.3.0)':
+    optionalDependencies:
+      react: 19.3.0
 
   '@cacheable/memory@2.2.0':
     dependencies:

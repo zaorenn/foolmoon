@@ -67,6 +67,7 @@ const ATTACH_IMAGES_EVENT = 'hermes:composer-attach-images'
 const INSERT_REFS_EVENT = 'hermes:composer-insert-refs'
 const SUBMIT_EVENT = 'hermes:composer-submit'
 const VOICE_TOGGLE_EVENT = 'hermes:composer-voice-toggle'
+const VOICE_STOP_TURN_EVENT = 'hermes:composer-voice-stop-turn'
 const DICTATION_EVENT = 'hermes:composer-dictation'
 const MODEL_MENU_EVENT = 'hermes:composer-model-menu'
 
@@ -723,6 +724,14 @@ export const requestVoiceToggle = (target: ComposerTarget | 'active' = 'active')
 
 export const onComposerVoiceToggleRequest = (handler: (target: ComposerTarget) => void) =>
   subscribe<{ target: ComposerTarget }>(VOICE_TOGGLE_EVENT, ({ target }) => handler(target))
+
+/** Force-flush the currently listening voice turn (e.g. PTT keyup from Right Ctrl)
+ *  so even quiet/short speech transcribes immediately without tearing down voice mode. */
+export const requestVoiceStopTurn = (target: ComposerTarget | 'active' = 'active') =>
+  dispatch<{ target: ComposerTarget }>(VOICE_STOP_TURN_EVENT, { target: resolve(target) })
+
+export const onComposerVoiceStopTurnRequest = (handler: (target: ComposerTarget) => void) =>
+  subscribe<{ target: ComposerTarget }>(VOICE_STOP_TURN_EVENT, ({ target }) => handler(target))
 
 /** Start or stop dictation on one composer. Like voice conversation, the
  * rebindable action targets only the active visible composer. */

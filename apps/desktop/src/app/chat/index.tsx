@@ -81,6 +81,7 @@ import { useRuntimeMessageRepository } from './runtime-repository'
 import { ScrollToBottomButton } from './scroll-to-bottom-button'
 import { useSessionView } from './session-view'
 import { SessionActionsMenu } from './sidebar/session-actions-menu'
+import { SimpleJarvisBar } from './simple-jarvis-bar'
 import { routedSessionIsLoading, threadLoadingState } from './thread-loading'
 import {
   backfillOlderTranscriptPage,
@@ -773,6 +774,7 @@ const ChatViewContent = memo(function ChatViewContent({
           selectedSessionId={selectedSessionId}
         />
       )}
+      {isPrimary && <SimpleJarvisBar />}
 
       {/* Mounted for the primary AND every tile, each scoped to its own session
           so a tiled/background session's blocking prompt surfaces instead of

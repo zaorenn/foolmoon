@@ -14,9 +14,11 @@ import threading
 import asyncio
 import json
 import os
+from pathlib import Path
 import urllib.parse
 import urllib.request
 from fastapi import APIRouter
+from fastapi.responses import FileResponse
 from hermes_cli.dashboard_auth.native_http import grant_home_scope
 from hermes_cli.web_routers._common import client_error, http_failure
 from hermes_cli.web_deps import late
@@ -30,6 +32,8 @@ from hermes_cli.web_models import (
     STTLeaseRequest,
     TTSSpeakRequest,
     TTSLeaseRequest,
+    VoiceCloneActivateRequest,
+    VoiceCloneUploadRequest,
     VoiceLiveSessionRequest,
 )
 from typing import Any, Dict, Optional
@@ -307,6 +311,48 @@ async def speak_text(payload: TTSSpeakRequest, profile: Optional[str] = None):
     if not text:
         raise HTTPException(status_code=400, detail="Text is required")
 
+    # Fast-path CUDA cloning providers: returns WAV + native/acoustic word_timings directly
+    from tools.tts_cloning_cuda import CUDA_CLONING_PROVIDERS, synthesize_cuda_pcm_with_timings
+    from tools.tts_tool import _get_provider, _load_tts_config
+    import io
+    import wave
+
+    def _try_cuda_speak():
+        cfg = _load_tts_config()
+        prov = _get_provider(cfg)
+        if prov not in CUDA_CLONING_PROVIDERS:
+            return None
+        try:
+            pcm, sr, timings = synthesize_cuda_pcm_with_timings(text, engine=prov, tts_config=cfg)
+        except Exception as cuda_exc:
+            _log.warning("CUDA TTS /api/audio/speak failed (%s); falling back to TTS fallback", cuda_exc)
+            pcm, sr = _sync_edge_fallback_pcm(text, cfg)
+            prov = "tts-fallback"
+            from tools.tts_cloning_cuda import compute_word_timings_ms
+            timings = compute_word_timings_ms(text, pcm, sr)
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(sr)
+            wf.writeframes(pcm)
+        return buf.getvalue(), prov, timings
+
+    with http_failure("Desktop voice TTS failed", 500, "Speech synthesis failed"):
+        cuda_res = await _run_config_scoped(profile, _try_cuda_speak)
+
+    if cuda_res is not None:
+        wav_bytes, prov, timings = cuda_res
+        encoded = base64.b64encode(wav_bytes).decode("ascii")
+        return {
+            "ok": True,
+            "data_url": f"data:audio/wav;base64,{encoded}",
+            "mime_type": "audio/wav",
+            "provider": prov,
+            "sentence": text,
+            "word_timings": timings,
+        }
+
     # _config_profile_scope raises 400/404 for a bad profile — pass it
     # through instead of masking it as a 500 synthesis failure.
     with http_failure("Desktop voice TTS failed", 500, "Speech synthesis failed"):
@@ -349,6 +395,101 @@ async def speak_text(payload: TTSSpeakRequest, profile: Optional[str] = None):
     return {
         "ok": True, "data_url": f"data:{mime_type};base64,{encoded}", "mime_type": mime_type,
         "provider": result.get("provider"),
+    }
+
+
+@router.get("/api/audio/clones")
+async def get_voice_clones():
+    """List registered voice clones, active clone/engine, and CUDA worker status."""
+    from tools.tts_cloning_cuda import list_voice_clones
+    data = await asyncio.to_thread(list_voice_clones)
+    return {"ok": True, **data}
+
+
+@router.post("/api/audio/clones")
+async def upload_voice_clone(payload: VoiceCloneUploadRequest):
+    """Upload or record a new reference audio sample for CUDA zero-shot voice cloning."""
+    data_url = (payload.data_url or "").strip()
+    if not data_url.startswith("data:") or "," not in data_url:
+        raise HTTPException(status_code=400, detail="Invalid audio payload")
+    header, encoded = data_url.split(",", 1)
+    if ";base64" not in header:
+        raise HTTPException(status_code=400, detail="Audio payload must be base64 encoded")
+    try:
+        audio_bytes = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError):
+        raise HTTPException(status_code=400, detail="Audio payload is not valid base64")
+    if len(audio_bytes) > _MAX_TRANSCRIPTION_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Voice clone sample is too large")
+
+    from tools.tts_cloning_cuda import create_voice_clone
+    with http_failure("Failed to create voice clone", 400, "Voice clone creation failed"):
+        clone = await asyncio.to_thread(
+            create_voice_clone,
+            name=payload.name,
+            audio_bytes=audio_bytes,
+            source_filename=payload.filename or "sample.wav",
+            ref_text=payload.ref_text or "",
+            activate=payload.activate,
+        )
+    return {"ok": True, "clone": clone}
+
+
+@router.post("/api/audio/clones/activate")
+async def activate_voice_clone(payload: VoiceCloneActivateRequest, profile: Optional[str] = None):
+    """Select active voice clone and/or CUDA TTS engine and optionally update config.yaml."""
+    from tools.tts_cloning_cuda import CUDA_CLONING_PROVIDERS, normalize_cloning_engine, set_active_voice_clone
+
+    engine = normalize_cloning_engine(payload.engine or "") if payload.engine else None
+    if engine and engine in CUDA_CLONING_PROVIDERS:
+        def _persist_provider():
+            from hermes_cli.config import load_config, save_config
+            from hermes_cli.config_backend import CONFIG_MUTATION_LOCK
+            with _config_profile_scope(profile):
+                with CONFIG_MUTATION_LOCK:
+                    cfg = load_config()
+                    tts_cfg = cfg.get("tts")
+                    if not isinstance(tts_cfg, dict):
+                        tts_cfg = {}
+                        cfg["tts"] = tts_cfg
+                    tts_cfg["provider"] = engine
+                    save_config(cfg)
+        await asyncio.to_thread(_persist_provider)
+
+    data = await asyncio.to_thread(
+        set_active_voice_clone, payload.clone_id, engine, warm=payload.warm
+    )
+    return {"ok": True, **data}
+
+
+@router.delete("/api/audio/clones/{clone_id}")
+async def remove_voice_clone(clone_id: str):
+    """Delete a registered voice clone sample and its cached CUDA conditionals."""
+    from tools.tts_cloning_cuda import delete_voice_clone
+    removed = await asyncio.to_thread(delete_voice_clone, clone_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Voice clone not found")
+    return {"ok": True, "deleted": clone_id}
+
+
+@router.get("/api/audio/clones/{clone_id}/audio")
+async def audition_voice_clone(clone_id: str, raw: bool = False):
+    """Fetch reference WAV audio for in-UI clone audition (JSON data URL or raw WAV)."""
+    from tools.tts_cloning_cuda import get_voice_clone_audio
+
+    clip = await asyncio.to_thread(get_voice_clone_audio, clone_id)
+    if not clip:
+        raise HTTPException(status_code=404, detail="Voice clone audio not found")
+    if raw:
+        return FileResponse(clip["wav_path"], media_type=clip["mime_type"], filename=f"{clone_id}.wav")
+    encoded = clip["audio_base64"]
+    return {
+        "ok": True,
+        "id": clip["id"],
+        "name": clip["name"],
+        "mime_type": clip["mime_type"],
+        "audio_base64": encoded,
+        "data_url": f"data:{clip['mime_type']};base64,{encoded}",
     }
 
 
@@ -414,6 +555,94 @@ class _SyncSentencePCMStreamer:
             self.sample_rate = rate
         if pcm:
             yield pcm
+
+
+def _sync_windows_sapi_pcm(text: str, lang: str = "") -> tuple[bytes, int]:
+    """Offline Windows SAPI SpeechSynthesizer fallback returning ``(int16_mono_pcm, sample_rate)``."""
+    if os.name != "nt":
+        raise RuntimeError("Windows SAPI fallback unavailable on non-Windows host")
+
+    import shutil
+    import subprocess
+
+    fd, tmp_wav = tempfile.mkstemp(suffix=".wav")
+    os.close(fd)
+    env = os.environ.copy()
+    env["FM_SAPI_TEXT"] = text
+    env["FM_SAPI_OUT"] = tmp_wav
+    env["FM_SAPI_LANG"] = "tr-" if lang == "tr" else ""
+
+    ps_script = (
+        "Add-Type -AssemblyName System.Speech; "
+        "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+        "try { "
+        "$lang = $env:FM_SAPI_LANG; "
+        "if ($lang) { "
+        "$match = $s.GetInstalledVoices() | Where-Object { $_.Enabled -and $_.VoiceInfo.Culture.Name -like \"$lang*\" } | Select-Object -First 1; "
+        "if ($match) { $s.SelectVoice($match.VoiceInfo.Name) } "
+        "}; "
+        "$fmt = New-Object System.Speech.AudioFormat.SpeechAudioFormatInfo(24000, [System.Speech.AudioFormat.AudioBitsPerSample]::Sixteen, [System.Speech.AudioFormat.AudioChannel]::Mono); "
+        "$s.SetOutputToWaveFile($env:FM_SAPI_OUT, $fmt); "
+        "$s.Speak($env:FM_SAPI_TEXT) "
+        "} finally { "
+        "$s.Dispose() "
+        "}"
+    )
+
+    try:
+        proc = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", ps_script],
+            capture_output=True,
+            text=True,
+            timeout=25,
+            env=env,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        if proc.returncode != 0:
+            err = (proc.stderr or proc.stdout or "").strip()[:300]
+            raise RuntimeError(f"Windows SAPI fallback exited {proc.returncode}: {err}")
+        if not os.path.isfile(tmp_wav) or os.path.getsize(tmp_wav) <= 0:
+            raise RuntimeError("Windows SAPI fallback produced no audio")
+        pcm, rate = _audio_file_to_pcm(tmp_wav)
+        if rate != 24000 and shutil.which("ffmpeg"):
+            pcm, rate = _ffmpeg_s16le_mono(tmp_wav)
+        if not pcm:
+            raise RuntimeError("Windows SAPI fallback decoded to silence")
+        return pcm, rate
+    finally:
+        _unlink_quietly(tmp_wav)
+
+
+def _sync_edge_fallback_pcm(text: str, tts_config: Optional[dict[str, Any]] = None) -> tuple[bytes, int]:
+    """Synthesize *text* via Edge TTS (or offline Windows SAPI) and return ``(int16_mono_pcm, sample_rate)``."""
+    from tools.tts_cloning_cuda import _detect_language
+    from tools.tts_tool import _load_tts_config, _run_edge_tts
+
+    detected_lang = _detect_language(text)
+    cfg = dict(tts_config or _load_tts_config() or {})
+    edge_cfg = dict(cfg.get("edge") or {}) if isinstance(cfg.get("edge"), dict) else {}
+    if detected_lang == "tr" and edge_cfg.get("voice") in (None, "", "en-US-AriaNeural"):
+        edge_cfg["voice"] = "tr-TR-EmelNeural"
+    cfg["edge"] = edge_cfg
+
+    fd, tmp_path = tempfile.mkstemp(suffix=".mp3")
+    os.close(fd)
+    try:
+        try:
+            _run_edge_tts(text, tmp_path, cfg)
+            if not os.path.isfile(tmp_path) or os.path.getsize(tmp_path) <= 0:
+                raise RuntimeError("Edge TTS fallback produced no audio")
+            pcm, rate = _audio_file_to_pcm(tmp_path)
+            if not pcm:
+                raise RuntimeError("Edge TTS fallback decoded to silence")
+            return pcm, rate
+        except Exception as edge_exc:
+            _log.warning("Edge TTS fallback failed (%s); falling back to Windows SAPI", edge_exc)
+            if os.name == "nt":
+                return _sync_windows_sapi_pcm(text, lang=detected_lang)
+            raise
+    finally:
+        _unlink_quietly(tmp_path)
 
 
 def _sync_sentence_to_pcm(text: str) -> tuple:
@@ -696,6 +925,7 @@ async def speak_stream_ws(ws: WebSocket) -> None:
 
     def _synthesize():
         nonlocal produced_audio, synthesis_failed
+        from tools.tts_cloning_cuda import compute_word_timings_ms
         from tools.tts_streaming import SentenceChunker
         from tools.tts_text_normalize import _strip_markdown_for_tts
 
@@ -729,17 +959,64 @@ async def speak_stream_ws(ws: WebSocket) -> None:
                     return
                 yield from chunker.feed(delta)
 
-        try:
+        def _pieces():
             for sentence in _sentences():
                 cleaned = _strip_markdown_for_tts(sentence)
                 if not cleaned:
                     continue
                 for piece in _split_text_for_speak_stream(cleaned, cap):
-                    for chunk in streamer.stream(piece):
+                    if piece.strip():
+                        yield piece
+
+        try:
+            stream_with_timings = getattr(streamer, "stream_with_timings", None)
+            if callable(stream_with_timings):
+                # Emit each piece immediately once ready so Sentence #1 never waits behind Sentence #2/EOT.
+                for piece in _pieces():
+                    if stop.is_set():
+                        return
+                    try:
+                        pcm, rate, timings = stream_with_timings(piece)
+                    except Exception as cuda_exc:
+                        _log.warning("CUDA TTS failed for sentence (%s); falling back to TTS fallback", cuda_exc)
+                        pcm, rate = _sync_edge_fallback_pcm(piece, cfg)
+                        timings = compute_word_timings_ms(piece, pcm, rate)
+                    if stop.is_set():
+                        return
+                    if rate and rate != getattr(streamer, "sample_rate", 24000) and not start_sent:
+                        streamer.sample_rate = rate
+                    if pcm:
+                        dur_ms = max(60, int(round((len(pcm) // 2 / max(8000, rate)) * 1000.0)))
+                        meta = {"type": "sentence", "text": piece, "words": timings, "durationMs": dur_ms, "sampleRate": rate}
+                        loop.call_soon_threadsafe(chunks.put_nowait, meta)
+                        produced_audio = True
+                        loop.call_soon_threadsafe(chunks.put_nowait, pcm)
+            else:
+                for piece in _pieces():
+                    if stop.is_set():
+                        return
+                    yielded_piece = False
+                    try:
+                        for chunk in streamer.stream(piece):
+                            if stop.is_set():
+                                return
+                            if not chunk:
+                                continue
+                            yielded_piece = True
+                            produced_audio = True
+                            loop.call_soon_threadsafe(chunks.put_nowait, chunk)
+                    except Exception as stream_exc:
+                        if yielded_piece:
+                            raise
+                        _log.warning("Streaming TTS failed for sentence (%s); falling back to TTS fallback", stream_exc)
+                        pcm, rate = _sync_edge_fallback_pcm(piece, cfg)
                         if stop.is_set():
                             return
-                        produced_audio = True
-                        loop.call_soon_threadsafe(chunks.put_nowait, chunk)
+                        if rate and rate != getattr(streamer, "sample_rate", 24000) and not start_sent:
+                            streamer.sample_rate = rate
+                        if pcm:
+                            produced_audio = True
+                            loop.call_soon_threadsafe(chunks.put_nowait, pcm)
         except Exception as exc:
             _log.warning("speak-stream synthesis failed: %s", exc)
             synthesis_failed = True
@@ -772,7 +1049,10 @@ async def speak_stream_ws(ws: WebSocket) -> None:
             if chunk is None:
                 break
             await _send_start()
-            await ws.send_bytes(chunk)
+            if isinstance(chunk, dict):
+                await ws.send_json(chunk)
+            else:
+                await ws.send_bytes(chunk)
         if not stop.is_set():
             # Fallback is the last resort: sentence synthesis was asked for and
             # produced nothing. A normal edge reply has already streamed PCM.

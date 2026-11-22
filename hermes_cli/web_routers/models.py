@@ -7,10 +7,14 @@ Extracted from ``hermes_cli.web_server``; helpers/state that tests monkeypatch o
 import asyncio
 import concurrent.futures
 import contextvars
+import json
 import logging
 from typing import Optional
+import urllib.request
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+
+from hermes_cli import config as config_mod
 
 from hermes_cli.web_deps import LateState, late
 from hermes_cli.web_server_config import (
@@ -449,3 +453,97 @@ async def set_model_assignment(body: ModelAssignment, profile: Optional[str] = N
                         reasoning_effort=reasoning_effort, prepared=prepared)
 
         return await asyncio.to_thread(_apply_assignment)
+
+
+def _resolve_lmstudio_base_url(cfg: dict, explicit: Optional[str] = None) -> str:
+    candidate = (explicit or "").strip()
+    if not candidate:
+        model_cfg = cfg.get("model") if isinstance(cfg.get("model"), dict) else {}
+        if str(model_cfg.get("provider") or "").lower() == "lmstudio" and model_cfg.get("base_url"):
+            candidate = str(model_cfg.get("base_url") or "")
+    candidate = (candidate or "http://127.0.0.1:1234/v1").rstrip("/")
+    if not candidate.endswith("/v1"):
+        candidate = f"{candidate}/v1"
+    return candidate
+
+
+@router.get("/api/models/lmstudio")
+async def list_lmstudio_models(base_url: Optional[str] = None, profile: Optional[str] = None):
+    """Probe the local LM Studio OpenAI-compatible server for live available models."""
+    def _probe():
+        with _config_profile_scope(profile):
+            cfg = load_config()
+            active_model, active_provider = _main_model_fields(cfg.get("model", {}))
+            resolved_base = _resolve_lmstudio_base_url(cfg, base_url)
+
+        req = urllib.request.Request(f"{resolved_base}/models", headers={"Accept": "application/json"})
+        online = False
+        rows: list[dict] = []
+        error: Optional[str] = None
+        try:
+            with urllib.request.urlopen(req, timeout=2.5) as resp:  # noqa: S310 -- explicit localhost LM Studio probe
+                payload = json.loads(resp.read().decode("utf-8"))
+                online = True
+                for item in payload.get("data") or []:
+                    if not isinstance(item, dict) or not item.get("id"):
+                        continue
+                    mid = str(item["id"])
+                    is_embed = "embed" in mid.lower()
+                    rows.append({
+                        "id": mid,
+                        "owned_by": str(item.get("owned_by") or "lmstudio"),
+                        "loaded": mid == active_model,
+                        "is_embedding": is_embed,
+                    })
+        except Exception as exc:
+            error = str(exc)
+
+        return {
+            "ok": True,
+            "online": online,
+            "base_url": resolved_base,
+            "active_model": active_model,
+            "active_provider": active_provider,
+            "models": rows,
+            **({"error": error} if error else {}),
+        }
+
+    return await run_in_threadpool(_probe)
+
+
+@router.post("/api/models/lmstudio/select")
+async def select_lmstudio_model(request: Request, profile: Optional[str] = None):
+    """Switch the active Hermes main model to a selected LM Studio model cleanly."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="Body must be a JSON object")
+
+    model_id = str(body.get("model") or "").strip()
+    if not model_id:
+        raise HTTPException(status_code=400, detail="model is required")
+    req_base = str(body.get("base_url") or "").strip() or None
+
+    def _apply():
+        with _profile_scope(body.get("profile") or profile):
+            with CONFIG_MUTATION_LOCK:
+                cfg = load_config()
+                resolved_base = _resolve_lmstudio_base_url(cfg, req_base)
+                model_section = cfg.get("model")
+                if not isinstance(model_section, dict):
+                    model_section = {}
+                model_section["provider"] = "lmstudio"
+                model_section["default"] = model_id
+                model_section["base_url"] = resolved_base
+                cfg["model"] = model_section
+                save_config(cfg)
+                return {
+                    "ok": True,
+                    "provider": "lmstudio",
+                    "model": model_id,
+                    "base_url": resolved_base,
+                }
+
+    return await asyncio.to_thread(_apply)

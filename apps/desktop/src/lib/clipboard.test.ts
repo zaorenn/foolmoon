@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createBrowserClipboardBridge } from './browser-clipboard'
-import { installClipboardShim, writeClipboardText } from './clipboard'
+import { installClipboardShim, readClipboardText, writeClipboardText } from './clipboard'
 import { copySvgAsPng } from './svg-image'
 
 const desktopWindow = window as unknown as { hermesDesktop?: Window['hermesDesktop'] }
@@ -176,4 +176,19 @@ describe('writeClipboardText', () => {
       }
     }
   )
+
+  it('reads clipboard text via Electron IPC first when navigator clipboard is unfocused', async () => {
+    const ipcRead = vi.fn().mockResolvedValue('clipped-from-main-process')
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        readText: vi.fn().mockRejectedValue(new Error('Document is not focused')),
+        writeText: vi.fn()
+      }
+    })
+    desktopWindow.hermesDesktop = { readClipboard: ipcRead } as unknown as Window['hermesDesktop']
+
+    await expect(readClipboardText()).resolves.toBe('clipped-from-main-process')
+    expect(ipcRead).toHaveBeenCalledTimes(1)
+  })
 })

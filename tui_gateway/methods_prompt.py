@@ -900,6 +900,7 @@ def _(rid, params: dict) -> dict:
         return _slot_refusal(rid, sid, session, text, params, limit_message, internal_hosted_submit)
     # Rewritten every submit: a session alternates app window / HUD / live voice; a stale value misinforms.
     session["client_surface"] = params.get("surface") if params.get("surface") in _CLIENT_SURFACES else ""
+    session["composer_persona"] = "architect" if params.get("persona") == "architect" else "standard"
     # Live-voice delegations carry the recent spoken transcript for the MODEL INPUT only (the persisted
     # user row stays the words the user said); anything else clears it.
     voice_context = params.get("voice_context")

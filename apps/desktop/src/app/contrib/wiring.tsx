@@ -111,6 +111,7 @@ import { useKeybinds } from '../hooks/use-keybinds'
 import { useHudHandoff } from '../hud/handoff'
 import { ModelPickerOverlay } from '../model-picker-overlay'
 import { ModelVisibilityOverlay } from '../model-visibility-overlay'
+import { FloatingNotchPreview } from '../notch/floating-notch-preview'
 import { mainChatOccupied, openSession, openSessionFromPicker } from '../open-session'
 import { PetGenerateOverlay } from '../pet-generate/pet-generate-overlay'
 import { FileActionDialogs } from '../right-sidebar/file-actions'
@@ -170,6 +171,7 @@ import {
 } from './hooks/use-background-sync'
 import { useDesktopIntegrations } from './hooks/use-desktop-integrations'
 import { useDesktopMetrics } from './hooks/use-desktop-metrics'
+import { NotchBridgeHost } from './hooks/use-notch-bridge'
 import { usePetBridge } from './hooks/use-pet-bridge'
 import { PreviewSigninsBoot } from './hooks/use-preview-signins-boot'
 import { useQuickEntryBridge } from './hooks/use-quick-entry-bridge'
@@ -1424,6 +1426,8 @@ export function ContribWiring({ children }: { children: ReactNode }) {
       {/* Petdex floating mascot — renders nothing unless installed + enabled.
           Never in the HUD: that window is the chat bar and nothing else. */}
       {!isHudWindow() && !isBrowserWindow() && <FloatingPet />}
+      {!isHudWindow() && !isBrowserWindow() && <NotchBridgeHost onCancel={cancelRun} submitText={submitText} />}
+      {!isHudWindow() && !isBrowserWindow() && <FloatingNotchPreview />}
 
       {/* In-app tips. Renders nothing until the app is quiet and has something
           to point at, and nothing at all once they're off or all retired. The

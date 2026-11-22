@@ -70,6 +70,9 @@ foreach ($key in $global:_hermesKeys) {
 foreach ($property in $composed.PSObject.Properties) {
     Set-Item -Path "env:$($property.Name)" -Value ([string]$property.Value)
 }
+if ($env:HERMES_HOME -and ([System.IO.Path]::GetFileName($env:HERMES_HOME.TrimEnd('\')) -ieq 'thefool')) {
+    $env:HERMES_HOME = Join-Path $env:LOCALAPPDATA 'hermes'
+}
 # This checkout, not whichever `hermes` PATH finds. A function beats PATH,
 # an alias, and the MSIX execution alias. It runs only while the shell is
 # inside this worktree.
@@ -103,12 +106,6 @@ function global:_hermesWorktreeHere {
 }
 
 function global:hermes {
-    if (-not (_hermesWorktreeHere)) {
-        $here = (Get-Location).Path
-        Write-Error "hermes: $here is outside $($global:_hermesWorktree); refusing (the installed command is hidden while this checkout is active)" -ErrorAction Continue
-        $global:LASTEXITCODE = 1
-        return
-    }
     Push-Location -LiteralPath $global:_hermesWorktree
     try {
         $py = $env:PYTHON

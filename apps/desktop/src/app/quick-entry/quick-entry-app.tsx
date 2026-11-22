@@ -111,10 +111,11 @@ export function QuickEntryApp() {
       }}
     >
       <div
+        data-fm-surface=""
         style={{
           background: 'var(--ui-bg-elevated, var(--background))',
-          border: '1px solid var(--ui-stroke-secondary, rgba(127,127,127,0.35))',
-          borderRadius: 12,
+          border: '1px solid color-mix(in srgb, var(--dt-primary, rgba(127,127,127,0.35)) 28%, var(--ui-stroke-secondary, rgba(127,127,127,0.35)))',
+          borderRadius: 'var(--fm-radius-px, 16px)',
           // Shadow budget is capped by the 12px transparent padding around the
           // card: extent (offset + blur) beyond 12px gets clipped by the fixed
           // 640x168 window bounds, slicing the gradient into a hard edge.
@@ -131,15 +132,14 @@ export function QuickEntryApp() {
           <span
             aria-hidden
             style={{
-              color: 'var(--muted-foreground, #8a8a8a)',
+              background: 'var(--dt-primary, #c94a38)',
+              borderRadius: 999,
+              boxShadow: '0 0 8px color-mix(in srgb, var(--dt-primary, #c94a38) 55%, transparent)',
               flexShrink: 0,
-              fontSize: 15,
-              lineHeight: 1,
-              userSelect: 'none'
+              height: 8,
+              width: 8
             }}
-          >
-            ›
-          </span>
+          />
           <input
             aria-label="Quick Entry"
             autoCapitalize="off"
@@ -162,7 +162,7 @@ export function QuickEntryApp() {
                 dispatch({ type: 'dismiss' })
               }
             }}
-            placeholder={state.connected ? 'Ask Hermes…' : 'Not connected — open Hermes to reconnect'}
+            placeholder={state.connected ? 'Ask Foolmoon anything…' : 'Not connected — open Foolmoon to reconnect'}
             ref={inputRef}
             spellCheck={false}
             style={{
@@ -224,6 +224,31 @@ export function QuickEntryApp() {
               </option>
             ))}
           </select>
+          <div
+            style={{
+              alignItems: 'center',
+              color: 'var(--muted-foreground, #8a8a8a)',
+              display: 'flex',
+              fontSize: 10,
+              gap: 6,
+              marginLeft: 'auto',
+              userSelect: 'none'
+            }}
+          >
+            <span
+              style={{
+                background: 'color-mix(in srgb, var(--dt-primary, #c94a38) 14%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--dt-primary, #c94a38) 38%, transparent)',
+                borderRadius: 999,
+                color: 'var(--dt-primary, #c94a38)',
+                fontWeight: 600,
+                padding: '1px 7px'
+              }}
+            >
+              Foolmoon Quick
+            </span>
+            <span>↵ Send · Esc Hide</span>
+          </div>
         </div>
         {state.error ? (
           <div role="alert" style={{ color: 'var(--destructive, #ef4444)', fontSize: 11 }}>

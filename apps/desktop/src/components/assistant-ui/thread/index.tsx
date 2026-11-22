@@ -12,6 +12,7 @@ import { type RestoreMessageTarget } from '@/components/assistant-ui/thread/type
 import { UserEditComposer } from '@/components/assistant-ui/thread/user-edit-composer'
 import { UserMessage } from '@/components/assistant-ui/thread/user-message'
 import { Intro, type IntroProps } from '@/components/chat/intro'
+import { StudioQuickLaunch } from '@/components/chat/studio-quick-launch'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import type { HermesGateway } from '@/hermes'
 import { useI18n } from '@/i18n'
@@ -168,7 +169,14 @@ export const Thread = memo(function Thread({
   // nothing in it yet gets whichever plugin owns it. The slot often renders
   // nothing, which costs an empty container — harmless, since there is no
   // content to lay out until the first message swaps this branch out.
-  const emptyBody = intro ? <Intro {...intro} /> : sessionId ? <ChatEmptySlot sessionId={sessionId} /> : null
+  const emptyBody = intro ? (
+    <div className="-mt-16 flex w-full flex-col items-center pb-14">
+      <Intro {...intro} />
+      <StudioQuickLaunch />
+    </div>
+  ) : sessionId ? (
+    <ChatEmptySlot sessionId={sessionId} />
+  ) : null
 
   const emptyPlaceholder = emptyBody ? (
     <div className="flex min-h-0 w-full flex-col items-center justify-center pt-[var(--composer-measured-height)]">

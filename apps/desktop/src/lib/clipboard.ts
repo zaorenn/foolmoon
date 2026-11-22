@@ -83,6 +83,33 @@ export async function writeClipboardText(text: string) {
   await native(text)
 }
 
+/**
+ * Reads plain text from the clipboard, preferring Electron's main-process IPC bridge
+ * so background or auxiliary windows (like the Top Notch) can read the clipboard even
+ * when `navigator.clipboard.readText()` would throw `Document is not focused`.
+ */
+export async function readClipboardText(): Promise<string> {
+  const ipc = hostHas('clipboardIpc') ? window.hermesDesktop?.readClipboard : undefined
+
+  if (ipc) {
+    try {
+      const value = await ipc()
+
+      if (typeof value === 'string' && value.length > 0) {
+        return value
+      }
+    } catch {
+      // Fall back to renderer Clipboard API if Electron IPC is unavailable.
+    }
+  }
+
+  try {
+    return (await navigator.clipboard?.readText?.()) ?? ''
+  } catch {
+    return ''
+  }
+}
+
 export function installClipboardShim() {
   const clipboard = navigator.clipboard
 

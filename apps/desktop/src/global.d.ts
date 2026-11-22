@@ -136,6 +136,27 @@ declare global {
         setState: (state: WakeIndicatorState) => void
         onState: (callback: (state: WakeIndicatorState) => void) => () => void
       }
+      notch?: {
+        getState: () => Promise<{ open: boolean }>
+        open: () => Promise<{ ok: boolean; open: boolean }>
+        close: () => Promise<{ ok: boolean; open: boolean }>
+        toggle: () => Promise<{ ok: boolean; open: boolean }>
+        setVisible: (visible: boolean) => Promise<{ ok: boolean; open: boolean }>
+        focusMainWindow: () => Promise<{ ok: boolean }>
+        setHitRect: (rect: { height: number; width: number; x: number; y: number } | null) => void
+        setFocusable: (focusable: boolean) => void
+        setSpotlight?: (active: boolean) => void
+        captureScreen?: () => Promise<{ dataUrl: string; height: number; name: string; width: number } | null>
+        onHotkeyAction?: (callback: (payload: { action: 'activate' | 'close' }) => void) => () => void
+        pushState: (payload: unknown) => void
+        sendCommand: (command: unknown) => void
+        onState: (callback: (payload: unknown) => void) => () => void
+        onCommand: (callback: (command: unknown) => void) => () => void
+        onChanged: (callback: (state: { open: boolean }) => void) => () => void
+        onCursor: (
+          callback: (point: { inside: boolean; normX: number; normY: number; screenX: number; screenY: number }) => void
+        ) => () => void
+      }
       chatOnboarding?: {
         size: (mode: WindowSizeMode) => void
       }

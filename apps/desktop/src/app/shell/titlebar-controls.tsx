@@ -1,5 +1,6 @@
 import { compactNumber } from '@hermes/shared'
 import { useStore } from '@nanostores/react'
+import { Mic, MicOff, Palette } from 'lucide-react'
 import { type ComponentProps, type MouseEvent, type ReactNode, useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 
@@ -21,17 +22,19 @@ import { formatModifierToken } from '@/lib/keybinds/combo'
 import { cn } from '@/lib/utils'
 import { recordAction } from '@/store/desktop-metrics'
 import { canUseHud, toggleHud } from '@/store/hud'
-import { $interfaceMode, shownInMode, type Tiered } from '@/store/interface-mode'
+import { $interfaceMode, setInterfaceMode, shownInMode, type Tiered } from '@/store/interface-mode'
 import {
   $fileBrowserOpen,
   $leftSideOpen,
   $panesFlipped,
   CHAT_SIDEBAR_PANE_ID,
   FILE_BROWSER_PANE_ID,
+  setSidebarOpen,
   toggleLeftSide,
   togglePanesFlipped,
   toggleRightSide
 } from '@/store/layout'
+import { $jarvisHandsFree, $notchOpen, $notchPreviewOpen, toggleJarvisHandsFree, toggleNotch } from '@/store/notch'
 import { REVIEW_PANE_ID } from '@/store/review'
 import { $unreadSessionCount } from '@/store/session-dot-state'
 import { $titlebarAppActionsSide, TITLEBAR_FIXED_TOOLS } from '@/store/titlebar-app-actions'
@@ -192,6 +195,10 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
   const unreadCount = useStore($unreadSessionCount)
   const appActionsSide = useStore($titlebarAppActionsSide)
   const interfaceMode = useStore($interfaceMode)
+  const notchOpen = useStore($notchOpen)
+  const notchPreviewOpen = useStore($notchPreviewOpen)
+  const notchActive = notchOpen || notchPreviewOpen
+  const jarvisOn = useStore($jarvisHandsFree)
   const unreadBadge = unreadCount > 0 ? unreadCount : undefined
   const unreadHint = unreadBadge ? ` · ${t.titlebar.unreadSessions(unreadBadge)}` : ''
   // One filter for every cluster: a tool's own `hidden`, then the mode's tier.
@@ -356,13 +363,138 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
     )
   }
 
+  const studioTool: TitlebarTool = {
+    icon: <Palette className="h-3.5 w-3.5" />,
+    id: 'foolmoon-studio',
+    label: 'Visual & Material Studio',
+    onSelect: () => {
+      triggerHaptic('open')
+      navigate('/settings?tab=config:appearance&page=theme')
+    },
+    title: 'Visual & Material Studio'
+  }
+
+  const notchTool: TitlebarTool = {
+    active: notchActive,
+    icon: <TitlebarIcon name="hubot" />,
+    id: 'jarvis-notch',
+    label: notchActive ? 'Hide Jarvis Notch' : 'Show Jarvis Notch',
+    onSelect: () => {
+      triggerHaptic('open')
+      void toggleNotch()
+    },
+    title: 'Jarvis Notch (Ctrl+Shift+N)'
+  }
+
   const visibleLeftTools = (
     appActionsSide === 'left' ? [sidebarTool, ...systemTools, ...leftTools] : [sidebarTool, ...leftTools]
   ).filter(visibleTool)
 
   const visibleSystemTools = appActionsSide === 'right' ? systemTools.filter(visibleTool) : []
   const visiblePaneTools = tools.filter(visibleTool)
-  const visibleRightFixedTools = [flipTool, rightSidebarTool].filter(visibleTool)
+  const visibleRightFixedTools = [studioTool, notchTool, flipTool, rightSidebarTool].filter(visibleTool)
+
+  const voiceCapsule = (
+    <div
+      aria-label="Foolmoon voice and notch controls"
+      className="mr-1.5 inline-flex h-6.5 items-center gap-1 rounded-full border border-(--ui-stroke-secondary)/80 bg-(--ui-control-background)/88 px-1.5 text-[10px] font-medium shadow-xs backdrop-blur-md select-none"
+      onPointerDown={event => event.stopPropagation()}
+      role="group"
+    >
+      <span
+        aria-hidden="true"
+        className={cn(
+          'h-1.5 w-1.5 rounded-full transition-colors',
+          jarvisOn ? 'bg-emerald-500 shadow-[0_0_6px_#10b981]' : 'bg-primary/55'
+        )}
+      />
+      <span className="hidden px-0.5 text-muted-foreground xl:inline">
+        {jarvisOn ? 'Voice Live' : 'Voice Ready'}
+      </span>
+      <button
+        aria-label={jarvisOn ? 'Disable hands-free voice' : 'Enable hands-free voice'}
+        aria-pressed={jarvisOn}
+        className={cn(
+          'inline-flex h-4.5 items-center gap-1 rounded-full px-2 transition-colors',
+          jarvisOn
+            ? 'bg-emerald-500/18 text-emerald-700 dark:text-emerald-300'
+            : 'text-foreground/85 hover:bg-muted/80'
+        )}
+        onClick={() => {
+          triggerHaptic('tap')
+          toggleJarvisHandsFree()
+        }}
+        type="button"
+      >
+        {jarvisOn ? <Mic className="h-2.5 w-2.5" /> : <MicOff className="h-2.5 w-2.5" />}
+        <span className="hidden md:inline">Hands-Free</span>
+      </button>
+      <button
+        aria-label={notchActive ? 'Hide hardware notch' : 'Open hardware notch'}
+        aria-pressed={notchActive}
+        className={cn(
+          'inline-flex h-4.5 items-center gap-1 rounded-full px-2 transition-colors',
+          notchActive
+            ? 'bg-primary text-primary-foreground shadow-xs'
+            : 'bg-muted/75 text-foreground hover:bg-muted'
+        )}
+        onClick={() => {
+          triggerHaptic('open')
+          void toggleNotch()
+        }}
+        type="button"
+      >
+        <span>Notch</span>
+      </button>
+    </div>
+  )
+
+  const modeSwitcher = (
+    <div
+      aria-label="Interface mode switcher"
+      className="mr-1 inline-flex h-6.5 items-center rounded-full border border-(--ui-stroke-secondary)/80 bg-(--ui-control-background)/90 p-0.5 text-[10px] font-medium shadow-xs backdrop-blur-md select-none"
+      onPointerDown={event => event.stopPropagation()}
+      role="group"
+    >
+      <span className="hidden border-r border-(--ui-stroke-secondary)/60 px-2 py-0.5 text-[10px] font-semibold tracking-tight text-foreground/85 sm:inline">
+        Foolmoon
+      </span>
+      <button
+        aria-pressed={interfaceMode === 'simple'}
+        className={cn(
+          'rounded-full px-2 py-0.5 transition-colors',
+          interfaceMode === 'simple'
+            ? 'bg-primary text-primary-foreground shadow-xs'
+            : 'text-muted-foreground hover:text-foreground'
+        )}
+        onClick={() => {
+          triggerHaptic('tap')
+          setInterfaceMode('simple')
+          setSidebarOpen(false)
+        }}
+        type="button"
+      >
+        Simple
+      </button>
+      <button
+        aria-pressed={interfaceMode === 'advanced'}
+        className={cn(
+          'rounded-full px-2 py-0.5 transition-colors',
+          interfaceMode === 'advanced'
+            ? 'bg-primary text-primary-foreground shadow-xs'
+            : 'text-muted-foreground hover:text-foreground'
+        )}
+        onClick={() => {
+          triggerHaptic('tap')
+          setInterfaceMode('advanced')
+          setSidebarOpen(true)
+        }}
+        type="button"
+      >
+        Power
+      </button>
+    </div>
+  )
 
   return (
     <>
@@ -393,6 +525,8 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
         className={cn(titlebarToolClusterClass, 'right-(--titlebar-tools-right) top-(--titlebar-controls-top)')}
         data-titlebar-cluster="right"
       >
+        {interfaceMode === 'advanced' && voiceCapsule}
+        {modeSwitcher}
         {visibleSystemTools.map(tool => (
           <TitlebarToolButton key={tool.id} navigate={navigate} tool={tool} />
         ))}

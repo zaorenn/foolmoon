@@ -10,8 +10,10 @@ export interface MinimizeToTrayStatus {
 
 interface Options {
   preferencesPath: string
+  defaultEnabled?: boolean
   getIconPath: () => string | undefined
   restoreMainWindow: () => void
+  toggleNotch?: () => void
   isQuittingForHandoff: () => boolean
   log: (message: string) => void
 }
@@ -20,6 +22,7 @@ interface Options {
 export function createMinimizeToTray(options: Options) {
   let enabled = false
   let quitting = false
+  let notifiedCloseToTray = false
   let tray: Tray | null = null
   let stopWatchingHost: (() => void) | undefined
   let dockHidden = false
@@ -183,13 +186,16 @@ export function createMinimizeToTray(options: Options) {
             height: process.platform === 'darwin' ? 18 : 24
           })
         )
-        tray.setToolTip('Hermes')
+        tray.setToolTip('Foolmoon')
         tray.setContextMenu(
           Menu.buildFromTemplate([
-            { label: 'Show Hermes', click: restore },
+            { label: 'Show Foolmoon', click: restore },
+            ...(options.toggleNotch
+              ? [{ label: 'Toggle Foolmoon Notch (Right Ctrl)', click: () => options.toggleNotch?.() }]
+              : []),
             { type: 'separator' },
             // Do not bypass the ordinary active-work confirmation or teardown.
-            { label: 'Quit Hermes', click: () => app.quit() }
+            { label: 'Quit Foolmoon', click: () => app.quit() }
           ])
         )
 
@@ -262,6 +268,20 @@ export function createMinimizeToTray(options: Options) {
       win.on('close', event => {
         if (hide()) {
           event.preventDefault()
+
+          if (process.platform === 'win32' && !notifiedCloseToTray && tray && !tray.isDestroyed()) {
+            notifiedCloseToTray = true
+
+            try {
+              tray.displayBalloon?.({
+                iconType: 'info',
+                title: 'Foolmoon',
+                content: 'Foolmoon arka planda sistem tepsisinde çalışmaya devam ediyor. Tamamen kapatmak için tepsi simgesine sağ tıklayın.'
+              })
+            } catch {
+              // Ignore notification failures on older shells.
+            }
+          }
         }
       })
     }
@@ -299,12 +319,16 @@ export function createMinimizeToTray(options: Options) {
   }
 
   async function start() {
-    let on = false
+    let on = options.defaultEnabled === true
 
     try {
-      on = JSON.parse(fs.readFileSync(options.preferencesPath, 'utf8')).enabled === true
+      const parsed = JSON.parse(fs.readFileSync(options.preferencesPath, 'utf8')) as { enabled?: unknown }
+
+      if (typeof parsed.enabled === 'boolean') {
+        on = parsed.enabled
+      }
     } catch {
-      // Missing or malformed preference preserves ordinary minimize/close.
+      // Missing or malformed preference falls back to defaultEnabled.
     }
 
     const operation = apply(on)

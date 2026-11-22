@@ -250,6 +250,130 @@ export function gatewayEventCompletedFileDiff(event: RpcEventLike): boolean {
   return typeof diff === 'string' && diff.trim().length > 0
 }
 
+const PREVIEWABLE_CREATED_RE = /\.(?:html?|pdf|svg)$/i
+const WEB_ASSET_EXT_RE = /\.(?:html?|css|js|mjs|ts|tsx|jsx|svg|pdf|json)$/i
+
+/**
+ * Extract the target file path when `write_file`, `patch`, or a generator tool
+ * finishes writing a live-previewable HTML website, PDF, or SVG artifact.
+ */
+export function gatewayEventPreviewableFilePath(event: RpcEventLike): string | null {
+  if (event.type !== 'tool.complete') {
+    return null
+  }
+
+  const payload = asRecord(event.payload)
+
+  if (payload.error) {
+    return null
+  }
+
+  const name = typeof payload.name === 'string' ? payload.name : ''
+  const args = asRecord(payload.args)
+
+  if (name === 'write_file' || name === 'patch') {
+    const raw =
+      typeof args.path === 'string'
+        ? args.path
+        : typeof args.file_path === 'string'
+          ? args.file_path
+          : typeof args.target_file === 'string'
+            ? args.target_file
+            : ''
+
+    const trimmed = raw.trim()
+
+    return trimmed && PREVIEWABLE_CREATED_RE.test(trimmed) ? trimmed : null
+  }
+
+  for (const key of ['output_path', 'pdf_path', 'html_path'] as const) {
+    const raw = args[key]
+
+    if (typeof raw === 'string') {
+      const trimmed = raw.trim()
+
+      if (trimmed && PREVIEWABLE_CREATED_RE.test(trimmed)) {
+        return trimmed
+      }
+    }
+  }
+
+  return null
+}
+
+/** True when `tool.complete` produced a diff or touched an HTML/CSS/JS/SVG/PDF asset. */
+export function gatewayEventTouchedWebAsset(event: RpcEventLike): boolean {
+  if (gatewayEventCompletedFileDiff(event)) {
+    return true
+  }
+
+  if (event.type !== 'tool.complete') {
+    return false
+  }
+
+  const payload = asRecord(event.payload)
+  const name = typeof payload.name === 'string' ? payload.name : ''
+
+  if (name !== 'write_file' && name !== 'patch') {
+    return false
+  }
+
+  const args = asRecord(payload.args)
+
+  const raw =
+    typeof args.path === 'string'
+      ? args.path
+      : typeof args.file_path === 'string'
+        ? args.file_path
+        : typeof args.target_file === 'string'
+          ? args.target_file
+          : ''
+
+  return Boolean(raw.trim() && WEB_ASSET_EXT_RE.test(raw.trim()))
+}
+
+const DELIVERED_MEDIA_HTML_PDF_RE = /\.(?:html?|pdf)$/i
+
+/**
+ * Extract the last explicitly delivered HTML/PDF path from a completed assistant
+ * `MEDIA:` directive (e.g. when a subagent wrote the file so no parent
+ * `write_file` tool call was seen in this stream). Plain prose without `MEDIA:`
+ * returns null so casual file mentions never hijack the preview pane.
+ */
+export function gatewayEventDeliveredMediaPreviewPath(event: RpcEventLike): string | null {
+  if (event.type !== 'message.complete') {
+    return null
+  }
+
+  const payload = asRecord(event.payload)
+
+  const rawText =
+    typeof payload.text === 'string'
+      ? payload.text
+      : typeof payload.content === 'string'
+        ? payload.content
+        : typeof payload.display_content === 'string'
+          ? payload.display_content
+          : ''
+
+  if (!rawText || !rawText.includes('MEDIA:')) {
+    return null
+  }
+
+  const mediaRe = /MEDIA:\s*(?:"([^"]+)"|'([^']+)'|([^\s`"'<>]+))/g
+  let lastMatch: string | null = null
+
+  for (let match = mediaRe.exec(rawText); match !== null; match = mediaRe.exec(rawText)) {
+    const rawCandidate = (match[1] ?? match[2] ?? match[3] ?? '').replace(/[.,;:!?)\]`*]+$/, '').trim()
+
+    if (rawCandidate && DELIVERED_MEDIA_HTML_PDF_RE.test(rawCandidate)) {
+      lastMatch = rawCandidate
+    }
+  }
+
+  return lastMatch
+}
+
 export function buildGatewayLogItems(lines: readonly string[]): readonly StatusbarMenuItem[] {
   if (lines.length === 0) {
     return [

@@ -274,8 +274,9 @@ def _home_relative(p: Path) -> Path:
 
 
 # Never disableable: `hermes-agent` is the agent's own operating manual and the
-# system prompt points at it unconditionally.
-ESSENTIAL_SKILLS: frozenset = frozenset({"hermes-agent"})
+# system prompt points at it unconditionally. `foolmoon-autonomy` carries core
+# self-authoring skill rules, live preview, desktop opening, and act-first defaults.
+ESSENTIAL_SKILLS: frozenset = frozenset({"hermes-agent", "foolmoon-autonomy"})
 
 
 def get_disabled_skill_names(platform: str | None = None) -> set[str]:

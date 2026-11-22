@@ -177,7 +177,11 @@ CLARIFY_SCHEMA = {
         "cancelled, timed_out or undelivered, with a notice saying why "
         "when the wait ended without a submit. Prefer deciding "
         "low-stakes questions yourself; don't use this for dangerous-command "
-        "confirmation (the terminal tool handles that)."
+        "confirmation (the terminal tool handles that). NEVER call clarify if "
+        "the user explicitly asked not to be asked questions (e.g. 'don't ask', "
+        "'soru sorma', 'just build it') or for creative/open-ended builds "
+        "(websites, HTML pages, PDFs, UI designs) where strong defaults let you "
+        "build and show a live result immediately."
     ),
     "parameters": {
         "type": "object",

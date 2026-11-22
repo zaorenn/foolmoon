@@ -1,3 +1,5 @@
+import path from 'node:path'
+
 import { resolveLocalReadPath } from './wsl-path-bridge'
 
 // Path preparation shared by the file-read boundaries that hand a backend-
@@ -35,4 +37,69 @@ export function resolveIpcFileReadPath(filePath: unknown): string {
  */
 export function resolvePreviewTargetPath(rawTarget: string, expandUserPath: (value: string) => string): string {
   return resolveLocalReadPath(/^file:/i.test(rawTarget) ? rawTarget : expandUserPath(rawTarget))
+}
+
+/**
+ * Fallback candidates when a Windows model or `MEDIA:/filename` card supplies
+ * a leading-slash path (`/portfolio_site.html`) or bare relative path that does
+ * not exist at drive root `C:\portfolio_site.html`, checking candidate dirs
+ * such as active cwd, home dir, and HERMES_HOME. Rejects traversal (`..`), UNC,
+ * explicit Windows drive paths, and URLs.
+ */
+export function windowsFallbackPreviewCandidates(
+  rawTarget: string,
+  candidateDirs: readonly string[],
+  platform: NodeJS.Platform = process.platform
+): string[] {
+  const trimmed = String(rawTarget || '').trim()
+
+  if (
+    !trimmed ||
+    /^(?:file|https?):/i.test(trimmed) ||
+    /^[A-Za-z]:[/\\]/.test(trimmed) ||
+    trimmed.startsWith('\\\\') ||
+    trimmed.startsWith('//')
+  ) {
+    return []
+  }
+
+  const pathApi = platform === 'win32' ? path.win32 : path.posix
+  let rel = ''
+
+  if (platform === 'win32' && trimmed.startsWith('/')) {
+    rel = trimmed.replace(/^\/+/, '')
+  } else if (!pathApi.isAbsolute(trimmed)) {
+    rel = trimmed
+  }
+
+  if (!rel) {
+    return []
+  }
+
+  const segments = rel.split(/[/\\]+/).filter(Boolean)
+
+  if (segments.length === 0 || segments.includes('..')) {
+    return []
+  }
+
+  const normalizedRel = segments.join(platform === 'win32' ? '\\' : '/')
+  const seen = new Set<string>()
+  const out: string[] = []
+
+  for (const dir of candidateDirs) {
+    const cleanDir = String(dir || '').trim()
+
+    if (!cleanDir) {
+      continue
+    }
+
+    const joined = pathApi.join(cleanDir, normalizedRel)
+
+    if (!seen.has(joined)) {
+      seen.add(joined)
+      out.push(joined)
+    }
+  }
+
+  return out
 }

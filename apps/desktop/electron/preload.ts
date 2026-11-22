@@ -101,6 +101,52 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
       return () => ipcRenderer.removeListener('hermes:wake-indicator:state', listener)
     }
   },
+  notch: {
+    getState: () => ipcRenderer.invoke('hermes:notch:get-state'),
+    open: () => ipcRenderer.invoke('hermes:notch:open'),
+    close: () => ipcRenderer.invoke('hermes:notch:close'),
+    toggle: () => ipcRenderer.invoke('hermes:notch:toggle'),
+    setVisible: visible => ipcRenderer.invoke('hermes:notch:set-visible', visible),
+    focusMainWindow: () => ipcRenderer.invoke('hermes:notch:focus-main'),
+    setHitRect: rect => ipcRenderer.send('hermes:notch:set-hit-rect', rect),
+    setFocusable: focusable => ipcRenderer.send('hermes:notch:set-focusable', focusable),
+    setSpotlight: active => ipcRenderer.send('hermes:notch:set-spotlight', active),
+    captureScreen: () => ipcRenderer.invoke('hermes:notch:capture-screen'),
+    onHotkeyAction: callback => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: { action: 'activate' | 'close' }) =>
+        callback(payload)
+
+      ipcRenderer.on('hermes:notch:hotkey-action', listener)
+
+      return () => ipcRenderer.removeListener('hermes:notch:hotkey-action', listener)
+    },
+    pushState: payload => ipcRenderer.send('hermes:notch:push-state', payload),
+    sendCommand: command => ipcRenderer.send('hermes:notch:command', command),
+    onState: callback => {
+      const listener = (_event, payload) => callback(payload)
+      ipcRenderer.on('hermes:notch:state', listener)
+
+      return () => ipcRenderer.removeListener('hermes:notch:state', listener)
+    },
+    onCommand: callback => {
+      const listener = (_event, command) => callback(command)
+      ipcRenderer.on('hermes:notch:command', listener)
+
+      return () => ipcRenderer.removeListener('hermes:notch:command', listener)
+    },
+    onChanged: callback => {
+      const listener = (_event, state) => callback(state)
+      ipcRenderer.on('hermes:notch:changed', listener)
+
+      return () => ipcRenderer.removeListener('hermes:notch:changed', listener)
+    },
+    onCursor: callback => {
+      const listener = (_event, point) => callback(point)
+      ipcRenderer.on('hermes:notch:cursor', listener)
+
+      return () => ipcRenderer.removeListener('hermes:notch:cursor', listener)
+    }
+  },
   chatOnboarding: {
     size: mode => ipcRenderer.send('hermes:window:size', mode)
   },

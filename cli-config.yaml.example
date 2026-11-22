@@ -1672,6 +1672,16 @@ platform_toolsets:
 #     entry falls back to the normal eager connect. The banner and the TUI show
 #     such a server as "lazy" with its cached tool count until it is first used.
 #
+# Bundled zero-API-key Foolmoon MCP servers auto-seeded into new profiles via
+# `hermes_cli.bundled_mcps.sync_bundled_mcp_servers()` (using `${hermesPython}`
+# and `${hermesProjectRoot}/mcp_servers/*.py`):
+#   - windows_os      : windows, apps/URIs, volume, media keys, clipboard, hotkeys, screen capture, hardware stats, notifications/theme
+#   - browser_pilot   : Chrome/Edge CDP automation & 1-call YouTube search/random autoplay (`youtube_play`)
+#   - power_files     : dir sizes, file search, Recycle Bin trash, ZIP archives, smart organizer, duplicates, Office/PDF inspection
+#   - web_power       : DuckDuckGo search, webpage extraction, REST HTTP requests, downloads, RSS/Atom feeds
+#   - media_studio    : FFmpeg video/audio editing, GIF conversion, frame extraction, Pillow image/PDF tools
+#   - local_workbench : SQLite workbench, CSV import, personal vault, read-only Git inspection, AST calculator/units
+#
 # mcp_servers:
 #   time:
 #     command: uvx

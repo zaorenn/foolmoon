@@ -2,7 +2,9 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
 import { ErrorBoundary } from '@/components/error-boundary'
+import { $studioAppearance, applyStudioToDocument } from '@/store/appearance-studio'
 import { ThemeProvider } from '@/themes/context'
+import { ensureShowcaseThemesRegistered } from '@/themes/studio-presets'
 
 import { QuickEntryApp } from './quick-entry-app'
 
@@ -16,6 +18,11 @@ import { QuickEntryApp } from './quick-entry-app'
  * so force the host layers see-through (same trick as the pet overlay).
  */
 export function mountQuickEntry(): void {
+  ensureShowcaseThemesRegistered()
+  $studioAppearance.subscribe(state => {
+    applyStudioToDocument(state)
+  })
+
   const style = document.createElement('style')
   style.textContent = 'html,body,#root{background:transparent !important;}'
   document.head.appendChild(style)

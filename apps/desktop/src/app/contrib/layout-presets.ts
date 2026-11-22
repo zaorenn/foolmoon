@@ -96,6 +96,25 @@ const QUAD_TREE = split(
   [3, 1]
 )
 
+const JARVIS_COMMAND_TREE = split(
+  'column',
+  [
+    split('row', [group(['sessions']), group(['workspace']), group(['review', 'files'])], [0.95, 3.3, 1.35]),
+    group(['terminal'])
+  ],
+  [3.1, 1]
+)
+
+const HERMES_STUDIO_TREE = split(
+  'row',
+  [
+    group(['sessions']),
+    split('column', [group(['workspace']), group(['terminal'])], [2.4, 1]),
+    group(['files', 'review'])
+  ],
+  [0.95, 3.0, 1.4]
+)
+
 export function registerLayoutPresets() {
   // Simple is always the Basic arrangement; its one choice is which side the
   // sidebar sits. The decks are Advanced — arranging tooling is the point.
@@ -110,6 +129,8 @@ export function registerLayoutPresets() {
       tier: 'simple'
     },
     { id: 'default', title: 'Default', order: 0, tree: DEFAULT_TREE, tier: 'advanced' },
+    { id: 'jarvis-command', title: 'Jarvis Command Center', order: 2, tree: JARVIS_COMMAND_TREE, tier: 'advanced' },
+    { id: 'hermes-studio', title: 'Hermes Studio', order: 4, tree: HERMES_STUDIO_TREE, tier: 'advanced' },
     { id: 'basic', title: 'Basic', order: 5, tree: BASIC_TREE, resting: BASIC_RESTING, tier: 'advanced' },
     { id: 'focus', title: 'Focus', order: 10, tree: FOCUS_TREE, resting: ['terminal'], tier: 'advanced' },
     {

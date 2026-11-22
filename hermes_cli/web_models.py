@@ -601,3 +601,32 @@ class _PluginVisibilityBody(BaseModel):
 class _PluginAutoUpdateBody(BaseModel):
     enabled: bool
 
+
+class VoiceCloneUploadRequest(BaseModel):
+    name: str
+    data_url: str
+    filename: Optional[str] = None
+    ref_text: Optional[str] = None
+    activate: bool = True
+
+
+class VoiceCloneActivateRequest(BaseModel):
+    clone_id: Optional[str] = None
+    engine: Optional[str] = None
+    warm: bool = True
+
+
+class MemoryFileUpdate(BaseModel):
+    target: Literal["memory", "user"]
+    content: str = Field(default="", max_length=50000)
+
+
+class MemoryProfileSeed(BaseModel):
+    name: str = Field(default="", max_length=120)
+    address_as: str = Field(default="", max_length=120)
+    language: str = Field(default="", max_length=80)
+    style: str = Field(default="", max_length=240)
+    role: str = Field(default="", max_length=240)
+    rules: str = Field(default="", max_length=2000)
+    apply_personality: bool = False
+
