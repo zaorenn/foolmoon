@@ -325,8 +325,70 @@ export function NotchShell({ inAppPreview = false }: NotchShellProps) {
   const inputRef = useRef<HTMLInputElement | null>(null)
   const shelfFileRef = useRef<HTMLInputElement | null>(null)
 
-  const isSpeaking = playback.status === 'speaking'
-  const hasLyrics = Boolean(playback.sentence) || (playback.words?.length ?? 0) > 0
+  const mirroredPlayback = notch.voicePlayback
+  const ipcTimingAnchorRef = useRef<{
+    key: string
+    lastRef: typeof mirroredPlayback
+    startTimeMs: number
+  }>({
+    key: '',
+    lastRef: null,
+    startTimeMs: 0,
+  })
+  const mirroredKey = mirroredPlayback
+    ? `${mirroredPlayback.status}|${mirroredPlayback.sentence}|${mirroredPlayback.words?.length ?? 0}`
+    : ''
+
+  if (!mirroredPlayback || mirroredPlayback.status !== 'speaking') {
+    ipcTimingAnchorRef.current = {
+      key: '',
+      lastRef: mirroredPlayback ?? null,
+      startTimeMs: 0,
+    }
+  } else if (ipcTimingAnchorRef.current.key !== mirroredKey) {
+    const nowPerf =
+      typeof performance !== 'undefined' ? performance.now() : Date.now()
+    ipcTimingAnchorRef.current = {
+      key: mirroredKey,
+      lastRef: mirroredPlayback,
+      startTimeMs: nowPerf - Math.max(0, mirroredPlayback.elapsedMs ?? 0),
+    }
+  } else if (ipcTimingAnchorRef.current.lastRef !== mirroredPlayback) {
+    const nowPerf =
+      typeof performance !== 'undefined' ? performance.now() : Date.now()
+    const freshElapsed = Math.max(0, mirroredPlayback.elapsedMs ?? 0)
+    const predictedElapsed = nowPerf - ipcTimingAnchorRef.current.startTimeMs
+    ipcTimingAnchorRef.current.lastRef = mirroredPlayback
+
+    if (Math.abs(predictedElapsed - freshElapsed) > 180) {
+      ipcTimingAnchorRef.current.startTimeMs = nowPerf - freshElapsed
+    }
+  }
+
+  const hasLocalPlayback =
+    playback.status !== 'idle' ||
+    Boolean(playback.sentence) ||
+    (playback.words?.length ?? 0) > 0
+  const effectivePlayback =
+    hasLocalPlayback || !mirroredPlayback
+      ? playback
+      : {
+          ...playback,
+          audioLevel: mirroredPlayback.audioLevel ?? 0,
+          mouthRound: mirroredPlayback.mouthRound ?? 0,
+          mouthWide: mirroredPlayback.mouthWide ?? 0,
+          sentence: mirroredPlayback.sentence ?? '',
+          sentenceStartTimeMs: ipcTimingAnchorRef.current.startTimeMs,
+          status:
+            (mirroredPlayback.status as typeof playback.status) ?? 'idle',
+          words:
+            (mirroredPlayback.words as typeof playback.words) ?? [],
+        }
+
+  const isSpeaking = effectivePlayback.status === 'speaking'
+  const hasLyrics =
+    Boolean(effectivePlayback.sentence) ||
+    (effectivePlayback.words?.length ?? 0) > 0
 
   const isBusy =
     notch.agentStatus === 'thinking' ||
@@ -671,7 +733,7 @@ export function NotchShell({ inAppPreview = false }: NotchShellProps) {
     })
   }
 
-  const signalLevel = isSpeaking ? (playback.audioLevel ?? 0) : notch.micLevel
+  const signalLevel = isSpeaking ? (effectivePlayback.audioLevel ?? 0) : notch.micLevel
   const isListening = notch.agentStatus === 'listening'
   const haloActive = jarvisOn || isBusy || isSpeaking || Boolean(pendingApproval) || Boolean(pendingClarify)
 
@@ -716,9 +778,11 @@ export function NotchShell({ inAppPreview = false }: NotchShellProps) {
       : isSimpleNotch && activeTab === 'jarvis' && !showContextShelf
         ? 'w-[344px] max-w-[80vw]'
         : 'w-[412px] max-w-[82vw]'
-    : isBusy || isSpeaking
-      ? 'w-[356px] max-w-[80vw]'
-      : 'w-[276px] max-w-[78vw]'
+    : hasLyrics
+      ? 'w-[388px] max-w-[84vw]'
+      : isBusy || isSpeaking
+        ? 'w-[356px] max-w-[80vw]'
+        : 'w-[276px] max-w-[78vw]'
 
   const shouldShowBbot =
     !resolvedBbotConfig.hideWhenIdle ||
@@ -957,15 +1021,30 @@ export function NotchShell({ inAppPreview = false }: NotchShellProps) {
                 }}
                 role="presentation"
               >
-                <AuroraWaveVisualizer
-                  activityKind={activityKind}
-                  hovered={hovered}
-                  intensity={resolvedNotchConfig.animationIntensity}
-                  isActive={isDynamicActive}
-                  palette={resolvedNotchConfig.auroraPalette}
-                  phase={pulsePhase}
-                  signalLevel={signalLevel}
-                />
+                {hasLyrics ? (
+                  <div className="flex min-w-0 w-full items-center justify-center overflow-hidden">
+                    <LiveLyrics
+                      className="w-full justify-center"
+                      compact
+                      isSpeaking={isSpeaking}
+                      sciFi
+                      sentence={effectivePlayback.sentence ?? ''}
+                      sentenceStartTimeMs={effectivePlayback.sentenceStartTimeMs ?? 0}
+                      singleLine
+                      words={effectivePlayback.words ?? []}
+                    />
+                  </div>
+                ) : (
+                  <AuroraWaveVisualizer
+                    activityKind={activityKind}
+                    hovered={hovered}
+                    intensity={resolvedNotchConfig.animationIntensity}
+                    isActive={isDynamicActive}
+                    palette={resolvedNotchConfig.auroraPalette}
+                    phase={pulsePhase}
+                    signalLevel={signalLevel}
+                  />
+                )}
               </div>
 
               <div
@@ -1060,9 +1139,9 @@ export function NotchShell({ inAppPreview = false }: NotchShellProps) {
                         compact
                         isSpeaking={isSpeaking}
                         sciFi
-                        sentence={playback.sentence ?? ''}
-                        sentenceStartTimeMs={playback.sentenceStartTimeMs ?? 0}
-                        words={playback.words ?? []}
+                        sentence={effectivePlayback.sentence ?? ''}
+                        sentenceStartTimeMs={effectivePlayback.sentenceStartTimeMs ?? 0}
+                        words={effectivePlayback.words ?? []}
                       />
                     </div>
                   ) : (
@@ -1366,11 +1445,28 @@ export function NotchShell({ inAppPreview = false }: NotchShellProps) {
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div
-                        aria-hidden="true"
-                        className="flex h-4 items-center gap-[2px]"
+                        aria-hidden={hasLyrics ? undefined : true}
+                        className={
+                          hasLyrics
+                            ? 'flex h-5 min-w-0 flex-1 items-center overflow-hidden'
+                            : 'flex h-4 items-center gap-[2px]'
+                        }
                         data-testid="notch-scifi-waveform-stage"
                       >
-                        {stageBars}
+                        {hasLyrics ? (
+                          <LiveLyrics
+                            className="w-full"
+                            compact
+                            isSpeaking={isSpeaking}
+                            sciFi={false}
+                            sentence={effectivePlayback.sentence ?? ''}
+                            sentenceStartTimeMs={effectivePlayback.sentenceStartTimeMs ?? 0}
+                            singleLine
+                            words={effectivePlayback.words ?? []}
+                          />
+                        ) : (
+                          stageBars
+                        )}
                       </div>
                       <div className="flex items-center gap-1 text-[10.5px]">
                         <button

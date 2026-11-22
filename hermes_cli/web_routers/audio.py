@@ -377,25 +377,38 @@ async def speak_text(payload: TTSSpeakRequest, profile: Optional[str] = None):
 
     mime_type = _SPEAK_MIME_BY_EXT.get(os.path.splitext(file_path)[1].lower(), "audio/mpeg")
 
-    def _read_and_unlink() -> bytes:
+    def _read_timings_and_unlink() -> tuple[bytes, list]:
         # Off-loop: synthesized audio can be several MB; reading it inline
         # blocks the uvicorn event loop. Unlink rides the same thread hop so
         # the temp file cannot outlive an early return.
         try:
             with open(file_path, "rb") as fh:
-                return fh.read()
+                raw = fh.read()
+            timings: list = []
+            try:
+                from tools.tts_cloning_cuda import compute_word_timings_ms
+                pcm, sr = _audio_file_to_pcm(file_path)
+                if pcm:
+                    timings = compute_word_timings_ms(text, pcm, sr)
+            except Exception:
+                timings = []
+            return raw, timings
         finally:
             _unlink_quietly(file_path)
 
     try:
-        audio_bytes = await asyncio.to_thread(_read_and_unlink)
+        audio_bytes, word_timings = await asyncio.to_thread(_read_timings_and_unlink)
     except OSError as exc:
         raise HTTPException(status_code=500, detail=f"Could not read audio: {exc}")
 
     encoded = base64.b64encode(audio_bytes).decode("ascii")
     return {
-        "ok": True, "data_url": f"data:{mime_type};base64,{encoded}", "mime_type": mime_type,
+        "ok": True,
+        "data_url": f"data:{mime_type};base64,{encoded}",
+        "mime_type": mime_type,
         "provider": result.get("provider"),
+        "sentence": text,
+        "word_timings": word_timings,
     }
 
 
@@ -1050,6 +1063,7 @@ async def speak_stream_ws(ws: WebSocket) -> None:
                     if stop.is_set():
                         return
                     yielded_piece = False
+                    sent_meta = False
                     try:
                         for chunk in streamer.stream(piece):
                             if stop.is_set():
@@ -1058,6 +1072,23 @@ async def speak_stream_ws(ws: WebSocket) -> None:
                                 continue
                             yielded_piece = True
                             produced_audio = True
+                            if not sent_meta:
+                                sent_meta = True
+                                cur_rate = getattr(streamer, "sample_rate", 24000) or 24000
+                                if isinstance(streamer, _SyncSentencePCMStreamer):
+                                    w_timings = compute_word_timings_ms(piece, chunk, cur_rate)
+                                    dur_ms = max(60, int(round((len(chunk) // 2 / max(8000, cur_rate)) * 1000.0)))
+                                else:
+                                    w_timings = []
+                                    dur_ms = 0
+                                meta = {
+                                    "type": "sentence",
+                                    "text": piece,
+                                    "words": w_timings,
+                                    "durationMs": dur_ms,
+                                    "sampleRate": cur_rate,
+                                }
+                                loop.call_soon_threadsafe(chunks.put_nowait, meta)
                             loop.call_soon_threadsafe(chunks.put_nowait, chunk)
                     except Exception as stream_exc:
                         if yielded_piece:
@@ -1069,6 +1100,16 @@ async def speak_stream_ws(ws: WebSocket) -> None:
                         if rate and rate != getattr(streamer, "sample_rate", 24000) and not start_sent:
                             streamer.sample_rate = rate
                         if pcm:
+                            w_timings = compute_word_timings_ms(piece, pcm, rate)
+                            dur_ms = max(60, int(round((len(pcm) // 2 / max(8000, rate)) * 1000.0)))
+                            meta = {
+                                "type": "sentence",
+                                "text": piece,
+                                "words": w_timings,
+                                "durationMs": dur_ms,
+                                "sampleRate": rate,
+                            }
+                            loop.call_soon_threadsafe(chunks.put_nowait, meta)
                             produced_audio = True
                             loop.call_soon_threadsafe(chunks.put_nowait, pcm)
         except Exception as exc:

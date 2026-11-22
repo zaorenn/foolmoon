@@ -10,6 +10,7 @@ export interface LiveLyricsProps {
   sciFi?: boolean
   sentence: string
   sentenceStartTimeMs: number
+  singleLine?: boolean
   words: VoiceWordTiming[]
 }
 
@@ -23,6 +24,7 @@ export function LiveLyrics({
   sciFi = false,
   sentence,
   sentenceStartTimeMs,
+  singleLine = false,
   words
 }: LiveLyricsProps) {
   const [elapsedMs, setElapsedMs] = useState(0)
@@ -59,7 +61,7 @@ export function LiveLyrics({
   if (words.length === 0) {
     return (
       <div
-        className={`overflow-hidden text-ellipsis whitespace-nowrap text-xs font-medium ${sciFi ? 'text-slate-100 drop-shadow-[0_0_8px_rgba(56,189,248,0.4)]' : 'text-foreground'} ${className}`}
+        className={`overflow-hidden text-ellipsis whitespace-nowrap font-medium ${compact ? 'text-[11px]' : 'text-xs'} ${sciFi ? 'text-slate-100 drop-shadow-[0_0_8px_rgba(56,189,248,0.4)]' : 'text-foreground'} ${className}`}
       >
         {sentence}
       </div>
@@ -72,14 +74,20 @@ export function LiveLyrics({
     activeIdx = words.reduce((lastIdx, w, idx) => (elapsedMs >= w.startMs ? idx : lastIdx), 0)
   }
 
-  const windowStart = Math.max(0, Math.min(words.length - MAX_WINDOW_WORDS, activeIdx - 8))
-  const windowEnd = Math.min(words.length, windowStart + MAX_WINDOW_WORDS)
+  const maxWindow = singleLine ? 7 : MAX_WINDOW_WORDS
+  const leadContext = singleLine ? 2 : 8
+  const windowStart = Math.max(0, Math.min(words.length - maxWindow, activeIdx - leadContext))
+  const windowEnd = Math.min(words.length, windowStart + maxWindow)
   const visible = words.slice(windowStart, windowEnd)
 
   return (
     <div
       aria-live="polite"
-      className={`flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 leading-snug ${compact ? 'text-[11px]' : 'text-xs'} ${className}`}
+      className={`flex min-w-0 items-center ${
+        singleLine
+          ? 'flex-nowrap gap-x-1 overflow-hidden whitespace-nowrap leading-none'
+          : 'flex-wrap gap-x-1.5 gap-y-0.5 leading-snug'
+      } ${compact ? 'text-[11px]' : 'text-xs'} ${className}`}
     >
       {visible.map((item, offset) => {
         const idx = windowStart + offset

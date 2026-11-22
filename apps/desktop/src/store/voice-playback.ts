@@ -1,4 +1,5 @@
 import { atom } from 'nanostores'
+import { $notchState, publishNotchState } from './notch'
 
 export type VoicePlaybackSource = 'read-aloud' | 'voice-conversation'
 export type VoicePlaybackStatus = 'idle' | 'preparing' | 'speaking'
@@ -89,10 +90,66 @@ if (typeof window !== 'undefined' && typeof BroadcastChannel === 'function') {
   getBroadcastChannel()
 }
 
+const NOTCH_METRIC_THROTTLE_MS = 100
+let lastNotchPushAt = 0
+let lastNotchKey = ''
+
+function syncVoicePlaybackToNotch(
+  state: VoicePlaybackState,
+  elapsedMs: number,
+  now: number,
+): void {
+  const key = `${state.status}|${state.sentence}|${state.words.length}|${state.sentenceStartTimeMs}`
+  const isStateChange = key !== lastNotchKey
+
+  if (!isStateChange && now - lastNotchPushAt < NOTCH_METRIC_THROTTLE_MS) {
+    return
+  }
+
+  lastNotchKey = key
+  lastNotchPushAt = now
+
+  const currentStatus = $notchState.get().agentStatus
+  const nextAgentStatus =
+    state.status === 'speaking'
+      ? 'speaking'
+      : currentStatus === 'speaking'
+        ? 'idle'
+        : undefined
+
+  const hasContent =
+    state.status === 'speaking' ||
+    Boolean(state.sentence) ||
+    state.words.length > 0
+
+  publishNotchState({
+    ...(nextAgentStatus !== undefined ? { agentStatus: nextAgentStatus } : {}),
+    voicePlayback: hasContent
+      ? {
+          audioLevel: state.audioLevel,
+          elapsedMs,
+          mouthRound: state.mouthRound,
+          mouthWide: state.mouthWide,
+          sentence: state.sentence,
+          status: state.status,
+          words: state.words,
+        }
+      : null,
+  })
+}
+
 function broadcastState(state: VoicePlaybackState): void {
   if (applyingRemote) {
     return
   }
+
+  const now = performance.now()
+  const elapsedMs =
+    state.status === 'speaking' && state.sentenceStartTimeMs
+      ? Math.max(0, now - state.sentenceStartTimeMs)
+      : 0
+
+  syncVoicePlaybackToNotch(state, elapsedMs, now)
 
   const ch = getBroadcastChannel()
 
@@ -102,11 +159,6 @@ function broadcastState(state: VoicePlaybackState): void {
 
   try {
     const { audioElement: _omit, ...serializable } = state
-
-    const elapsedMs =
-      state.status === 'speaking' && state.sentenceStartTimeMs
-        ? Math.max(0, performance.now() - state.sentenceStartTimeMs)
-        : 0
 
     ch.postMessage({ ...serializable, elapsedMs })
   } catch {

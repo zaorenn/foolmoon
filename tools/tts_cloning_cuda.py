@@ -2214,22 +2214,35 @@ def _resolve_uv_binary() -> str:
     raise RuntimeError("uv runtime tool was not found. Re-run setup or install uv first.")
 
 
+def _uv_clean_env(base_env: Optional[dict[str, str]] = None) -> dict[str, str]:
+    env = dict(base_env if base_env is not None else os.environ)
+    for k in ("UV_EXCLUDE_NEWER", "UV_CONFIG_FILE", "UV_INDEX_STRATEGY", "UV_FROZEN", "UV_LOCKED"):
+        env.pop(k, None)
+    env["UV_NO_CONFIG"] = "1"
+    env["PIP_DISABLE_PIP_VERSION_CHECK"] = "1"
+    return env
+
+
 def _run_cmd_logged(
     cmd: list[str],
     job_key: str,
     *,
+    cwd: Optional[Path] = None,
     env: Optional[dict[str, str]] = None,
     timeout: int = 1800,
 ) -> None:
     _update_install_job(job_key, log_line="$ " + " ".join(cmd[:6]) + (" ..." if len(cmd) > 6 else ""))
+    work_dir = cwd or resolve_voice_root()
+    work_dir.mkdir(parents=True, exist_ok=True)
     proc = subprocess.Popen(
         cmd,
+        cwd=str(work_dir),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
         encoding="utf-8",
         errors="replace",
-        env=env,
+        env=_uv_clean_env(env),
         stdin=subprocess.DEVNULL,
         creationflags=windows_hide_flags(),
     )
@@ -2336,7 +2349,12 @@ def _run_tts_install_worker(engine_id: str, job_key: str, activate: bool) -> Non
         if not py_exe.is_file():
             _update_install_job(job_key, progress=12, step="Creating Python 3.11 runtime via uv...")
             venv_dir.parent.mkdir(parents=True, exist_ok=True)
-            _run_cmd_logged([uv_exe, "venv", "--python", "3.11", "--seed", str(venv_dir)], job_key, timeout=300)
+            _run_cmd_logged(
+                [uv_exe, "venv", "--no-config", "--python", "3.11", "--seed", str(venv_dir)],
+                job_key,
+                cwd=venv_dir.parent,
+                timeout=300,
+            )
 
         sp = _venv_site_packages(venv_dir)
         has_gpu, _gpu_name = _detect_gpu_summary()
@@ -2347,10 +2365,22 @@ def _run_tts_install_worker(engine_id: str, job_key: str, activate: bool) -> Non
                 progress=28,
                 step="Installing PyTorch (CUDA 12.4)..." if has_gpu else "Installing PyTorch (CPU)...",
             )
-            torch_cmd = [uv_exe, "pip", "install", "--python", str(py_exe), "torch==2.6.0", "torchaudio==2.6.0"]
             if has_gpu:
-                torch_cmd.extend(["--index-url", "https://download.pytorch.org/whl/cu124"])
-            _run_cmd_logged(torch_cmd, job_key, timeout=1800)
+                torch_cmd = [
+                    uv_exe, "pip", "install", "--no-config",
+                    "--python", str(py_exe),
+                    "--index-url", "https://download.pytorch.org/whl/cu124",
+                    "--extra-index-url", "https://pypi.org/simple",
+                    "--index-strategy", "unsafe-best-match",
+                    "torch==2.6.0+cu124", "torchaudio==2.6.0+cu124",
+                ]
+            else:
+                torch_cmd = [
+                    uv_exe, "pip", "install", "--no-config",
+                    "--python", str(py_exe),
+                    "torch==2.6.0", "torchaudio==2.6.0",
+                ]
+            _run_cmd_logged(torch_cmd, job_key, cwd=venv_dir, timeout=1800)
 
         _update_install_job(job_key, progress=55, step=f"Installing {engine_id} packages...")
         if engine_id in ("chatterbox", "chatterbox_turbo"):
@@ -2373,7 +2403,14 @@ def _run_tts_install_worker(engine_id: str, job_key: str, activate: bool) -> Non
         else:
             raise ValueError(f"Unsupported TTS engine: {engine_id}")
 
-        _run_cmd_logged([uv_exe, "pip", "install", "--python", str(py_exe), *pkgs], job_key, timeout=1800)
+        pkg_cmd = [uv_exe, "pip", "install", "--no-config", "--python", str(py_exe)]
+        if has_gpu:
+            pkg_cmd.extend([
+                "--extra-index-url", "https://download.pytorch.org/whl/cu124",
+                "--index-strategy", "unsafe-best-match",
+            ])
+        pkg_cmd.extend(pkgs)
+        _run_cmd_logged(pkg_cmd, job_key, cwd=venv_dir, timeout=1800)
 
         _update_install_job(job_key, progress=78, step=f"Downloading {engine_id} model weights...")
         dl_env = _engine_install_env(engine_id)

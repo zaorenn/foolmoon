@@ -48,7 +48,7 @@ import {
   subscribeNotchCommands,
   triggerBbotSpotlight
 } from '@/store/notch'
-import { $voicePlayback } from '@/store/voice-playback'
+import { $voicePlayback, setVoicePlaybackState } from '@/store/voice-playback'
 
 import { SimpleJarvisBar } from '../chat/simple-jarvis-bar'
 
@@ -624,6 +624,87 @@ describe('Hardware Notch, Live Lyrics & Dual-Mode Controls', () => {
       unsub()
       clearNotchShelf()
       ;(window as unknown as Record<string, unknown>).hermesDesktop = prevDesktop
+    }
+  })
+
+  it('replaces Notch wavelength visualizer with synced LiveLyrics during active speech and across IPC mirror', () => {
+    const prevState = $notchState.get()
+
+    try {
+      render(<NotchShell inAppPreview />)
+      expect(screen.getByTestId('notch-aurora-wave')).toBeTruthy()
+
+      act(() => {
+        setVoicePlaybackState({
+          audioLevel: 0.72,
+          sentence: 'Synced Notch captions active',
+          sentenceStartTimeMs: performance.now(),
+          status: 'speaking',
+          words: [
+            { endMs: 300, startMs: 0, word: 'Synced' },
+            { endMs: 650, startMs: 300, word: 'Notch' },
+            { endMs: 1100, startMs: 650, word: 'captions' },
+            { endMs: 1500, startMs: 1100, word: 'active' }
+          ]
+        })
+      })
+
+      expect($notchState.get().voicePlayback?.sentence).toBe('Synced Notch captions active')
+      expect(screen.queryByTestId('notch-aurora-wave')).toBeNull()
+
+      const waveSlot = screen.getByTestId('notch-scifi-waveform')
+      expect(waveSlot.textContent).toContain('Synced')
+      expect(waveSlot.textContent).toContain('captions')
+
+      act(() => {
+        setVoicePlaybackState({
+          audioLevel: 0,
+          sentence: '',
+          sentenceStartTimeMs: 0,
+          status: 'idle',
+          words: []
+        })
+      })
+
+      expect($notchState.get().voicePlayback).toBeNull()
+      expect(screen.getByTestId('notch-aurora-wave')).toBeTruthy()
+
+      // Separate Notch OS window receives playback only through mirrored IPC state
+      act(() => {
+        $notchState.set({
+          ...$notchState.get(),
+          agentStatus: 'speaking',
+          voicePlayback: {
+            audioLevel: 0.65,
+            elapsedMs: 100,
+            mouthRound: 0.4,
+            mouthWide: 0.3,
+            sentence: 'Mirrored edge caption',
+            status: 'speaking',
+            words: [
+              { endMs: 250, startMs: 0, word: 'Mirrored' },
+              { endMs: 550, startMs: 250, word: 'edge' },
+              { endMs: 900, startMs: 550, word: 'caption' }
+            ]
+          }
+        })
+      })
+
+      expect(screen.queryByTestId('notch-aurora-wave')).toBeNull()
+      expect(screen.getByTestId('notch-scifi-waveform').textContent).toContain('Mirrored')
+      expect(screen.getByTestId('notch-scifi-waveform').textContent).toContain('caption')
+    } finally {
+      $voicePlayback.set({
+        audioElement: null,
+        audioLevel: 0,
+        mouthRound: 0,
+        mouthWide: 0,
+        sentence: '',
+        sentenceStartTimeMs: 0,
+        status: 'idle',
+        words: []
+      })
+      $notchState.set(prevState)
     }
   })
 })

@@ -297,6 +297,16 @@ export interface NotchActivityEntry {
   kind: NotchActivityKind
 }
 
+export interface NotchVoicePlaybackMirror {
+  audioLevel: number
+  elapsedMs: number
+  mouthRound: number
+  mouthWide: number
+  sentence: string
+  status: string
+  words: readonly unknown[]
+}
+
 export interface NotchMirrorState {
   activeCloneId: string | null
   activeUniverse?: string
@@ -323,6 +333,7 @@ export interface NotchMirrorState {
   sessionTitle: string | null
   toolName: string | null
   voiceClones: VoiceCloneEntry[]
+  voicePlayback?: NotchVoicePlaybackMirror | null
   wakeWord: string
 }
 
@@ -384,6 +395,7 @@ const INITIAL_MIRROR: NotchMirrorState = {
   sessionTitle: null,
   toolName: null,
   voiceClones: [],
+  voicePlayback: null,
   wakeWord: 'Hey Foolmoon'
 }
 
