@@ -1504,7 +1504,11 @@ namespace FoolmoonSetup
                             while ((errLine = proc.StandardError.ReadLine()) != null)
                             {
                                 string captured = errLine;
-                                Dispatcher.BeginInvoke(new Action(() => AppendLog("[ERR] " + captured)));
+                                if (string.IsNullOrWhiteSpace(captured)) continue;
+                                string low = captured.ToLowerInvariant();
+                                bool looksLikeErr = low.Contains("error") || low.Contains("fatal") || low.Contains("exception") || low.Contains("failed") || low.Contains("traceback");
+                                string formatted = looksLikeErr ? ("[ERR] " + captured) : captured;
+                                Dispatcher.BeginInvoke(new Action(() => AppendLog(formatted)));
                             }
                         }) { IsBackground = true };
                         errThread.Start();

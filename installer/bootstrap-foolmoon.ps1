@@ -131,7 +131,7 @@ if ((Test-Path -LiteralPath (Join-Path $installDir '.git'))) {
 } else {
     $parentDir = Split-Path -Parent $installDir
     if ($parentDir) { New-Item -ItemType Directory -Force -Path $parentDir | Out-Null }
-    & $gitExe clone --branch main $foolmoonRepoUrl $installDir | Out-Host
+    & $gitExe clone --depth 1 --single-branch --branch main $foolmoonRepoUrl $installDir | Out-Host
     if ($LASTEXITCODE -ne 0) { throw "Failed to clone repository: $foolmoonRepoUrl" }
     & $gitExe -C $installDir remote add upstream $upstreamRepoUrl | Out-Null
 }
@@ -158,7 +158,13 @@ Emit-Stage -StageId 'desktop' -Status 'running' -Percent 68 -Message 'Building F
 foreach ($v in @('PYTHONPATH', 'PYTHONHOME', 'VIRTUAL_ENV', '__HERMES_ACTIVATED', '__HERMES_TEST_PYTHON')) {
     Remove-Item "Env:$v" -ErrorAction SilentlyContinue
 }
-. (Join-Path $installDir 'activate.ps1') | Out-Null
+$env:HERMES_SKIP_ACTIVATE_SETUP = '1'
+try {
+    . (Join-Path $installDir 'activate.ps1') | Out-Null
+} finally {
+    Remove-Item Env:HERMES_SKIP_ACTIVATE_SETUP -ErrorAction SilentlyContinue
+}
+$activatedPython = $env:PYTHON
 foreach ($v in @('PYTHONPATH', 'PYTHONHOME', 'VIRTUAL_ENV', '__HERMES_ACTIVATED', '__HERMES_TEST_PYTHON')) {
     Remove-Item "Env:$v" -ErrorAction SilentlyContinue
 }
@@ -166,9 +172,9 @@ $env:HERMES_HOME = $hermesHome
 
 Push-Location $installDir
 try {
-    pnpm install --frozen-lockfile | Out-Host
+    pnpm install --frozen-lockfile --trust-lockfile --filter "{./apps/desktop}..." | Out-Host
     if ($LASTEXITCODE -ne 0) {
-        pnpm install | Out-Host
+        pnpm install --filter "{./apps/desktop}..." | Out-Host
         if ($LASTEXITCODE -ne 0) { throw 'Failed to install desktop Node packages.' }
     }
     Set-Location (Join-Path $installDir 'apps\desktop')
@@ -185,11 +191,30 @@ Emit-Stage -StageId 'desktop' -Status 'done' -Percent 84 -Message 'Foolmoon Desk
 # ----------------------------------------------------------------------------
 Emit-Stage -StageId 'personalize' -Status 'running' -Percent 87 -Message 'Configuring LM Studio endpoint, profile memory, skills, and MCP servers...'
 
-$venvPy = Join-Path $installDir '.venv\Scripts\python.exe'
-if (-not (Test-Path -LiteralPath $venvPy)) {
-    $venvPy = Join-Path $installDir 'venv\Scripts\python.exe'
+$venvPy = $null
+if ($activatedPython -and (Test-Path -LiteralPath $activatedPython)) {
+    $venvPy = $activatedPython
 }
-if (-not (Test-Path -LiteralPath $venvPy)) {
+if (-not $venvPy) {
+    $storePy = Get-ChildItem -LiteralPath $toolsStore -Directory -Filter 'python-*' -ErrorAction SilentlyContinue |
+        ForEach-Object { Join-Path $_.FullName 'python.exe' } |
+        Where-Object { Test-Path -LiteralPath $_ } |
+        Select-Object -First 1
+    if ($storePy) {
+        $resolvedPy = (& $storePy -c "import sys; from pathlib import Path; sys.path.insert(0, sys.argv[1]); from pm.environments import project_python; print(project_python(Path(sys.argv[1])))" $installDir 2>$null | Out-String).Trim()
+        if ($resolvedPy -and (Test-Path -LiteralPath $resolvedPy)) {
+            $venvPy = $resolvedPy
+        } else {
+            $venvPy = $storePy
+        }
+    }
+}
+if (-not $venvPy) {
+    foreach ($candidate in @((Join-Path $installDir '.venv\Scripts\python.exe'), (Join-Path $installDir 'venv\Scripts\python.exe'))) {
+        if (Test-Path -LiteralPath $candidate) { $venvPy = $candidate; break }
+    }
+}
+if (-not $venvPy) {
     throw 'Installed Hermes Python virtual environment not found.'
 }
 
@@ -197,7 +222,21 @@ $pySetupScript = @'
 import json
 import os
 from pathlib import Path
-import yaml
+import sys
+
+install_dir = Path(os.environ["FM_INSTALL_DIR"]).resolve()
+if str(install_dir) not in sys.path:
+    sys.path.insert(0, str(install_dir))
+try:
+    from pm.environments import activate_dependencies
+    activate_dependencies(install_dir)
+except Exception:
+    pass
+
+try:
+    import hermes_yaml as yaml
+except ImportError:
+    import yaml
 
 payload = json.loads(os.environ["FM_SETUP_JSON"])
 home = Path(os.environ["HERMES_HOME"])
@@ -301,12 +340,17 @@ sync_bundled_mcp_servers(home, quiet=True)
 '@
 
 $env:PYTHONPATH = $installDir
+$env:FM_INSTALL_DIR = $installDir
 $env:FM_SETUP_JSON = ($cfg | ConvertTo-Json -Compress)
+$tmpPy = Join-Path ([System.IO.Path]::GetTempPath()) ("foolmoon-personalize-" + [guid]::NewGuid().ToString('n') + ".py")
+[System.IO.File]::WriteAllText($tmpPy, $pySetupScript, (New-Object System.Text.UTF8Encoding($false)))
 try {
-    & $venvPy -c $pySetupScript | Out-Host
+    & $venvPy $tmpPy | Out-Host
     if ($LASTEXITCODE -ne 0) { throw 'Personalization and memory setup failed.' }
 } finally {
+    Remove-Item -LiteralPath $tmpPy -Force -ErrorAction SilentlyContinue
     Remove-Item Env:FM_SETUP_JSON -ErrorAction SilentlyContinue
+    Remove-Item Env:FM_INSTALL_DIR -ErrorAction SilentlyContinue
 }
 
 # Sync bundled skills into %LOCALAPPDATA%\hermes\skills

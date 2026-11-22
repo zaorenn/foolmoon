@@ -1,4 +1,4 @@
-# ============================================================================
+﻿# ============================================================================
 # Hermes Agent Setup Script (Windows) — THE dev-environment entry point.
 # ============================================================================
 # Sets up the pm-managed development environment from a fresh clone:
@@ -97,7 +97,10 @@ try {
         [Console]::OutputEncoding = $previousNativeOutputEncoding
     }
     if ($LASTEXITCODE -ne 0 -or -not $bootPy) { throw 'bootstrap Python lookup failed' }
-    & $bootPy.Trim() -m pm.cli install $(if ($RuntimeOnly) { '--trust-recorded' }) "--test-environment=$TestExtras"
+    $pmArgs = @('install')
+    if ($RuntimeOnly) { $pmArgs += '--trust-recorded' }
+    if (-not $RuntimeOnly -or $TestExtras) { $pmArgs += "--test-environment=$TestExtras" }
+    & $bootPy.Trim() -m pm.cli @pmArgs
     if ($LASTEXITCODE -ne 0) { throw 'pm install failed - see output above.' }
 } finally {
     Pop-Location

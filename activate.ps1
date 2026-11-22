@@ -14,12 +14,14 @@ foreach ($key in @('PYTHONPATH', 'PYTHONHOME', 'VIRTUAL_ENV')) {
     Remove-Item "env:$key" -ErrorAction SilentlyContinue
 }
 try {
-    # Run separately so setup's exit/failure cannot terminate the sourced shell.
-    $shell = (Get-Process -Id $PID).Path
-    $testArgs = @()
-    if ($TestExtras) { $testArgs = @('-TestExtras', $TestExtras) }
-    & $shell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$repo\setup-hermes.ps1" -RuntimeOnly @testArgs | Out-Host
-    if ($LASTEXITCODE -ne 0) { throw 'activate: setup failed; shell environment unchanged' }
+    if ($env:HERMES_SKIP_ACTIVATE_SETUP -ne '1') {
+        # Run separately so setup's exit/failure cannot terminate the sourced shell.
+        $shell = (Get-Process -Id $PID).Path
+        $testArgs = @()
+        if ($TestExtras) { $testArgs = @('-TestExtras', $TestExtras) }
+        & $shell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$repo\setup-hermes.ps1" -RuntimeOnly @testArgs | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw 'activate: setup failed; shell environment unchanged' }
+    }
 } finally {
     foreach ($key in $bootstrapSaved.Keys) {
         if ($null -eq $bootstrapSaved[$key]) { Remove-Item "env:$key" -ErrorAction SilentlyContinue }
