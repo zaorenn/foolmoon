@@ -61,22 +61,64 @@ export interface VoiceCloneEntry {
 }
 
 export interface VoiceCloneEngineInfo {
+  description?: string
+  error?: string | null
   id: string
   installed: boolean
+  installing?: boolean
+  kind?: string
+  label?: string
+  progress?: number
   running: boolean
+  sizeLabel?: string
+  step?: string
   supportsCloning: boolean
+}
+
+export interface VoiceSttModelInfo {
+  active: boolean
+  description?: string
+  error?: string | null
+  id: string
+  installed: boolean
+  installing?: boolean
+  label?: string
+  progress?: number
+  sizeLabel?: string
+  step?: string
+}
+
+export interface VoiceEngineInstallJob {
+  error?: string | null
+  key: string
+  logs?: string[]
+  progress: number
+  status: 'running' | 'completed' | 'failed'
+  step: string
+  targetId: string
+  targetType: 'tts' | 'stt'
 }
 
 export interface VoiceCloneListResponse {
   activeCloneId?: string | null
   activeEngine?: string | null
+  activeSttModel?: string | null
+  activeSttProvider?: string | null
+  activeTtsProvider?: string | null
   active_id?: string | null
   clones: VoiceCloneEntry[]
   cuda?: boolean
   engines?: VoiceCloneEngineInfo[]
   gpu_name?: string | null
+  installJobs?: VoiceEngineInstallJob[]
   ok: boolean
+  sttModels?: VoiceSttModelInfo[]
+  sttRuntimeInstalled?: boolean
   voiceRoot?: string
+}
+
+export interface VoiceEngineInstallResponse extends VoiceCloneListResponse {
+  job?: VoiceEngineInstallJob
 }
 
 export interface VoiceCloneCreateResponse {

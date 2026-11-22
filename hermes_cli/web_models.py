@@ -616,6 +616,12 @@ class VoiceCloneActivateRequest(BaseModel):
     warm: bool = True
 
 
+class VoiceEngineInstallRequest(BaseModel):
+    target_type: Literal["tts", "stt"] = "tts"
+    target_id: str
+    activate: bool = True
+
+
 class MemoryFileUpdate(BaseModel):
     target: Literal["memory", "user"]
     content: str = Field(default="", max_length=50000)

@@ -34,6 +34,7 @@ from hermes_cli.web_models import (
     TTSLeaseRequest,
     VoiceCloneActivateRequest,
     VoiceCloneUploadRequest,
+    VoiceEngineInstallRequest,
     VoiceLiveSessionRequest,
 )
 from typing import Any, Dict, Optional
@@ -399,11 +400,59 @@ async def speak_text(payload: TTSSpeakRequest, profile: Optional[str] = None):
 
 
 @router.get("/api/audio/clones")
-async def get_voice_clones():
-    """List registered voice clones, active clone/engine, and CUDA worker status."""
+async def get_voice_clones(profile: Optional[str] = None):
+    """List registered voice clones, active clone/engine, and TTS/STT install status."""
     from tools.tts_cloning_cuda import list_voice_clones
-    data = await asyncio.to_thread(list_voice_clones)
+    data = await _run_config_scoped(profile, list_voice_clones)
     return {"ok": True, **data}
+
+
+@router.get("/api/audio/engines/status")
+async def get_voice_engines_status_route(profile: Optional[str] = None):
+    """Return installation status, active selection, and live download progress for TTS/STT engines."""
+    from tools.tts_cloning_cuda import get_voice_engines_status
+    data = await _run_config_scoped(profile, get_voice_engines_status)
+    return {"ok": True, **data}
+
+
+@router.post("/api/audio/engines/install")
+async def install_voice_engine(payload: VoiceEngineInstallRequest, profile: Optional[str] = None):
+    """Download & install a local/CUDA TTS engine or local STT Whisper model."""
+    from tools.tts_cloning_cuda import list_voice_clones, start_voice_engine_install
+
+    with http_failure("Failed to start engine installation", 400, "Engine install failed"):
+        job = await _run_config_scoped(
+            profile,
+            lambda: start_voice_engine_install(
+                payload.target_type,
+                payload.target_id,
+                activate=payload.activate,
+            ),
+        )
+        status = await _run_config_scoped(profile, list_voice_clones)
+    return {"ok": True, "job": job, **status}
+
+
+@router.post("/api/audio/engines/activate")
+async def activate_voice_engine(payload: VoiceEngineInstallRequest, profile: Optional[str] = None):
+    """Activate an installed TTS engine or local STT Whisper model in config."""
+    from tools.tts_cloning_cuda import (
+        STT_MODEL_CATALOG_INFO,
+        TTS_ENGINE_CATALOG,
+        _persist_voice_selection,
+        list_voice_clones,
+        normalize_cloning_engine,
+    )
+
+    ttype = (payload.target_type or "tts").strip().lower()
+    tid = normalize_cloning_engine(payload.target_id) if ttype == "tts" else (payload.target_id or "").strip().lower()
+    valid = {m["id"] for m in (TTS_ENGINE_CATALOG if ttype == "tts" else STT_MODEL_CATALOG_INFO)}
+    if tid not in valid:
+        raise HTTPException(status_code=400, detail=f"Unknown {ttype} engine: {payload.target_id}")
+
+    await _run_config_scoped(profile, lambda: _persist_voice_selection(ttype, tid))
+    status = await _run_config_scoped(profile, list_voice_clones)
+    return {"ok": True, **status}
 
 
 @router.post("/api/audio/clones")
@@ -438,10 +487,15 @@ async def upload_voice_clone(payload: VoiceCloneUploadRequest):
 @router.post("/api/audio/clones/activate")
 async def activate_voice_clone(payload: VoiceCloneActivateRequest, profile: Optional[str] = None):
     """Select active voice clone and/or CUDA TTS engine and optionally update config.yaml."""
-    from tools.tts_cloning_cuda import CUDA_CLONING_PROVIDERS, normalize_cloning_engine, set_active_voice_clone
+    from tools.tts_cloning_cuda import (
+        TTS_ENGINE_CATALOG,
+        normalize_cloning_engine,
+        set_active_voice_clone,
+    )
 
+    valid_tts = {m["id"] for m in TTS_ENGINE_CATALOG}
     engine = normalize_cloning_engine(payload.engine or "") if payload.engine else None
-    if engine and engine in CUDA_CLONING_PROVIDERS:
+    if engine and engine in valid_tts:
         def _persist_provider():
             from hermes_cli.config import load_config, save_config
             from hermes_cli.config_backend import CONFIG_MUTATION_LOCK

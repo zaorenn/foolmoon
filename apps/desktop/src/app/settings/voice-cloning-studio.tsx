@@ -1,5 +1,19 @@
 import { useStore } from '@nanostores/react'
-import { Cpu, Mic, MicOff, Play, SlidersHorizontal, Sparkles, Square, Trash2, Upload, Volume2 } from 'lucide-react'
+import {
+  Check,
+  Cpu,
+  Download,
+  Loader2,
+  Mic,
+  MicOff,
+  Play,
+  SlidersHorizontal,
+  Sparkles,
+  Square,
+  Trash2,
+  Upload,
+  Volume2
+} from 'lucide-react'
 import { type ChangeEvent, useCallback, useEffect, useRef, useState } from 'react'
 
 import { BbotAvatar } from '@/app/notch/bbot-avatar'
@@ -7,11 +21,13 @@ import { LiveLyrics } from '@/app/notch/live-lyrics'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
+  activateVoiceEngine,
   createVoiceClone,
   deleteVoiceClone,
   getHermesConfigRecord,
   getLocalHardware,
   getVoiceCloneAudio,
+  installVoiceEngine,
   listVoiceClones,
   saveHermesConfig,
   setActiveVoiceClone
@@ -29,7 +45,136 @@ import {
 } from '@/store/notch'
 import { notify, notifyError } from '@/store/notifications'
 import { $voicePlayback } from '@/store/voice-playback'
-import type { VoiceCloneEntry, VoiceCloneListResponse } from '@/types/hermes'
+import type {
+  VoiceCloneEngineInfo,
+  VoiceCloneEntry,
+  VoiceCloneListResponse,
+  VoiceSttModelInfo
+} from '@/types/hermes'
+
+const DEFAULT_TTS_ENGINES: VoiceCloneEngineInfo[] = [
+  {
+    description: 'Ultra-fast GPU zero-shot voice cloning with CUDAGraph & BF16.',
+    id: 'chatterbox_turbo',
+    installed: false,
+    kind: 'cuda',
+    label: 'Chatterbox Turbo (CUDA)',
+    running: false,
+    sizeLabel: '~4.2 GB',
+    supportsCloning: true
+  },
+  {
+    description: 'Bilingual TR/EN zero-shot cloning with neural word-timing alignment.',
+    id: 'chatterbox',
+    installed: false,
+    kind: 'cuda',
+    label: 'Chatterbox Multilingual (CUDA)',
+    running: false,
+    sizeLabel: '~3.4 GB',
+    supportsCloning: true
+  },
+  {
+    description: 'Multilingual 17-language neural voice cloning on GPU.',
+    id: 'xtts_v2',
+    installed: false,
+    kind: 'cuda',
+    label: 'Coqui XTTS-v2 (CUDA)',
+    running: false,
+    sizeLabel: '~2.8 GB',
+    supportsCloning: true
+  },
+  {
+    description: 'Diffusion flow-matching zero-shot voice cloning.',
+    id: 'f5_tts',
+    installed: false,
+    kind: 'cuda',
+    label: 'F5-TTS Flow Matching (CUDA)',
+    running: false,
+    sizeLabel: '~2.4 GB',
+    supportsCloning: true
+  },
+  {
+    description: 'Compact high-speed local neural voice synthesis.',
+    id: 'kokoro',
+    installed: false,
+    kind: 'cuda',
+    label: 'Kokoro-82M Neural TTS',
+    running: false,
+    sizeLabel: '~450 MB',
+    supportsCloning: false
+  },
+  {
+    description: 'Offline CPU/ONNX neural synthesis (no GPU required).',
+    id: 'piper',
+    installed: false,
+    kind: 'local',
+    label: 'Piper Local VITS TTS',
+    running: false,
+    sizeLabel: '~75 MB',
+    supportsCloning: false
+  },
+  {
+    description: 'Zero-VRAM streaming neural voices (TR Emel / EN Aria).',
+    id: 'edge',
+    installed: false,
+    kind: 'cloud-free',
+    label: 'Edge Neural TTS',
+    running: false,
+    sizeLabel: '~5 MB',
+    supportsCloning: false
+  }
+]
+
+const DEFAULT_STT_MODELS: VoiceSttModelInfo[] = [
+  {
+    active: false,
+    description: 'Ultra-fast local speech recognition for quick voice commands.',
+    id: 'tiny',
+    installed: false,
+    label: 'Faster-Whisper Tiny',
+    sizeLabel: '~75 MB'
+  },
+  {
+    active: false,
+    description: 'Balanced bilingual TR/EN local speech recognition (recommended).',
+    id: 'base',
+    installed: false,
+    label: 'Faster-Whisper Base',
+    sizeLabel: '~145 MB'
+  },
+  {
+    active: false,
+    description: 'Higher accuracy multilingual local speech recognition.',
+    id: 'small',
+    installed: false,
+    label: 'Faster-Whisper Small',
+    sizeLabel: '~465 MB'
+  },
+  {
+    active: false,
+    description: 'Studio-grade accuracy for noisy rooms & mixed languages.',
+    id: 'medium',
+    installed: false,
+    label: 'Faster-Whisper Medium',
+    sizeLabel: '~1.5 GB'
+  },
+  {
+    active: false,
+    description: 'Maximum accuracy 99-language Whisper model.',
+    id: 'large-v3',
+    installed: false,
+    label: 'Faster-Whisper Large-v3',
+    sizeLabel: '~3.1 GB'
+  },
+  {
+    active: false,
+    description: 'Fast near-Large accuracy speech recognition.',
+    id: 'turbo',
+    installed: false,
+    label: 'Faster-Whisper Large-v3-Turbo',
+    sizeLabel: '~1.6 GB'
+  }
+]
 
 function encodeWavFromFloat32(samples: Float32Array, sampleRate: number): string {
   const numChannels = 1
@@ -168,6 +313,39 @@ export function VoiceCloningStudio({ scopeProfile }: { scopeProfile?: string }) 
     void refresh()
   }, [refresh])
 
+  const prevRunningJobsRef = useRef<Set<string>>(new Set())
+
+  const jobs = inventory?.installJobs ?? []
+  const anyInstalling =
+    jobs.some(j => j.status === 'running') ||
+    (inventory?.engines ?? []).some(e => e.installing) ||
+    (inventory?.sttModels ?? []).some(m => m.installing)
+
+  useEffect(() => {
+    const runningNow = new Set(jobs.filter(j => j.status === 'running').map(j => j.key))
+    for (const prevKey of prevRunningJobsRef.current) {
+      if (!runningNow.has(prevKey)) {
+        const finished = jobs.find(j => j.key === prevKey)
+        if (finished?.status === 'completed') {
+          notify({ kind: 'success', message: `Installed & activated ${finished.targetId}.` })
+        } else if (finished?.status === 'failed') {
+          notify({ kind: 'error', message: finished.error || `Failed installing ${finished.targetId}.` })
+        }
+      }
+    }
+    prevRunningJobsRef.current = runningNow
+  }, [jobs])
+
+  useEffect(() => {
+    if (!anyInstalling) {
+      return
+    }
+    const id = window.setInterval(() => {
+      void refresh()
+    }, 1500)
+    return () => window.clearInterval(id)
+  }, [anyInstalling, refresh])
+
   useEffect(
     () => () => {
       recAbortRef.current?.()
@@ -188,6 +366,35 @@ export function VoiceCloningStudio({ scopeProfile }: { scopeProfile?: string }) 
       await refresh()
     } catch (err) {
       notifyError(err, 'Could not activate voice clone / engine')
+    } finally {
+      setBusyAction(null)
+    }
+  }
+
+  const handleInstallEngine = async (targetType: 'tts' | 'stt', targetId: string) => {
+    setBusyAction(`install:${targetType}:${targetId}`)
+    try {
+      const res = await installVoiceEngine({ activate: true, target_id: targetId, target_type: targetType }, scopeProfile)
+      setInventory(res)
+      notify({ kind: 'info', message: `Downloading ${targetId}... progress will update automatically.` })
+    } catch (err) {
+      notifyError(err, `Could not start installation for ${targetId}`)
+    } finally {
+      setBusyAction(null)
+    }
+  }
+
+  const handleActivateEngine = async (targetType: 'tts' | 'stt', targetId: string) => {
+    setBusyAction(`activate:${targetType}:${targetId}`)
+    try {
+      const res =
+        targetType === 'tts' && ['chatterbox_turbo', 'chatterbox', 'xtts_v2', 'f5_tts', 'kokoro'].includes(targetId)
+          ? await setActiveVoiceClone(inventory?.activeCloneId ?? null, scopeProfile, { engine: targetId, warm: true })
+          : await activateVoiceEngine({ target_id: targetId, target_type: targetType }, scopeProfile)
+      setInventory(res)
+      notify({ kind: 'success', message: `Active ${targetType.toUpperCase()} set to ${targetId}.` })
+    } catch (err) {
+      notifyError(err, `Could not activate ${targetId}`)
     } finally {
       setBusyAction(null)
     }
@@ -434,8 +641,9 @@ export function VoiceCloningStudio({ scopeProfile }: { scopeProfile?: string }) 
 
   const clones = inventory?.clones ?? []
   const activeId = inventory?.activeCloneId ?? inventory?.active_id ?? null
-  const activeEngine = inventory?.activeEngine ?? 'chatterbox_turbo'
-  const engines = inventory?.engines ?? []
+  const activeEngine = inventory?.activeEngine ?? inventory?.activeTtsProvider ?? 'chatterbox_turbo'
+  const engines = inventory?.engines?.length ? inventory.engines : DEFAULT_TTS_ENGINES
+  const sttModels = inventory?.sttModels?.length ? inventory.sttModels : DEFAULT_STT_MODELS
   const cudaReady = Boolean(inventory?.cuda) || engines.some(e => e.installed)
 
   return (
@@ -458,14 +666,14 @@ export function VoiceCloningStudio({ scopeProfile }: { scopeProfile?: string }) 
           <div>
             <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
               <Sparkles className="h-4 w-4 text-primary" />
-              Foolmoon CUDA Voice Cloning Studio
+              Foolmoon CUDA Voice &amp; Speech Studio
             </h3>
             <p className="text-xs text-muted-foreground">
               {cudaReady
-                ? `CUDA Ready · Active Engine: ${activeEngine}${
+                ? `CUDA Ready · Active TTS: ${activeEngine}${
                     gpuVramLabel ? ` · ${gpuVramLabel}` : inventory?.gpu_name ? ` (${inventory.gpu_name})` : ''
                   }`
-                : 'Select any Chatterbox / XTTS / F5 / Kokoro engine or configure Cloud TTS below'}
+                : 'Download local CUDA TTS & Faster-Whisper STT engines in one click below'}
             </p>
           </div>
         </div>
@@ -490,23 +698,211 @@ export function VoiceCloningStudio({ scopeProfile }: { scopeProfile?: string }) 
         </div>
       </div>
 
-      {engines.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 text-xs font-medium text-muted-foreground">CUDA Engine:</span>
-          {engines.map(eng => (
-            <Button
-              disabled={busyAction !== null || !eng.installed}
-              key={eng.id}
-              onClick={() => void handleSetActive(activeId, eng.id)}
-              size="xs"
-              variant={activeEngine === eng.id ? 'default' : 'outline'}
-            >
-              {eng.id}
-              {eng.running ? ' ●' : ''}
-            </Button>
-          ))}
+      {/* 1-Click Local & CUDA TTS Engine Manager */}
+      <div className="flex flex-col gap-2 rounded-lg border border-border/60 bg-background/40 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+            <Volume2 className="h-3.5 w-3.5 text-primary" />
+            Local &amp; CUDA TTS Engines (Text-to-Speech)
+          </span>
+          <span className="text-[11px] text-muted-foreground">
+            One-click install with automatic PyTorch CUDA &amp; weight caching
+          </span>
         </div>
-      )}
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {engines.map(eng => {
+            const isActive = activeEngine === eng.id
+            const progress = Math.max(0, Math.min(100, eng.progress ?? 0))
+
+            return (
+              <div
+                className={`flex flex-col justify-between gap-2 rounded-lg border p-2.5 text-xs transition ${
+                  isActive ? 'border-primary bg-primary/8' : 'border-border/60 bg-background/60'
+                }`}
+                key={eng.id}
+              >
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-start justify-between gap-1.5">
+                    <span className="font-medium text-foreground">{eng.label ?? eng.id}</span>
+                    <span
+                      className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                        eng.installing
+                          ? 'bg-amber-500/15 text-amber-600'
+                          : eng.installed
+                            ? isActive
+                              ? 'bg-primary text-primary-foreground'
+                              : 'bg-emerald-500/15 text-emerald-700'
+                            : 'bg-muted text-muted-foreground'
+                      }`}
+                    >
+                      {eng.installing
+                        ? `${progress}%`
+                        : eng.installed
+                          ? isActive
+                            ? 'Active'
+                            : 'Installed'
+                          : eng.sizeLabel ?? 'Not Installed'}
+                    </span>
+                  </div>
+                  {eng.description && <p className="text-[11px] leading-snug text-muted-foreground">{eng.description}</p>}
+                  {eng.installing && (
+                    <div className="mt-1 flex flex-col gap-1">
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                        <div className="h-full bg-primary transition-all" style={{ width: `${progress}%` }} />
+                      </div>
+                      <span className="truncate text-[10px] text-muted-foreground">{eng.step || 'Installing...'}</span>
+                    </div>
+                  )}
+                  {!eng.installing && eng.error && (
+                    <span className="line-clamp-2 text-[10px] text-destructive">{eng.error}</span>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between gap-2 pt-1">
+                  <span className="text-[10px] text-muted-foreground">
+                    {eng.sizeLabel ?? ''}
+                    {eng.running ? ' · GPU Hot' : ''}
+                  </span>
+                  {eng.installing ? (
+                    <Button disabled size="xs" variant="outline">
+                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                      Installing
+                    </Button>
+                  ) : eng.installed ? (
+                    <Button
+                      disabled={busyAction !== null}
+                      onClick={() => void handleActivateEngine('tts', eng.id)}
+                      size="xs"
+                      variant={isActive ? 'default' : 'outline'}
+                    >
+                      {isActive ? (
+                        <>
+                          <Check className="mr-1 h-3 w-3" />
+                          Active
+                        </>
+                      ) : (
+                        'Use Engine'
+                      )}
+                    </Button>
+                  ) : (
+                    <Button
+                      disabled={busyAction !== null}
+                      onClick={() => void handleInstallEngine('tts', eng.id)}
+                      size="xs"
+                      variant="default"
+                    >
+                      <Download className="mr-1 h-3 w-3" />
+                      Download
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* 1-Click Local STT Model Manager */}
+      <div className="flex flex-col gap-2 rounded-lg border border-border/60 bg-background/40 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+            <Mic className="h-3.5 w-3.5 text-primary" />
+            Local Speech-to-Text Models (Faster-Whisper STT)
+          </span>
+          <span className="text-[11px] text-muted-foreground">
+            {inventory?.sttRuntimeInstalled
+              ? `STT Runtime Ready · Active: ${inventory?.activeSttModel ?? 'base'}`
+              : 'Runtime & Whisper weights install in one click'}
+          </span>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {sttModels.map(model => {
+            const progress = Math.max(0, Math.min(100, model.progress ?? 0))
+
+            return (
+              <div
+                className={`flex flex-col justify-between gap-2 rounded-lg border p-2.5 text-xs transition ${
+                  model.active ? 'border-primary bg-primary/8' : 'border-border/60 bg-background/60'
+                }`}
+                key={model.id}
+              >
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-start justify-between gap-1.5">
+                    <span className="font-medium text-foreground">{model.label ?? model.id}</span>
+                    <span
+                      className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                        model.installing
+                          ? 'bg-amber-500/15 text-amber-600'
+                          : model.installed
+                            ? model.active
+                              ? 'bg-primary text-primary-foreground'
+                              : 'bg-emerald-500/15 text-emerald-700'
+                            : 'bg-muted text-muted-foreground'
+                      }`}
+                    >
+                      {model.installing
+                        ? `${progress}%`
+                        : model.installed
+                          ? model.active
+                            ? 'Active'
+                            : 'Installed'
+                          : model.sizeLabel ?? 'Not Installed'}
+                    </span>
+                  </div>
+                  {model.description && <p className="text-[11px] leading-snug text-muted-foreground">{model.description}</p>}
+                  {model.installing && (
+                    <div className="mt-1 flex flex-col gap-1">
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                        <div className="h-full bg-primary transition-all" style={{ width: `${progress}%` }} />
+                      </div>
+                      <span className="truncate text-[10px] text-muted-foreground">{model.step || 'Downloading...'}</span>
+                    </div>
+                  )}
+                  {!model.installing && model.error && (
+                    <span className="line-clamp-2 text-[10px] text-destructive">{model.error}</span>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between gap-2 pt-1">
+                  <span className="text-[10px] text-muted-foreground">{model.sizeLabel ?? ''}</span>
+                  {model.installing ? (
+                    <Button disabled size="xs" variant="outline">
+                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                      Downloading
+                    </Button>
+                  ) : model.installed ? (
+                    <Button
+                      disabled={busyAction !== null}
+                      onClick={() => void handleActivateEngine('stt', model.id)}
+                      size="xs"
+                      variant={model.active ? 'default' : 'outline'}
+                    >
+                      {model.active ? (
+                        <>
+                          <Check className="mr-1 h-3 w-3" />
+                          Active
+                        </>
+                      ) : (
+                        'Use STT'
+                      )}
+                    </Button>
+                  ) : (
+                    <Button
+                      disabled={busyAction !== null}
+                      onClick={() => void handleInstallEngine('stt', model.id)}
+                      size="xs"
+                      variant="default"
+                    >
+                      <Download className="mr-1 h-3 w-3" />
+                      Download
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
 
       {/* Live karaoke lyrics preview strip */}
       <div className="flex flex-col gap-2 rounded-lg border border-border/60 bg-background/60 p-3">

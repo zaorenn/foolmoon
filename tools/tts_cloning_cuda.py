@@ -17,6 +17,7 @@ from __future__ import annotations
 import atexit
 import base64
 import collections
+import importlib.util
 import json
 import logging
 import math
@@ -26,6 +27,7 @@ import re
 import shutil
 import struct
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -35,7 +37,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from hermes_cli._subprocess_compat import windows_hide_flags
-from hermes_constants import get_hermes_dir
+from hermes_constants import get_hermes_dir, get_hermes_home
 
 logger = logging.getLogger("tools.tts_cloning_cuda")
 
@@ -46,6 +48,110 @@ CUDA_CLONING_PROVIDERS = frozenset({
     "f5_tts",
     "kokoro",
 })
+
+TTS_ENGINE_CATALOG: tuple[dict[str, Any], ...] = (
+    {
+        "id": "chatterbox_turbo",
+        "label": "Chatterbox Turbo (CUDA)",
+        "description": "Ultra-fast GPU zero-shot voice cloning with CUDAGraph & BF16.",
+        "sizeLabel": "~4.2 GB",
+        "kind": "cuda",
+        "supportsCloning": True,
+    },
+    {
+        "id": "chatterbox",
+        "label": "Chatterbox Multilingual (CUDA)",
+        "description": "Bilingual TR/EN zero-shot cloning with neural word-timing alignment.",
+        "sizeLabel": "~3.4 GB",
+        "kind": "cuda",
+        "supportsCloning": True,
+    },
+    {
+        "id": "xtts_v2",
+        "label": "Coqui XTTS-v2 (CUDA)",
+        "description": "Multilingual 17-language neural voice cloning on GPU.",
+        "sizeLabel": "~2.8 GB",
+        "kind": "cuda",
+        "supportsCloning": True,
+    },
+    {
+        "id": "f5_tts",
+        "label": "F5-TTS Flow Matching (CUDA)",
+        "description": "Diffusion flow-matching zero-shot voice cloning.",
+        "sizeLabel": "~2.4 GB",
+        "kind": "cuda",
+        "supportsCloning": True,
+    },
+    {
+        "id": "kokoro",
+        "label": "Kokoro-82M Neural TTS",
+        "description": "Compact high-speed local neural voice synthesis.",
+        "sizeLabel": "~450 MB",
+        "kind": "cuda",
+        "supportsCloning": False,
+    },
+    {
+        "id": "piper",
+        "label": "Piper Local VITS TTS",
+        "description": "Offline CPU/ONNX neural synthesis (no GPU required).",
+        "sizeLabel": "~75 MB",
+        "kind": "local",
+        "supportsCloning": False,
+    },
+    {
+        "id": "edge",
+        "label": "Edge Neural TTS",
+        "description": "Zero-VRAM streaming neural voices (TR Emel / EN Aria).",
+        "sizeLabel": "~5 MB",
+        "kind": "cloud-free",
+        "supportsCloning": False,
+    },
+)
+
+STT_MODEL_CATALOG_INFO: tuple[dict[str, Any], ...] = (
+    {
+        "id": "tiny",
+        "label": "Faster-Whisper Tiny",
+        "description": "Ultra-fast local speech recognition for quick voice commands.",
+        "sizeLabel": "~75 MB",
+        "hfRepos": ("Systran/faster-whisper-tiny",),
+    },
+    {
+        "id": "base",
+        "label": "Faster-Whisper Base",
+        "description": "Balanced bilingual TR/EN local speech recognition (recommended).",
+        "sizeLabel": "~145 MB",
+        "hfRepos": ("Systran/faster-whisper-base",),
+    },
+    {
+        "id": "small",
+        "label": "Faster-Whisper Small",
+        "description": "Higher accuracy multilingual local speech recognition.",
+        "sizeLabel": "~465 MB",
+        "hfRepos": ("Systran/faster-whisper-small",),
+    },
+    {
+        "id": "medium",
+        "label": "Faster-Whisper Medium",
+        "description": "Studio-grade accuracy for noisy rooms & mixed languages.",
+        "sizeLabel": "~1.5 GB",
+        "hfRepos": ("Systran/faster-whisper-medium",),
+    },
+    {
+        "id": "large-v3",
+        "label": "Faster-Whisper Large-v3",
+        "description": "Maximum accuracy 99-language Whisper model.",
+        "sizeLabel": "~3.1 GB",
+        "hfRepos": ("Systran/faster-whisper-large-v3",),
+    },
+    {
+        "id": "turbo",
+        "label": "Faster-Whisper Large-v3-Turbo",
+        "description": "Fast near-Large accuracy speech recognition.",
+        "sizeLabel": "~1.6 GB",
+        "hfRepos": ("mobiuslabsgmbh/faster-whisper-large-v3-turbo", "Systran/faster-whisper-large-v3-turbo"),
+    },
+)
 
 _ENGINE_ALIASES: dict[str, str] = {
     "chatterbox_turbo": "chatterbox_turbo",
@@ -60,6 +166,9 @@ _ENGINE_ALIASES: dict[str, str] = {
     "f5_tts": "f5_tts",
     "f5-tts": "f5_tts",
     "kokoro": "kokoro",
+    "piper": "piper",
+    "edge": "edge",
+    "edge-tts": "edge",
 }
 
 
@@ -68,11 +177,19 @@ def normalize_cloning_engine(engine: str) -> str:
     return _ENGINE_ALIASES.get(key, key)
 
 
+def _dir_has_entries(path: Path) -> bool:
+    try:
+        return path.is_dir() and any(path.iterdir())
+    except OSError:
+        return False
+
+
 def resolve_voice_root() -> Path:
     """Resolve the persistent voice storage root (venvs, models, voice-clones).
 
-    Checks ``HERMES_VOICE_DIR``, then ``~/.hermes/voice`` if it already contains
-    pre-installed voice assets (venvs/clones/models), and finally ``get_hermes_dir("voice")``.
+    Checks ``HERMES_VOICE_DIR``, then ``get_hermes_dir("voice", "voice")`` if populated,
+    then ``~/.hermes/voice`` if populated, and finally defaults to
+    ``get_hermes_dir("voice", "voice")``.
     """
     env_dir = (os.environ.get("HERMES_VOICE_DIR") or "").strip()
     if env_dir:
@@ -80,12 +197,16 @@ def resolve_voice_root() -> Path:
         root.mkdir(parents=True, exist_ok=True)
         return root
 
+    hermes_voice = Path(get_hermes_dir("voice", "voice"))
+    if _dir_has_entries(hermes_voice / "voice-venv") or _dir_has_entries(hermes_voice / "voice-clones"):
+        hermes_voice.mkdir(parents=True, exist_ok=True)
+        return hermes_voice
+
     home_voice = Path.home() / ".hermes" / "voice"
-    if (home_voice / "voice-venv").exists() or (home_voice / "voice-clones").exists():
+    if _dir_has_entries(home_voice / "voice-venv") or _dir_has_entries(home_voice / "voice-clones"):
         home_voice.mkdir(parents=True, exist_ok=True)
         return home_voice
 
-    hermes_voice = Path(get_hermes_dir("voice"))
     hermes_voice.mkdir(parents=True, exist_ok=True)
     return hermes_voice
 
@@ -127,12 +248,179 @@ def get_clones_dir() -> Path:
     return clones_dir
 
 
+def _venv_site_packages(venv_dir: Path) -> Optional[Path]:
+    if os.name == "nt":
+        candidate = venv_dir / "Lib" / "site-packages"
+        return candidate if candidate.is_dir() else None
+    for candidate in venv_dir.glob("lib/python*/site-packages"):
+        if candidate.is_dir():
+            return candidate
+    return None
+
+
+def _venv_base_python_valid(venv_dir: Path) -> bool:
+    cfg = venv_dir / "pyvenv.cfg"
+    if not cfg.is_file():
+        return False
+    try:
+        for line in cfg.read_text(encoding="utf-8-sig", errors="replace").splitlines():
+            key, _, val = line.partition("=")
+            if key.strip().lower() == "home":
+                home_dir = Path(val.strip())
+                return home_dir.is_dir()
+    except OSError:
+        return False
+    return True
+
+
+def _engine_verified_marker(engine: str) -> Path:
+    venv_dir = resolve_voice_root() / "voice-venv" / _venv_subdir_for_engine(engine)
+    return venv_dir / f".verified-engine-{normalize_cloning_engine(engine)}.json"
+
+
 def is_cuda_engine_installed(engine: str) -> bool:
     norm = normalize_cloning_engine(engine)
     if norm not in CUDA_CLONING_PROVIDERS:
         return False
     py_exe = get_engine_python_executable(norm)
-    return py_exe.is_file()
+    if not py_exe.is_file():
+        return False
+    venv_dir = resolve_voice_root() / "voice-venv" / _venv_subdir_for_engine(norm)
+    if not _venv_base_python_valid(venv_dir):
+        return False
+    if _engine_verified_marker(norm).is_file():
+        return True
+    sp = _venv_site_packages(venv_dir)
+    if sp is None:
+        return False
+    pkg_checks = {
+        "chatterbox_turbo": ("chatterbox", "torch"),
+        "chatterbox": ("chatterbox", "torch"),
+        "xtts_v2": ("TTS", "torch"),
+        "f5_tts": ("f5_tts", "torch"),
+        "kokoro": ("kokoro",),
+    }
+    required = pkg_checks.get(norm, ())
+    return all((sp / name).exists() for name in required)
+
+
+def _is_piper_installed() -> tuple[bool, bool]:
+    pkg_ok = importlib.util.find_spec("piper") is not None
+    if not pkg_ok:
+        try:
+            import pm
+            pkg_ok = bool(pm.available("piper"))
+        except Exception:
+            pkg_ok = False
+    voice_ok = False
+    try:
+        from tools.tts_tool_local import _get_piper_voices_dir
+        vdir = _get_piper_voices_dir()
+        voice_ok = any(vdir.glob("*.onnx"))
+    except Exception:
+        pass
+    return (pkg_ok and voice_ok), pkg_ok
+
+
+def _is_edge_installed() -> bool:
+    if importlib.util.find_spec("edge_tts") is not None:
+        return True
+    try:
+        import pm
+        return bool(pm.available("edge-tts"))
+    except Exception:
+        return False
+
+
+def is_tts_engine_installed(engine: str) -> bool:
+    norm = normalize_cloning_engine(engine)
+    if norm in CUDA_CLONING_PROVIDERS:
+        return is_cuda_engine_installed(norm)
+    if norm == "piper":
+        return _is_piper_installed()[0]
+    if norm == "edge":
+        return _is_edge_installed()
+    return False
+
+
+def _is_stt_runtime_installed() -> bool:
+    if importlib.util.find_spec("faster_whisper") is not None:
+        return True
+    try:
+        import pm
+        return bool(pm.available("stt-whisper"))
+    except Exception:
+        return False
+
+
+def _hf_hub_cache_roots() -> list[Path]:
+    roots: list[Path] = []
+    for env_key in ("HUGGINGFACE_HUB_CACHE", "HF_HUB_CACHE"):
+        raw = (os.environ.get(env_key) or "").strip()
+        if raw:
+            roots.append(Path(raw).expanduser())
+    hf_home = (os.environ.get("HF_HOME") or "").strip()
+    if hf_home:
+        roots.append(Path(hf_home).expanduser() / "hub")
+    roots.append(Path.home() / ".cache" / "huggingface" / "hub")
+    roots.append(resolve_voice_root() / "models" / "stt-hf-cache" / "hub")
+    return roots
+
+
+def _stt_verified_marker(model_id: str, *, create: bool = False) -> Path:
+    models_dir = resolve_voice_root() / "models"
+    if create:
+        models_dir.mkdir(parents=True, exist_ok=True)
+    safe = re.sub(r"[^a-z0-9._-]+", "-", model_id.lower()).strip("-")
+    return models_dir / f".verified-stt-{safe}.json"
+
+
+def is_stt_model_installed(model_id: str) -> bool:
+    runtime_ok = _is_stt_runtime_installed()
+    if not runtime_ok:
+        return False
+    if _stt_verified_marker(model_id).is_file():
+        return True
+    entry = next((m for m in STT_MODEL_CATALOG_INFO if m["id"] == model_id), None)
+    repos = entry["hfRepos"] if entry else (f"Systran/faster-whisper-{model_id}",)
+    for root in _hf_hub_cache_roots():
+        for repo in repos:
+            cache_dir = root / f"models--{repo.replace('/', '--')}"
+            snaps = cache_dir / "snapshots"
+            if snaps.is_dir():
+                for snap in snaps.iterdir():
+                    if snap.is_dir() and (snap / "model.bin").exists():
+                        return True
+    return False
+
+
+_install_jobs_lock = threading.Lock()
+_install_jobs: dict[str, dict[str, Any]] = {}
+
+
+def _job_key(target_type: str, target_id: str) -> str:
+    return f"{target_type}:{target_id}"
+
+
+def _update_install_job(key: str, **fields: Any) -> dict[str, Any]:
+    with _install_jobs_lock:
+        cur = dict(_install_jobs.get(key) or {})
+        logs = list(cur.get("logs") or [])
+        log_line = fields.pop("log_line", None)
+        if isinstance(log_line, str) and log_line.strip():
+            logs.append(log_line.strip())
+            if len(logs) > 25:
+                logs = logs[-25:]
+        cur.update(fields)
+        cur["logs"] = logs
+        cur["updatedAt"] = time.time()
+        _install_jobs[key] = cur
+        return dict(cur)
+
+
+def _snapshot_install_jobs() -> dict[str, dict[str, Any]]:
+    with _install_jobs_lock:
+        return {k: dict(v) for k, v in _install_jobs.items()}
 
 
 def _clones_index_path() -> Path:
@@ -169,8 +457,50 @@ def _write_clones_state(state: dict[str, Any]) -> None:
     os.replace(tmp, path)
 
 
+def _detect_gpu_summary() -> tuple[bool, Optional[str]]:
+    try:
+        proc = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=3,
+            stdin=subprocess.DEVNULL,
+            creationflags=windows_hide_flags(),
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            first_line = proc.stdout.strip().splitlines()[0].strip()
+            if first_line:
+                return True, first_line
+    except Exception:
+        pass
+    return False, None
+
+
+def _current_tts_and_stt_selection() -> tuple[str, str, str]:
+    tts_provider = ""
+    stt_provider = "local"
+    stt_model = "base"
+    try:
+        from hermes_cli.config import load_config
+        cfg = load_config() or {}
+        tts_cfg = cfg.get("tts") or {}
+        stt_cfg = cfg.get("stt") or {}
+        if isinstance(tts_cfg, dict) and tts_cfg.get("provider"):
+            tts_provider = str(tts_cfg["provider"]).strip().lower()
+        if isinstance(stt_cfg, dict) and stt_cfg.get("provider"):
+            stt_provider = str(stt_cfg["provider"]).strip().lower()
+        local_cfg = stt_cfg.get("local") if isinstance(stt_cfg, dict) else None
+        if isinstance(local_cfg, dict) and local_cfg.get("model"):
+            stt_model = str(local_cfg["model"]).strip() or "base"
+    except Exception:
+        pass
+    return tts_provider, stt_provider, stt_model
+
+
 def list_voice_clones() -> dict[str, Any]:
-    """Return all registered voice clones, active clone/engine selection, and engine availability."""
+    """Return all registered voice clones, active clone/engine selection, and TTS/STT install status."""
     with _clones_lock:
         index_path = _clones_index_path()
         clones: list[dict[str, Any]] = []
@@ -202,20 +532,61 @@ def list_voice_clones() -> dict[str, Any]:
         elif not active_id and not state_exists and clones:
             active_id = next((c["id"] for c in clones if c.get("exists")), None)
 
-    engines = [
-        {
-            "id": eid,
-            "installed": is_cuda_engine_installed(eid),
+    jobs = _snapshot_install_jobs()
+    cfg_tts_provider, cfg_stt_provider, cfg_stt_model = _current_tts_and_stt_selection()
+    has_cuda, gpu_name = _detect_gpu_summary()
+
+    engines: list[dict[str, Any]] = []
+    for meta in TTS_ENGINE_CATALOG:
+        eid = meta["id"]
+        job = jobs.get(_job_key("tts", eid))
+        is_installing = bool(job and job.get("status") == "running")
+        engines.append({
+            **meta,
+            "installed": is_tts_engine_installed(eid),
             "running": eid in _active_workers,
-            "supportsCloning": eid != "kokoro",
-        }
-        for eid in ("chatterbox_turbo", "chatterbox", "xtts_v2", "f5_tts", "kokoro")
-    ]
+            "installing": is_installing,
+            "progress": int(job.get("progress", 0)) if job else 0,
+            "step": str(job.get("step") or "") if job else "",
+            "error": job.get("error") if job else None,
+        })
+
+    stt_runtime_ok = _is_stt_runtime_installed()
+    stt_models: list[dict[str, Any]] = []
+    for meta in STT_MODEL_CATALOG_INFO:
+        mid = meta["id"]
+        job = jobs.get(_job_key("stt", mid))
+        is_installing = bool(job and job.get("status") == "running")
+        stt_models.append({
+            "id": mid,
+            "label": meta["label"],
+            "description": meta["description"],
+            "sizeLabel": meta["sizeLabel"],
+            "installed": is_stt_model_installed(mid),
+            "active": cfg_stt_provider == "local" and cfg_stt_model == mid,
+            "installing": is_installing,
+            "progress": int(job.get("progress", 0)) if job else 0,
+            "step": str(job.get("step") or "") if job else "",
+            "error": job.get("error") if job else None,
+        })
+
+    active_engine = state.get("active_engine") or cfg_tts_provider or "chatterbox_turbo"
+    if cfg_tts_provider and cfg_tts_provider in {m["id"] for m in TTS_ENGINE_CATALOG}:
+        active_engine = cfg_tts_provider
+
     return {
         "clones": clones,
         "activeCloneId": active_id,
-        "activeEngine": state.get("active_engine") or "chatterbox_turbo",
+        "activeEngine": active_engine,
+        "activeTtsProvider": cfg_tts_provider or "edge",
+        "activeSttProvider": cfg_stt_provider,
+        "activeSttModel": cfg_stt_model,
+        "sttRuntimeInstalled": stt_runtime_ok,
+        "cuda": has_cuda or any(is_cuda_engine_installed(e) for e in CUDA_CLONING_PROVIDERS),
+        "gpu_name": gpu_name,
         "engines": engines,
+        "sttModels": stt_models,
+        "installJobs": list(jobs.values()),
         "voiceRoot": str(resolve_voice_root()),
     }
 
@@ -255,6 +626,12 @@ def _find_ffmpeg() -> str:
     found = shutil.which("ffmpeg")
     if found:
         return found
+    exe_name = "ffmpeg.exe" if os.name == "nt" else "ffmpeg"
+    tools_dir = get_hermes_home() / "tools"
+    if tools_dir.is_dir():
+        for candidate in sorted(tools_dir.glob(f"ffmpeg-*/bin/{exe_name}"), reverse=True):
+            if candidate.is_file():
+                return str(candidate)
     raise RuntimeError("ffmpeg is required to process uploaded voice clone audio")
 
 
@@ -408,6 +785,8 @@ def get_voice_clone_audio(clone_id: str) -> Optional[dict[str, Any]]:
         if not wav_raw:
             return None
         wav_path = Path(wav_raw).resolve()
+        if not wav_path.is_file():
+            wav_path = (clones_dir / Path(wav_raw).name).resolve()
         try:
             wav_path.relative_to(clones_dir)
         except ValueError:
@@ -1331,6 +1710,51 @@ for raw_line in sys.stdin:
         emit({"id": req_id, "ok": False, "error": f"{exc}\n{traceback.format_exc()}"})
 '''
 
+_KOKORO_WORKER_SCRIPT = r'''
+import json, os, sys, traceback, wave
+import numpy as np
+os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
+from kokoro import KPipeline
+
+pipeline = KPipeline(lang_code="a")
+
+def emit(obj):
+    sys.stdout.write(json.dumps(obj, ensure_ascii=False) + "\n")
+    sys.stdout.flush()
+
+emit({"ready": True, "device": "local", "sr": 24000})
+
+for raw_line in sys.stdin:
+    line = raw_line.strip()
+    if not line:
+        continue
+    req_id = None
+    try:
+        req = json.loads(line)
+        req_id = req.get("id")
+        if req.get("cmd") == "shutdown":
+            emit({"id": req_id, "ok": True})
+            os._exit(0)
+        raw_voice = str(req.get("voiceId") or "af_heart").strip()
+        voice = raw_voice if ("_" in raw_voice and len(raw_voice) < 32 and " " not in raw_voice) else "af_heart"
+        speed = max(0.5, min(2.0, float(req.get("speed", 1.0))))
+        parts = []
+        for _gs, _ps, audio in pipeline(str(req["text"]), voice=voice, speed=speed):
+            if audio is not None:
+                arr = audio.detach().cpu().numpy() if hasattr(audio, "detach") else np.asarray(audio, dtype=np.float32)
+                parts.append(arr.astype(np.float32))
+        wav_np = np.concatenate(parts) if parts else np.zeros((2400,), dtype=np.float32)
+        pcm = np.clip(wav_np * 32767.0, -32768, 32767).astype("<i2")
+        with wave.open(str(req["outWav"]), "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(24000)
+            wf.writeframes(pcm.tobytes())
+        emit({"id": req_id, "ok": True, "sampleRate": 24000, "device": "local"})
+    except Exception as exc:
+        emit({"id": req_id, "ok": False, "error": f"{exc}\n{traceback.format_exc()}"})
+'''
+
 
 class _PersistentCudaWorker:
     """Manages one persistent JSON-RPC GPU Python subprocess for low-latency synthesis."""
@@ -1397,6 +1821,10 @@ class _PersistentCudaWorker:
         if self.engine == "f5_tts":
             p = venv_dir / "hermes_f5_worker.py"
             p.write_text(_F5_WORKER_SCRIPT.lstrip(), encoding="utf-8")
+            return p
+        if self.engine == "kokoro":
+            p = venv_dir / "hermes_kokoro_worker.py"
+            p.write_text(_KOKORO_WORKER_SCRIPT.lstrip(), encoding="utf-8")
             return p
         p = venv_dir / "hermes_xtts_worker.py"
         p.write_text(_XTTS_WORKER_SCRIPT.lstrip(), encoding="utf-8")
@@ -1756,3 +2184,338 @@ def generate_cuda_cloning_audio(
         wf.setframerate(sr)
         wf.writeframes(pcm)
     return _finalize_wav_output(wav_path, output_path)
+
+
+# ---------------------------------------------------------------------------
+# In-App TTS & STT Engine Downloader / Installer
+# ---------------------------------------------------------------------------
+
+def get_voice_engines_status() -> dict[str, Any]:
+    """Return full TTS/STT engine inventory, install jobs, and hardware status."""
+    return list_voice_clones()
+
+
+def _resolve_uv_binary() -> str:
+    try:
+        import pm
+        found = pm.uv_launcher("uv")
+        if found and found.is_file():
+            return str(found)
+    except Exception:
+        pass
+    local_root = get_hermes_home() / "tools"
+    if local_root.is_dir():
+        for exe in sorted(local_root.glob("uv-*/uv.exe" if os.name == "nt" else "uv-*/uv"), reverse=True):
+            if exe.is_file():
+                return str(exe)
+    which_uv = shutil.which("uv")
+    if which_uv:
+        return which_uv
+    raise RuntimeError("uv runtime tool was not found. Re-run setup or install uv first.")
+
+
+def _run_cmd_logged(
+    cmd: list[str],
+    job_key: str,
+    *,
+    env: Optional[dict[str, str]] = None,
+    timeout: int = 1800,
+) -> None:
+    _update_install_job(job_key, log_line="$ " + " ".join(cmd[:6]) + (" ..." if len(cmd) > 6 else ""))
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=env,
+        stdin=subprocess.DEVNULL,
+        creationflags=windows_hide_flags(),
+    )
+    tail: collections.deque[str] = collections.deque(maxlen=40)
+    deadline = time.monotonic() + timeout
+    assert proc.stdout is not None
+    for raw_line in proc.stdout:
+        line = raw_line.strip()
+        if line:
+            tail.append(line)
+            _update_install_job(job_key, log_line=line[:240])
+        if time.monotonic() > deadline:
+            proc.kill()
+            raise RuntimeError(f"Command timed out after {timeout}s")
+    rc = proc.wait()
+    if rc != 0:
+        err_tail = " | ".join(list(tail)[-6:])
+        raise RuntimeError(f"Command exited {rc}: {err_tail}")
+
+
+def _persist_voice_selection(target_type: str, target_id: str) -> None:
+    from hermes_cli.config import load_config, save_config
+    from hermes_cli.config_backend import CONFIG_MUTATION_LOCK
+
+    with CONFIG_MUTATION_LOCK:
+        cfg = load_config()
+        if target_type == "tts":
+            tts_cfg = cfg.get("tts")
+            if not isinstance(tts_cfg, dict):
+                tts_cfg = {}
+                cfg["tts"] = tts_cfg
+            tts_cfg["provider"] = target_id
+        elif target_type == "stt":
+            stt_cfg = cfg.get("stt")
+            if not isinstance(stt_cfg, dict):
+                stt_cfg = {}
+                cfg["stt"] = stt_cfg
+            stt_cfg["enabled"] = True
+            stt_cfg["provider"] = "local"
+            local_cfg = stt_cfg.get("local")
+            if not isinstance(local_cfg, dict):
+                local_cfg = {}
+                stt_cfg["local"] = local_cfg
+            local_cfg["model"] = target_id
+        save_config(cfg)
+
+    if target_type == "tts" and target_id in {m["id"] for m in TTS_ENGINE_CATALOG}:
+        with _clones_lock:
+            state = _read_clones_state()
+            state["active_engine"] = target_id
+            _write_clones_state(state)
+
+
+def _engine_install_env(engine: str) -> dict[str, str]:
+    cache_dir = get_engine_cache_dir(engine)
+    hf_home = cache_dir / "hf"
+    tts_home = cache_dir / "coqui"
+    torch_home = cache_dir / "torch"
+    for d in (hf_home, tts_home, torch_home):
+        d.mkdir(parents=True, exist_ok=True)
+    return {
+        **os.environ,
+        "COQUI_TOS_AGREED": "1",
+        "TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD": "1",
+        "HF_HOME": str(hf_home),
+        "HUGGINGFACE_HUB_CACHE": str(hf_home / "hub"),
+        "TTS_HOME": str(tts_home),
+        "TORCH_HOME": str(torch_home),
+        "HF_HUB_DISABLE_TELEMETRY": "1",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONIOENCODING": "utf-8",
+    }
+
+
+def _run_tts_install_worker(engine_id: str, job_key: str, activate: bool) -> None:
+    try:
+        if engine_id in ("piper", "edge"):
+            import pm
+            extra_name = "piper" if engine_id == "piper" else "edge-tts"
+            _update_install_job(job_key, progress=20, step=f"Installing {extra_name} runtime package...")
+            try:
+                pm.ensure_import(extra_name)
+            except Exception as exc:
+                if "restart Hermes" not in str(exc):
+                    raise
+            if engine_id == "piper":
+                _update_install_job(job_key, progress=60, step="Downloading Piper neural voice model...")
+                from tools.tts_tool_local import DEFAULT_PIPER_VOICE, _get_piper_voices_dir, _resolve_piper_voice_path
+                _resolve_piper_voice_path(DEFAULT_PIPER_VOICE, _get_piper_voices_dir())
+            if activate:
+                _persist_voice_selection("tts", engine_id)
+            _update_install_job(job_key, status="completed", progress=100, step="Ready")
+            return
+
+        uv_exe = _resolve_uv_binary()
+        root = resolve_voice_root()
+        venv_dir = root / "voice-venv" / _venv_subdir_for_engine(engine_id)
+        py_exe = get_engine_python_executable(engine_id)
+
+        if venv_dir.exists() and (not py_exe.is_file() or not _venv_base_python_valid(venv_dir)):
+            _update_install_job(job_key, progress=8, step="Resetting stale Python virtual environment...")
+            shutil.rmtree(venv_dir, ignore_errors=True)
+
+        if not py_exe.is_file():
+            _update_install_job(job_key, progress=12, step="Creating Python 3.11 runtime via uv...")
+            venv_dir.parent.mkdir(parents=True, exist_ok=True)
+            _run_cmd_logged([uv_exe, "venv", "--python", "3.11", "--seed", str(venv_dir)], job_key, timeout=300)
+
+        sp = _venv_site_packages(venv_dir)
+        has_gpu, _gpu_name = _detect_gpu_summary()
+
+        if sp is None or not (sp / "torch").exists():
+            _update_install_job(
+                job_key,
+                progress=28,
+                step="Installing PyTorch (CUDA 12.4)..." if has_gpu else "Installing PyTorch (CPU)...",
+            )
+            torch_cmd = [uv_exe, "pip", "install", "--python", str(py_exe), "torch==2.6.0", "torchaudio==2.6.0"]
+            if has_gpu:
+                torch_cmd.extend(["--index-url", "https://download.pytorch.org/whl/cu124"])
+            _run_cmd_logged(torch_cmd, job_key, timeout=1800)
+
+        _update_install_job(job_key, progress=55, step=f"Installing {engine_id} packages...")
+        if engine_id in ("chatterbox", "chatterbox_turbo"):
+            pkgs = [
+                "chatterbox-tts",
+                "soundfile",
+                "scipy",
+                "pyloudnorm",
+                "huggingface_hub",
+                "safetensors",
+                "transformers",
+                "hf_xet",
+            ]
+        elif engine_id == "xtts_v2":
+            pkgs = ["coqui-tts", "soundfile"]
+        elif engine_id == "f5_tts":
+            pkgs = ["f5-tts", "soundfile", "hf_xet"]
+        elif engine_id == "kokoro":
+            pkgs = ["kokoro>=0.9.2", "soundfile", "misaki[en]"]
+        else:
+            raise ValueError(f"Unsupported TTS engine: {engine_id}")
+
+        _run_cmd_logged([uv_exe, "pip", "install", "--python", str(py_exe), *pkgs], job_key, timeout=1800)
+
+        _update_install_job(job_key, progress=78, step=f"Downloading {engine_id} model weights...")
+        dl_env = _engine_install_env(engine_id)
+        if engine_id == "chatterbox_turbo":
+            dl_code = "from chatterbox.tts_turbo import ChatterboxTurboTTS; ChatterboxTurboTTS.from_pretrained(device='cpu')"
+        elif engine_id == "chatterbox":
+            dl_code = "from chatterbox.mtl_tts import ChatterboxMultilingualTTS; ChatterboxMultilingualTTS.from_pretrained(device='cpu')"
+        elif engine_id == "xtts_v2":
+            dl_code = "import os; os.environ['COQUI_TOS_AGREED']='1'; os.environ['TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD']='1'; from TTS.api import TTS; TTS('tts_models/multilingual/multi-dataset/xtts_v2')"
+        elif engine_id == "f5_tts":
+            dl_code = "from f5_tts.api import F5TTS; F5TTS()"
+        else:
+            dl_code = "from kokoro import KPipeline; KPipeline(lang_code='a')"
+
+        _run_cmd_logged([str(py_exe), "-c", dl_code], job_key, env=dl_env, timeout=2400)
+
+        marker = _engine_verified_marker(engine_id)
+        marker.write_text(
+            json.dumps({
+                "engine": engine_id,
+                "pythonExecutable": str(py_exe),
+                "cacheDir": str(get_engine_cache_dir(engine_id)),
+                "verifiedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            }, indent=2),
+            encoding="utf-8",
+        )
+        if activate:
+            _persist_voice_selection("tts", engine_id)
+        _update_install_job(job_key, status="completed", progress=100, step="Ready")
+    except Exception as exc:
+        logger.exception("TTS engine install failed for %s", engine_id)
+        _update_install_job(job_key, status="failed", error=str(exc), step="Install failed")
+
+
+def _run_stt_install_worker(model_id: str, job_key: str, activate: bool) -> None:
+    try:
+        import pm
+        from pm.environments import project_python
+        from pm.paths import repo_root
+
+        _update_install_job(job_key, progress=20, step="Installing faster-whisper STT runtime...")
+        try:
+            if not pm.available("stt-whisper"):
+                pm.ensure_import("stt-whisper")
+            if not pm.available("audio-io"):
+                pm.ensure_import("audio-io")
+        except Exception as exc:
+            if "restart Hermes" not in str(exc):
+                raise
+
+        try:
+            from tools import transcription_tools
+            transcription_tools._HAS_FASTER_WHISPER = importlib.util.find_spec("faster_whisper") is not None
+        except Exception:
+            pass
+
+        py_target = sys.executable
+        try:
+            cand = project_python(repo_root())
+            if cand.is_file():
+                py_target = str(cand)
+        except Exception:
+            pass
+
+        _update_install_job(job_key, progress=55, step=f"Downloading faster-whisper '{model_id}' model...")
+        dl_code = (
+            f"from faster_whisper.utils import download_model; "
+            f"p = download_model({model_id!r}); print(p)"
+        )
+        _run_cmd_logged([py_target, "-c", dl_code], job_key, timeout=1800)
+
+        marker = _stt_verified_marker(model_id, create=True)
+        marker.write_text(
+            json.dumps({
+                "modelId": model_id,
+                "verifiedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            }, indent=2),
+            encoding="utf-8",
+        )
+        if activate:
+            _persist_voice_selection("stt", model_id)
+        _update_install_job(job_key, status="completed", progress=100, step="Ready")
+    except Exception as exc:
+        logger.exception("STT model install failed for %s", model_id)
+        _update_install_job(job_key, status="failed", error=str(exc), step="Install failed")
+
+
+def start_voice_engine_install(
+    target_type: str,
+    target_id: str,
+    *,
+    activate: bool = True,
+) -> dict[str, Any]:
+    """Start an asynchronous install/download job for a local TTS engine or STT Whisper model."""
+    from hermes_constants import get_hermes_home_override, reset_hermes_home_override, set_hermes_home_override
+
+    ttype = (target_type or "tts").strip().lower()
+    if ttype not in ("tts", "stt"):
+        raise ValueError(f"Invalid target_type: {target_type!r}")
+
+    if ttype == "tts":
+        tid = normalize_cloning_engine(target_id)
+        valid_ids = {m["id"] for m in TTS_ENGINE_CATALOG}
+        if tid not in valid_ids:
+            raise ValueError(f"Unknown TTS engine: {target_id!r}")
+    else:
+        tid = (target_id or "").strip().lower()
+        valid_ids = {m["id"] for m in STT_MODEL_CATALOG_INFO}
+        if tid not in valid_ids:
+            raise ValueError(f"Unknown STT model: {target_id!r}")
+
+    key = _job_key(ttype, tid)
+    with _install_jobs_lock:
+        existing = _install_jobs.get(key)
+        if existing and existing.get("status") == "running":
+            return dict(existing)
+        _install_jobs[key] = {
+            "key": key,
+            "targetType": ttype,
+            "targetId": tid,
+            "status": "running",
+            "progress": 5,
+            "step": "Queued...",
+            "logs": [],
+            "error": None,
+            "startedAt": time.time(),
+            "updatedAt": time.time(),
+        }
+
+    home_override = get_hermes_home_override()
+
+    def _runner():
+        token = set_hermes_home_override(home_override) if home_override else None
+        try:
+            if ttype == "tts":
+                _run_tts_install_worker(tid, key, activate)
+            else:
+                _run_stt_install_worker(tid, key, activate)
+        finally:
+            if token is not None:
+                reset_hermes_home_override(token)
+
+    threading.Thread(target=_runner, name=f"voice-install-{key}", daemon=True).start()
+    return dict(_install_jobs[key])
+

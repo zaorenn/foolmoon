@@ -20,7 +20,8 @@ import type {
   UserSkinsResponse,
   VoiceCloneAudioResponse,
   VoiceCloneCreateResponse,
-  VoiceCloneListResponse
+  VoiceCloneListResponse,
+  VoiceEngineInstallResponse
 } from '@/types/hermes'
 
 import {
@@ -411,6 +412,47 @@ export function listVoiceClones(profile?: null | string): Promise<VoiceCloneList
   return hermesApi<VoiceCloneListResponse>({
     path: '/api/audio/clones',
     ...profileScoped(profile)
+  })
+}
+
+export function installVoiceEngine(
+  payload: {
+    activate?: boolean
+    target_id: string
+    target_type: 'tts' | 'stt'
+  },
+  profile?: null | string
+): Promise<VoiceEngineInstallResponse> {
+  return hermesApi<VoiceEngineInstallResponse>({
+    ...profileScoped(profile),
+    body: {
+      activate: payload.activate ?? true,
+      target_id: payload.target_id,
+      target_type: payload.target_type
+    },
+    method: 'POST',
+    path: '/api/audio/engines/install',
+    timeoutMs: 60_000
+  })
+}
+
+export function activateVoiceEngine(
+  payload: {
+    target_id: string
+    target_type: 'tts' | 'stt'
+  },
+  profile?: null | string
+): Promise<VoiceCloneListResponse> {
+  return hermesApi<VoiceCloneListResponse>({
+    ...profileScoped(profile),
+    body: {
+      activate: true,
+      target_id: payload.target_id,
+      target_type: payload.target_type
+    },
+    method: 'POST',
+    path: '/api/audio/engines/activate',
+    timeoutMs: 30_000
   })
 }
 

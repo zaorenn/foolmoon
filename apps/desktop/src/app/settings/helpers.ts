@@ -323,6 +323,11 @@ function personalityOptions(config: HermesConfigRecord): string[] {
 // `deepinfra`/`local_command` (STT). Filtering on the display list would offer
 // those names as command providers that the runtime would never honour.
 const BUILTIN_TTS_PROVIDERS = new Set([
+  'chatterbox_turbo',
+  'chatterbox',
+  'xtts_v2',
+  'f5_tts',
+  'kokoro',
   'edge',
   'elevenlabs',
   'openai',

@@ -143,7 +143,11 @@ export type {
   VoiceCloneAudioResponse,
   VoiceCloneCreateResponse,
   VoiceCloneEntry,
+  VoiceCloneEngineInfo,
   VoiceCloneListResponse,
+  VoiceEngineInstallJob,
+  VoiceEngineInstallResponse,
+  VoiceSttModelInfo,
   VoiceWordTiming
 } from '@/types/hermes'
 export type {
