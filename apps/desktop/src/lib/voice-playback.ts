@@ -762,7 +762,23 @@ function openSpeechStream(wsUrl: string, options: VoicePlaybackOptions): SpeechS
 
     if (!started) {
       started = true
-      setVoicePlaybackState(currentState('speaking', options))
+      const firstCue = sentenceCues[0]
+      let cuePatch: Partial<VoicePlaybackState> | undefined
+
+      if (firstCue) {
+        firstCue.activated = true
+        firstCue.startAudioTime = startAt
+        cuePatch = {
+          sentence: firstCue.sentence,
+          sentenceStartTimeMs:
+            typeof performance !== 'undefined'
+              ? performance.now() + Math.max(0, startAt - context.currentTime) * 1_000
+              : 0,
+          words: firstCue.words
+        }
+      }
+
+      setVoicePlaybackState(currentState('speaking', options, null, cuePatch))
       startMeterLoop()
     }
   }
@@ -840,7 +856,7 @@ function openSpeechStream(wsUrl: string, options: VoicePlaybackOptions): SpeechS
         words
       })
 
-      if (sentenceCues.length === 1 && context) {
+      if (started && sentenceCues.length === 1 && context) {
         sentenceCues[0].activated = true
         updateVoicePlaybackMetrics({
           sentence: sentenceText,

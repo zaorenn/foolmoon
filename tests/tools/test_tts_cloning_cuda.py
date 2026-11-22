@@ -109,3 +109,23 @@ def test_turkish_routing_and_pcm_speed_scaling():
     unchanged, same_timings = cuda_mod._apply_pcm_speed(raw_pcm, 24000, 1.0, raw_timings)
     assert unchanged == raw_pcm
     assert same_timings == raw_timings
+
+
+def test_isolated_python_env_strips_host_python314_leakage(tmp_path, monkeypatch):
+    monkeypatch.setenv("PYTHONPATH", r"C:\Users\demo\AppData\Local\hermes\installs\abc\venv\Lib\site-packages")
+    monkeypatch.setenv("PYTHONHOME", r"C:\Python314")
+    monkeypatch.setenv("VIRTUAL_ENV", r"C:\Users\demo\AppData\Local\hermes\installs\abc\venv")
+    monkeypatch.setenv("UV_EXCLUDE_NEWER", "3 days")
+    monkeypatch.setenv("PATH", r"C:\Users\demo\AppData\Local\hermes\installs\abc\venv\Scripts;C:\Windows\System32")
+
+    venv_dir = tmp_path / "voice-venv" / "chatterbox"
+    env = cuda_mod._isolated_python_env(venv_dir, {"HF_HOME": str(tmp_path / "hf")})
+    assert "PYTHONPATH" not in env
+    assert "PYTHONHOME" not in env
+    assert "UV_EXCLUDE_NEWER" not in env
+    assert env["PYTHONNOUSERSITE"] == "1"
+    assert env["UV_NO_CONFIG"] == "1"
+    assert env["VIRTUAL_ENV"] == str(venv_dir)
+    assert env["HF_HOME"] == str(tmp_path / "hf")
+    assert "hermes\\installs\\" not in env["PATH"].lower()
+    assert str(venv_dir) in env["PATH"].split(";")[0] or str(venv_dir) in env["PATH"].split(":")[0]

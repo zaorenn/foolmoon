@@ -392,6 +392,7 @@ export function VoiceCloningStudio({ scopeProfile }: { scopeProfile?: string }) 
           ? await setActiveVoiceClone(inventory?.activeCloneId ?? null, scopeProfile, { engine: targetId, warm: true })
           : await activateVoiceEngine({ target_id: targetId, target_type: targetType }, scopeProfile)
       setInventory(res)
+      await refresh()
       notify({ kind: 'success', message: `Active ${targetType.toUpperCase()} set to ${targetId}.` })
     } catch (err) {
       notifyError(err, `Could not activate ${targetId}`)
@@ -571,7 +572,7 @@ export function VoiceCloningStudio({ scopeProfile }: { scopeProfile?: string }) 
     const line = previewSampleText.trim() || 'Testing Foolmoon voice output.'
 
     try {
-      await playSpeechText(line, { source: 'read-aloud', syncOnly: false })
+      await playSpeechText(line, { profile: scopeProfile, source: 'read-aloud', syncOnly: false })
     } catch (err) {
       notifyError(err, 'Voice preview failed')
     }
@@ -768,7 +769,7 @@ export function VoiceCloningStudio({ scopeProfile }: { scopeProfile?: string }) 
                       <Loader2 className="mr-1 h-3 w-3 animate-spin" />
                       Installing
                     </Button>
-                  ) : eng.installed ? (
+                  ) : eng.installed && !eng.error ? (
                     <Button
                       disabled={busyAction !== null}
                       onClick={() => void handleActivateEngine('tts', eng.id)}
@@ -792,7 +793,7 @@ export function VoiceCloningStudio({ scopeProfile }: { scopeProfile?: string }) 
                       variant="default"
                     >
                       <Download className="mr-1 h-3 w-3" />
-                      Download
+                      {eng.error ? 'Retry / Resume' : 'Download'}
                     </Button>
                   )}
                 </div>
@@ -870,7 +871,7 @@ export function VoiceCloningStudio({ scopeProfile }: { scopeProfile?: string }) 
                       <Loader2 className="mr-1 h-3 w-3 animate-spin" />
                       Downloading
                     </Button>
-                  ) : model.installed ? (
+                  ) : model.installed && !model.error ? (
                     <Button
                       disabled={busyAction !== null}
                       onClick={() => void handleActivateEngine('stt', model.id)}
@@ -894,7 +895,7 @@ export function VoiceCloningStudio({ scopeProfile }: { scopeProfile?: string }) 
                       variant="default"
                     >
                       <Download className="mr-1 h-3 w-3" />
-                      Download
+                      {model.error ? 'Retry / Resume' : 'Download'}
                     </Button>
                   )}
                 </div>

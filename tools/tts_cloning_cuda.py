@@ -278,6 +278,20 @@ def _engine_verified_marker(engine: str) -> Path:
     return venv_dir / f".verified-engine-{normalize_cloning_engine(engine)}.json"
 
 
+def _has_cached_engine_weights(engine: str) -> bool:
+    norm = normalize_cloning_engine(engine)
+    cache_dir = get_engine_cache_dir(norm)
+    weight_exts = {".safetensors", ".pth", ".pt", ".bin", ".onnx", ".ckpt"}
+    try:
+        if cache_dir.is_dir():
+            for p in cache_dir.rglob("*"):
+                if p.is_file() and p.suffix.lower() in weight_exts and p.stat().st_size > 1_000_000:
+                    return True
+    except OSError:
+        pass
+    return False
+
+
 def is_cuda_engine_installed(engine: str) -> bool:
     norm = normalize_cloning_engine(engine)
     if norm not in CUDA_CLONING_PROVIDERS:
@@ -290,6 +304,10 @@ def is_cuda_engine_installed(engine: str) -> bool:
         return False
     if _engine_verified_marker(norm).is_file():
         return True
+    with _install_jobs_lock:
+        job = _install_jobs.get(_job_key("tts", norm))
+        if job and job.get("status") == "failed":
+            return False
     sp = _venv_site_packages(venv_dir)
     if sp is None:
         return False
@@ -301,7 +319,9 @@ def is_cuda_engine_installed(engine: str) -> bool:
         "kokoro": ("kokoro",),
     }
     required = pkg_checks.get(norm, ())
-    return all((sp / name).exists() for name in required)
+    if not all((sp / name).exists() for name in required):
+        return False
+    return _has_cached_engine_weights(norm)
 
 
 def _is_piper_installed() -> tuple[bool, bool]:
@@ -601,13 +621,25 @@ def get_active_voice_clone() -> Optional[dict[str, Any]]:
 
 
 def set_active_voice_clone(clone_id: Optional[str], engine: Optional[str] = None, warm: bool = False) -> dict[str, Any]:
+    norm_engine: Optional[str] = None
     with _clones_lock:
         state = _read_clones_state()
         if clone_id is not None:
             state["active_clone_id"] = clone_id.strip() or None
         if engine:
-            state["active_engine"] = normalize_cloning_engine(engine)
+            norm_engine = normalize_cloning_engine(engine)
+            state["active_engine"] = norm_engine
         _write_clones_state(state)
+
+    if norm_engine and norm_engine in {m["id"] for m in TTS_ENGINE_CATALOG}:
+        try:
+            _persist_voice_selection("tts", norm_engine)
+        except Exception:
+            logger.debug("Could not persist tts.provider=%s during set_active_voice_clone", norm_engine, exc_info=True)
+        with _install_jobs_lock:
+            job = _install_jobs.get(_job_key("tts", norm_engine))
+            if job and job.get("status") == "failed" and is_tts_engine_installed(norm_engine):
+                job["error"] = None
 
     if warm and state.get("active_engine") in ("chatterbox", "chatterbox_turbo"):
         target_engine = state["active_engine"]
@@ -1831,26 +1863,29 @@ class _PersistentCudaWorker:
         return p
 
     def _build_env(self) -> dict[str, str]:
+        venv_dir = resolve_voice_root() / "voice-venv" / _venv_subdir_for_engine(self.engine)
         cache_dir = get_engine_cache_dir(self.engine)
         hf_home = cache_dir / "hf"
         tts_home = cache_dir / "coqui"
         torch_home = cache_dir / "torch"
         for d in (hf_home, tts_home, torch_home):
             d.mkdir(parents=True, exist_ok=True)
-        return {
-            **os.environ,
-            "COQUI_TOS_AGREED": "1",
-            "TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD": "1",
-            "HERMES_CHATTERBOX_VARIANT": "turbo" if self.engine == "chatterbox_turbo" else "multilingual",
-            "HF_HOME": str(hf_home),
-            "HUGGINGFACE_HUB_CACHE": str(hf_home / "hub"),
-            "TTS_HOME": str(tts_home),
-            "TORCH_HOME": str(torch_home),
-            "HF_HUB_DISABLE_TELEMETRY": "1",
-            "TQDM_DISABLE": "1",
-            "PYTHONUNBUFFERED": "1",
-            "PYTHONIOENCODING": "utf-8",
-        }
+        return _isolated_python_env(
+            venv_dir,
+            {
+                "COQUI_TOS_AGREED": "1",
+                "TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD": "1",
+                "HERMES_CHATTERBOX_VARIANT": "turbo" if self.engine == "chatterbox_turbo" else "multilingual",
+                "HF_HOME": str(hf_home),
+                "HUGGINGFACE_HUB_CACHE": str(hf_home / "hub"),
+                "TTS_HOME": str(tts_home),
+                "TORCH_HOME": str(torch_home),
+                "HF_HUB_DISABLE_TELEMETRY": "1",
+                "TQDM_DISABLE": "1",
+                "PYTHONUNBUFFERED": "1",
+                "PYTHONIOENCODING": "utf-8",
+            },
+        )
 
     def ensure_started(self, timeout_s: float = 90.0) -> None:
         with self.lock:
@@ -1865,7 +1900,7 @@ class _PersistentCudaWorker:
                 )
             script = self._script_path()
             proc = subprocess.Popen(
-                [str(py_exe), str(script)],
+                [str(py_exe), "-s", str(script)],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -2214,13 +2249,175 @@ def _resolve_uv_binary() -> str:
     raise RuntimeError("uv runtime tool was not found. Re-run setup or install uv first.")
 
 
+_PYTHON_LEAK_ENV_KEYS = (
+    "PYTHONPATH",
+    "PYTHONHOME",
+    "VIRTUAL_ENV",
+    "PYTHONSTARTUP",
+    "PYTHONUSERBASE",
+    "CONDA_PREFIX",
+    "CONDA_DEFAULT_ENV",
+    "__PYVENV_LAUNCHER__",
+    "UV_EXCLUDE_NEWER",
+    "UV_CONFIG_FILE",
+    "UV_INDEX_STRATEGY",
+    "UV_FROZEN",
+    "UV_LOCKED",
+)
+
+_MISSING_MODULE_PKG_MAP: dict[str, str] = {
+    "pkg_resources": "setuptools>=68,<81",
+    "six": "six",
+    "packaging": "packaging",
+    "einops": "einops",
+    "num2words": "num2words",
+    "scipy": "scipy",
+    "soundfile": "soundfile",
+    "hf_xet": "hf_xet",
+    "yaml": "pyyaml",
+    "PIL": "pillow",
+    "inflect": "inflect",
+    "anyascii": "anyascii",
+    "unidecode": "unidecode",
+    "librosa": "librosa",
+    "numba": "numba",
+    "tiktoken": "tiktoken",
+    "omegaconf": "omegaconf",
+    "diffusers": "diffusers",
+    "safetensors": "safetensors",
+    "transformers": "transformers",
+    "huggingface_hub": "huggingface_hub",
+    "conformer": "conformer",
+    "resemble_perth": "resemble-perth",
+    "s3tokenizer": "s3tokenizer",
+    "pypinyin": "pypinyin",
+    "jieba": "jieba",
+    "gruut": "gruut",
+    "g2p_en": "g2p-en",
+    "hangul_romanize": "hangul-romanize",
+    "cn2an": "cn2an",
+    "bangla": "bangla",
+    "bnnumerizer": "bnnumerizer",
+    "bnunicodenormalizer": "bnunicodenormalizer",
+}
+
+
 def _uv_clean_env(base_env: Optional[dict[str, str]] = None) -> dict[str, str]:
     env = dict(base_env if base_env is not None else os.environ)
-    for k in ("UV_EXCLUDE_NEWER", "UV_CONFIG_FILE", "UV_INDEX_STRATEGY", "UV_FROZEN", "UV_LOCKED"):
+    for k in (
+        "UV_EXCLUDE_NEWER",
+        "UV_CONFIG_FILE",
+        "UV_INDEX_STRATEGY",
+        "UV_FROZEN",
+        "UV_LOCKED",
+        "PYTHONPATH",
+        "PYTHONHOME",
+    ):
         env.pop(k, None)
     env["UV_NO_CONFIG"] = "1"
     env["PIP_DISABLE_PIP_VERSION_CHECK"] = "1"
     return env
+
+
+def _isolated_python_env(venv_dir: Path, extra: Optional[dict[str, str]] = None) -> dict[str, str]:
+    """Build a hermetically isolated env for a Python 3.11 CUDA engine venv.
+
+    Prevents the host Python 3.14 Hermes gateway's PYTHONPATH/VIRTUAL_ENV/PATH
+    from leaking cp314 C-extensions (such as NumPy 2.5.4) into cp311 workers.
+    """
+    env = dict(os.environ)
+    for k in _PYTHON_LEAK_ENV_KEYS:
+        env.pop(k, None)
+    env["PYTHONNOUSERSITE"] = "1"
+    env["VIRTUAL_ENV"] = str(venv_dir)
+    env["UV_NO_CONFIG"] = "1"
+    env["PIP_DISABLE_PIP_VERSION_CHECK"] = "1"
+    bin_dir = venv_dir / ("Scripts" if os.name == "nt" else "bin")
+    sep = os.pathsep
+    old_path = env.get("PATH") or ""
+    cleaned_parts = [
+        part for part in old_path.split(sep)
+        if part
+        and "hermes\\installs\\" not in part.lower()
+        and "hermes/installs/" not in part.lower()
+    ]
+    env["PATH"] = sep.join([str(bin_dir), *cleaned_parts])
+    if extra:
+        env.update(extra)
+    return env
+
+
+def _auto_heal_missing_module(
+    err_text: str,
+    uv_exe: str,
+    py_exe: Path,
+    venv_dir: Path,
+    job_key: str,
+) -> bool:
+    """Detect ModuleNotFoundError in a CUDA venv command and install the missing dep."""
+    match = re.search(r"No module named ['\"]([A-Za-z0-9_]+)(?:\.[^'\"]*)?['\"]", err_text)
+    if not match:
+        return False
+    mod_name = match.group(1)
+    pkg_spec = _MISSING_MODULE_PKG_MAP.get(mod_name)
+    if not pkg_spec:
+        return False
+    _update_install_job(job_key, step=f"Auto-repairing missing dependency ({pkg_spec})...")
+    try:
+        _run_cmd_logged(
+            [uv_exe, "pip", "install", "--no-config", "--python", str(py_exe), pkg_spec],
+            job_key,
+            cwd=venv_dir,
+            timeout=600,
+        )
+        return True
+    except Exception:
+        logger.warning("Auto-heal install of %s failed", pkg_spec, exc_info=True)
+        return False
+
+
+def _run_cmd_with_retry(
+    cmd: list[str],
+    job_key: str,
+    *,
+    cwd: Optional[Path] = None,
+    env: Optional[dict[str, str]] = None,
+    timeout: int = 1800,
+    retries: int = 3,
+    retry_delay_s: float = 3.0,
+    step_label: str = "",
+    heal_ctx: Optional[tuple[str, Path, Path]] = None,
+) -> None:
+    last_exc: Optional[Exception] = None
+    max_attempts = max(1, retries)
+    healed_count = 0
+    attempt = 0
+    while attempt < max_attempts:
+        attempt += 1
+        try:
+            _run_cmd_logged(cmd, job_key, cwd=cwd, env=env, timeout=timeout)
+            return
+        except Exception as exc:
+            last_exc = exc
+            err_str = str(exc)
+            if heal_ctx and healed_count < 4:
+                uv_exe, py_exe, venv_dir = heal_ctx
+                if _auto_heal_missing_module(err_str, uv_exe, py_exe, venv_dir, job_key):
+                    healed_count += 1
+                    attempt -= 1  # Don't consume a retry budget slot on an auto-healed missing module
+                    continue
+            if attempt >= max_attempts:
+                break
+            wait_s = retry_delay_s * attempt
+            label = f"{step_label} — " if step_label else ""
+            _update_install_job(
+                job_key,
+                step=f"{label}Retrying automatically ({attempt + 1}/{max_attempts})...",
+                log_line=f"[retry] attempt {attempt} failed ({err_str[:160]}); resuming in {int(wait_s)}s...",
+            )
+            time.sleep(wait_s)
+    assert last_exc is not None
+    raise last_exc
 
 
 def _run_cmd_logged(
@@ -2297,24 +2494,27 @@ def _persist_voice_selection(target_type: str, target_id: str) -> None:
 
 
 def _engine_install_env(engine: str) -> dict[str, str]:
+    venv_dir = resolve_voice_root() / "voice-venv" / _venv_subdir_for_engine(engine)
     cache_dir = get_engine_cache_dir(engine)
     hf_home = cache_dir / "hf"
     tts_home = cache_dir / "coqui"
     torch_home = cache_dir / "torch"
     for d in (hf_home, tts_home, torch_home):
         d.mkdir(parents=True, exist_ok=True)
-    return {
-        **os.environ,
-        "COQUI_TOS_AGREED": "1",
-        "TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD": "1",
-        "HF_HOME": str(hf_home),
-        "HUGGINGFACE_HUB_CACHE": str(hf_home / "hub"),
-        "TTS_HOME": str(tts_home),
-        "TORCH_HOME": str(torch_home),
-        "HF_HUB_DISABLE_TELEMETRY": "1",
-        "PYTHONUNBUFFERED": "1",
-        "PYTHONIOENCODING": "utf-8",
-    }
+    return _isolated_python_env(
+        venv_dir,
+        {
+            "COQUI_TOS_AGREED": "1",
+            "TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD": "1",
+            "HF_HOME": str(hf_home),
+            "HUGGINGFACE_HUB_CACHE": str(hf_home / "hub"),
+            "TTS_HOME": str(tts_home),
+            "TORCH_HOME": str(torch_home),
+            "HF_HUB_DISABLE_TELEMETRY": "1",
+            "PYTHONUNBUFFERED": "1",
+            "PYTHONIOENCODING": "utf-8",
+        },
+    )
 
 
 def _run_tts_install_worker(engine_id: str, job_key: str, activate: bool) -> None:
@@ -2380,26 +2580,55 @@ def _run_tts_install_worker(engine_id: str, job_key: str, activate: bool) -> Non
                     "--python", str(py_exe),
                     "torch==2.6.0", "torchaudio==2.6.0",
                 ]
-            _run_cmd_logged(torch_cmd, job_key, cwd=venv_dir, timeout=1800)
+            _run_cmd_with_retry(
+                torch_cmd,
+                job_key,
+                cwd=venv_dir,
+                timeout=1800,
+                retries=3,
+                step_label="Installing PyTorch",
+            )
 
         _update_install_job(job_key, progress=55, step=f"Installing {engine_id} packages...")
         if engine_id in ("chatterbox", "chatterbox_turbo"):
             pkgs = [
-                "chatterbox-tts",
+                "setuptools>=68,<81",
+                "six",
+                "packaging",
+                "chatterbox-tts>=0.1.6",
                 "soundfile",
                 "scipy",
                 "pyloudnorm",
                 "huggingface_hub",
                 "safetensors",
-                "transformers",
                 "hf_xet",
             ]
         elif engine_id == "xtts_v2":
-            pkgs = ["coqui-tts", "soundfile"]
+            pkgs = [
+                "setuptools>=68,<81",
+                "six",
+                "packaging",
+                "coqui-tts",
+                "soundfile",
+                "hf_xet",
+            ]
         elif engine_id == "f5_tts":
-            pkgs = ["f5-tts", "soundfile", "hf_xet"]
+            pkgs = [
+                "setuptools>=68,<81",
+                "six",
+                "packaging",
+                "f5-tts",
+                "soundfile",
+                "hf_xet",
+            ]
         elif engine_id == "kokoro":
-            pkgs = ["kokoro>=0.9.2", "soundfile", "misaki[en]"]
+            pkgs = [
+                "setuptools>=68,<81",
+                "six",
+                "kokoro>=0.9.2",
+                "soundfile",
+                "misaki[en]",
+            ]
         else:
             raise ValueError(f"Unsupported TTS engine: {engine_id}")
 
@@ -2408,9 +2637,18 @@ def _run_tts_install_worker(engine_id: str, job_key: str, activate: bool) -> Non
             pkg_cmd.extend([
                 "--extra-index-url", "https://download.pytorch.org/whl/cu124",
                 "--index-strategy", "unsafe-best-match",
+                "torch==2.6.0+cu124",
+                "torchaudio==2.6.0+cu124",
             ])
         pkg_cmd.extend(pkgs)
-        _run_cmd_logged(pkg_cmd, job_key, cwd=venv_dir, timeout=1800)
+        _run_cmd_with_retry(
+            pkg_cmd,
+            job_key,
+            cwd=venv_dir,
+            timeout=1800,
+            retries=3,
+            step_label=f"Installing {engine_id} packages",
+        )
 
         _update_install_job(job_key, progress=78, step=f"Downloading {engine_id} model weights...")
         dl_env = _engine_install_env(engine_id)
@@ -2425,7 +2663,16 @@ def _run_tts_install_worker(engine_id: str, job_key: str, activate: bool) -> Non
         else:
             dl_code = "from kokoro import KPipeline; KPipeline(lang_code='a')"
 
-        _run_cmd_logged([str(py_exe), "-c", dl_code], job_key, env=dl_env, timeout=2400)
+        _run_cmd_with_retry(
+            [str(py_exe), "-s", "-c", dl_code],
+            job_key,
+            cwd=venv_dir,
+            env=dl_env,
+            timeout=2400,
+            retries=3,
+            step_label=f"Downloading {engine_id} weights",
+            heal_ctx=(uv_exe, py_exe, venv_dir),
+        )
 
         marker = _engine_verified_marker(engine_id)
         marker.write_text(
@@ -2480,7 +2727,13 @@ def _run_stt_install_worker(model_id: str, job_key: str, activate: bool) -> None
             f"from faster_whisper.utils import download_model; "
             f"p = download_model({model_id!r}); print(p)"
         )
-        _run_cmd_logged([py_target, "-c", dl_code], job_key, timeout=1800)
+        _run_cmd_with_retry(
+            [py_target, "-c", dl_code],
+            job_key,
+            timeout=1800,
+            retries=3,
+            step_label=f"Downloading Whisper '{model_id}'",
+        )
 
         marker = _stt_verified_marker(model_id, create=True)
         marker.write_text(
