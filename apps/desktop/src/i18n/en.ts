@@ -4242,6 +4242,7 @@ export const en: Translations = {
         loading: 'Loading breakdown…',
         percentFull: percent => `${percent}% Full`,
         title: 'Context Usage',
+        tokensLeft: remaining => `${remaining} left`,
         tokenSummary: (used, max) => `${used} / ${max} Tokens`
       },
       focusedSince: 'Focused for',

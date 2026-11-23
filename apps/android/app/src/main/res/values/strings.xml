@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Foolmoon</string>
+    <string name="assistant_label">Foolmoon Assistant</string>
+    <string name="tile_label">Ask Foolmoon</string>
+    <string name="accessibility_service_label">Foolmoon Agentic Screen Control</string>
+    <string name="accessibility_service_description">Allows Foolmoon Assistant to read visible screen context and tap/scroll UI controls when you explicitly ask it to perform an on-device task.</string>
+</resources>

@@ -61,10 +61,10 @@ def _local_tts_warmers() -> dict[str, Callable[[dict[str, Any]], Any]]:
         def _loader(_cfg: dict[str, Any]):
             from tools.tts_cloning_cuda import _get_worker, get_active_voice_clone
             w = _get_worker(engine)
-            w.ensure_started(timeout_s=90.0)
+            w.ensure_started(timeout_s=120.0)
             active = get_active_voice_clone()
             if active and active.get("wavPath") and w.engine in ("chatterbox", "chatterbox_turbo"):
-                w.request({"cmd": "prepare_clone", "cloneWavPath": active["wavPath"]}, timeout_s=30.0)
+                w.request({"cmd": "prepare_clone", "cloneWavPath": active["wavPath"]}, timeout_s=120.0)
             return w
         return _loader
 

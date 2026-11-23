@@ -442,6 +442,21 @@ def _recover_context_length(st: _Recovery, _retry: TurnRetryState, error_msg: st
         return st.done("break")
 
     # Can't compress further and already at minimum tier.
+    active_window = agent.context_compressor.context_length
+    if is_local_server(agent.base_url, agent.provider) and new_tokens < 1000 and active_window <= 16384:
+        local_hint = (
+            f"The local model `{agent.model}` only has {active_window:,} tokens of loaded context (`n_ctx`), "
+            f"which is smaller than the active system prompt and MCP tool schemas (~{st.request_tokens():,} tokens). "
+            f"Increase Context Length in LM Studio (recommended: 32,768+) or disable unused MCP servers."
+        )
+        return st.fail_turn(
+            local_hint,
+            notices=(f"❌ {local_hint}",),
+            log=(
+                "%sLocal context window (%s) smaller than static prompt+tools (~%s tokens; chat=%s).",
+                agent.log_prefix, f"{active_window:,}", f"{st.request_tokens():,}", f"{new_tokens:,}",
+            ),
+        )
     return st.fail_turn(
         site_copy("context_overflow", model=agent.model),
         notices=(

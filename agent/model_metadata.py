@@ -963,8 +963,19 @@ def _lmstudio_loaded_context(model: dict[str, Any]) -> Optional[int]:
     return None
 
 
+def _lmstudio_fallback_context(model: dict[str, Any]) -> Optional[int]:
+    """Loaded runtime context first; if unloaded, fall back to model's reported max_context_length."""
+    loaded = _lmstudio_loaded_context(model)
+    if loaded is not None:
+        return loaded
+    max_ctx = model.get("max_context_length")
+    if isinstance(max_ctx, int) and max_ctx > 0:
+        return max_ctx
+    return None
+
+
 def _lmstudio_native_models(normalized: str, headers: dict[str, str]) -> dict[str, dict[str, Any]]:
-    """LM Studio ``/api/v1/models`` → cache; context comes from the first loaded instance."""
+    """LM Studio ``/api/v1/models`` → cache; context comes from loaded instance or max_context_length."""
     response = model_metadata_http.get(_lmstudio_server_root(normalized).rstrip("/") + "/api/v1/models", headers=headers, timeout=(5, 10), verify=model_metadata_http.resolve_verify(normalized))
     response.raise_for_status()
     cache: dict[str, dict[str, Any]] = {}
@@ -972,7 +983,7 @@ def _lmstudio_native_models(normalized: str, headers: dict[str, str]) -> dict[st
         model_id = (model.get("key") or model.get("id")) if isinstance(model, dict) else None
         if not model_id:
             continue
-        entry = _endpoint_model_entry(model, model_id, _lmstudio_loaded_context(model))
+        entry = _endpoint_model_entry(model, model_id, _lmstudio_fallback_context(model))
         _add_model_aliases(cache, model_id, entry)
         alt_id = model.get("id")
         if isinstance(alt_id, str) and alt_id and alt_id != model_id:
@@ -1222,10 +1233,12 @@ def parse_context_limit_from_error(error_msg: str) -> Optional[int]:
     if ("output limit" in error_lower or "output tokens" in error_lower or "output token" in error_lower) and "context" not in error_lower:
         return None
     patterns = (
+        r'"n_ctx"\s*:\s*(\d{4,})',  # LM Studio / llama.cpp JSON error: "n_ctx": 8192
+        r'available\s+context\s+size\s*\(\s*(\d{4,})\s*tokens?\s*\)',  # LM Studio: available context size (8192 tokens)
         r'max_model_len\s*(?:is\s*)?[:=(]?\s*(\d{4,})',  # vLLM: "max_model_len 32768", "=32768", ": 32768", "(32768)", "is 32768"
         r'maximum model length\s*(?:is\s*)?[:=(]?\s*(\d{4,})',  # vLLM alt: "maximum model length 131072", "... is 131072"
-        r'(?:max(?:imum)?|limit)\s*(?:context\s*)?(?:length|size|window)?\s*(?:is|of|:)?\s*(\d{4,})',
-        r'context\s*(?:length|size|window)\s*(?:is|of|:)?\s*(\d{4,})',
+        r'(?:max(?:imum)?|limit)\s*(?:context\s*)?(?:length|size|window)?\s*(?:is|of|:|\()?\s*(\d{4,})',
+        r'context\s*(?:length|size|window)\s*(?:is|of|:|\()?\s*(\d{4,})',
         r'(\d{4,})\s*(?:token)?\s*(?:context|limit)',
         r'>\s*(\d{4,})\s*(?:max|limit|token)',  # "250000 tokens > 200000 maximum"
         r'(\d{4,})\s*(?:max(?:imum)?)\b',  # "200000 maximum"

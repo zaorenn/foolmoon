@@ -111,9 +111,10 @@ export function ContextRingPill({
       ? '…'
       : 'Ctx'
 
+  const copy = t.shell.statusbar.contextUsagePanel
   const tooltipText = hasCapacity
-    ? `${t.shell.statusbar.contextUsagePanel.title}: ${estPrefix}${compactNumber(contextUsed)} / ${compactNumber(contextMax)} (${percent}% · ${compactNumber(contextRemaining)} left)`
-    : `${t.shell.statusbar.contextUsagePanel.title} — ${t.shell.statusbar.contextUsagePanel.empty}`
+    ? `${copy.title}: ${estPrefix}${compactNumber(contextUsed)} / ${compactNumber(contextMax)} (${percent}% · ${copy.tokensLeft(compactNumber(contextRemaining))})`
+    : `${copy.title} — ${copy.empty}`
 
   return (
     <DropdownMenu onOpenChange={setOpen} open={open}>

@@ -2020,9 +2020,13 @@ class _PersistentCudaWorker:
                         self._stderr_tail = stderr_tail
                         return
 
-    def request(self, payload: dict[str, Any], timeout_s: float = 45.0) -> dict[str, Any]:
+    def request(self, payload: dict[str, Any], timeout_s: Optional[float] = None) -> dict[str, Any]:
         with self.lock:
-            self.ensure_started()
+            self.ensure_started(timeout_s=120.0)
+            # First request triggers cold GPU weight loading & CUDAGraph capture (~35-65s on RTX GPUs).
+            effective_timeout = float(timeout_s) if timeout_s is not None else (
+                120.0 if not getattr(self, "_warmed_once", False) else 45.0
+            )
             assert self.proc is not None and self.proc.stdin is not None
             req_id = uuid.uuid4().hex[:12]
             req = {**payload, "id": req_id}
@@ -2033,14 +2037,14 @@ class _PersistentCudaWorker:
                 tail = " | ".join(list(self._stderr_tail)[-8:])
                 self._reset_proc()
                 raise RuntimeError(f"{self.engine} worker write failed ({exc})" + (f": {tail}" if tail else ""))
-            deadline = time.monotonic() + float(timeout_s)
+            deadline = time.monotonic() + effective_timeout
             while True:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     tail = " | ".join(list(self._stderr_tail)[-8:])
                     self._reset_proc()
                     raise RuntimeError(
-                        f"{self.engine} worker request timed out after {int(timeout_s)}s"
+                        f"{self.engine} worker request timed out after {int(effective_timeout)}s"
                         + (f": {tail}" if tail else "")
                     )
                 try:
@@ -2066,6 +2070,7 @@ class _PersistentCudaWorker:
                     continue
                 if not resp.get("ok"):
                     raise RuntimeError(str(resp.get("error") or f"{self.engine} synthesis error"))
+                self._warmed_once = True
                 return resp
 
     def shutdown(self) -> None:

@@ -4524,6 +4524,7 @@
   "shell.statusbar.contextUsagePanel.percentFull": ["ar"],
   "shell.statusbar.contextUsagePanel.title": ["ar"],
   "shell.statusbar.contextUsagePanel.tokenSummary": ["ar"],
+  "shell.statusbar.contextUsagePanel.tokensLeft": ["ar","de","es","fr","ja","ru","zh","zh-hant"],
   "shell.statusbar.customizeTitle": ["ar","ja","zh-hant"],
   "shell.statusbar.desktopVersion": ["tr"],
   "shell.statusbar.focusedSinceTitle": ["tr"],

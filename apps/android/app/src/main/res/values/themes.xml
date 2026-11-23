@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Foolmoon" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">#151110</item>
+        <item name="android:navigationBarColor">#151110</item>
+        <item name="android:windowBackground">#151110</item>
+    </style>
+
+    <style name="Theme.Foolmoon.Overlay" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:backgroundDimAmount">0.42</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>

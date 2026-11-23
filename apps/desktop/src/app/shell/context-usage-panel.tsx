@@ -64,7 +64,7 @@ export function ContextUsagePanel({ breakdown, compact, loading, usage }: Contex
           </span>
           {contextMax > 0 && (
             <span className="text-muted-foreground" data-testid="context-panel-remaining">
-              · {compactNumber(contextRemaining)} left
+              · {copy.tokensLeft(compactNumber(contextRemaining))}
             </span>
           )}
         </span>

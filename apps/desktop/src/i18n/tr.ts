@@ -348,6 +348,7 @@ export const trOverrides: TranslationOverrides = {
         loading: 'Dağılım yükleniyor…',
         percentFull: percent => `%${percent} Dolu`,
         title: 'Bağlam Kullanımı',
+        tokensLeft: remaining => `${remaining} kaldı`,
         tokenSummary: (used, max) => `${used} / ${max} Token`
       },
       focusedSince: 'Odak süresi',

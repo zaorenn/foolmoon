@@ -3700,6 +3700,7 @@ export interface Translations extends NoticeTranslations {
         loading: string
         percentFull: (percent: number) => string
         title: string
+        tokensLeft: (remaining: string) => string
         tokenSummary: (used: string, max: string) => string
       }
       focusedSince: string

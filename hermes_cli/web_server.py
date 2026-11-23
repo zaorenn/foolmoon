@@ -464,6 +464,13 @@ async def auth_middleware(request: Request, call_next):
     then authoritative and the loopback-only token path must not override it.
     """
     path = request.url.path
+    if path == "/api/mobile/pair/complete":
+        return await call_next(request)
+    if path.startswith(("/api/mobile/", "/api/audio/")):
+        from hermes_cli.web_routers.mobile_bridge import verify_mobile_request_token
+        if verify_mobile_request_token(request) is not None:
+            request.state.token_authenticated = True
+            return await call_next(request)
     if (
         not getattr(request.state, "token_authenticated", False)
         and not getattr(request.state, "native_http_principal", None)
@@ -819,6 +826,7 @@ from hermes_cli.web_routers import (
 
 import hermes_cli.web_routers.desktop_plugins as _desktop_plugin_routes
 import hermes_cli.web_routers.foolmoon_updates as _foolmoon_updates_routes
+import hermes_cli.web_routers.mobile_bridge as _mobile_bridge_routes
 import hermes_cli.web_routers.uploads as _upload_routes
 from fastapi import Depends as _Depends
 from hermes_cli.web_server_surface import route_on as _route_on
@@ -832,6 +840,7 @@ app.include_router(_local_models_routes.router)
 app.include_router(_status_routes.router)
 app.include_router(_actions_routes.router)
 app.include_router(_foolmoon_updates_routes.router)
+app.include_router(_mobile_bridge_routes.router)
 app.include_router(_audio_routes.router)
 app.include_router(_display_routes.router)
 app.include_router(_actions_routes.status_router)

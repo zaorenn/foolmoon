@@ -46,6 +46,7 @@ import {
   toggleJarvisHandsFree,
   toggleNotch
 } from '@/store/notch'
+import { confirm } from '@/store/confirm'
 import { notify, notifyError } from '@/store/notifications'
 import { $voicePlayback } from '@/store/voice-playback'
 import type {
@@ -418,7 +419,13 @@ export function VoiceCloningStudio({ scopeProfile }: { scopeProfile?: string }) 
   }
 
   const handleUninstallEngine = async (targetType: 'tts' | 'stt', targetId: string, label: string) => {
-    if (typeof window !== 'undefined' && !window.confirm(`Uninstall ${label} and delete its local weights/cache?`)) {
+    const confirmed = await confirm({
+      confirmLabel: 'Uninstall',
+      description: `Delete local weights and cached runtime files for ${label}? You can re-download it anytime.`,
+      destructive: true,
+      title: `Uninstall ${label}?`
+    })
+    if (!confirmed) {
       return
     }
     setBusyAction(`uninstall:${targetType}:${targetId}`)
