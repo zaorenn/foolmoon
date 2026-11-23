@@ -9,6 +9,7 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -35,11 +36,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CropFree
 import androidx.compose.material.icons.filled.OpenInFull
-import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.AssistChip
@@ -275,6 +276,8 @@ private fun OverlayScreen(
     val latestAssistant = turns.lastOrNull { it.role == "assistant" }?.content.orEmpty()
     val auraPhase = rememberGeminiAuraPhase(2400)
 
+    BackHandler(enabled = showCircleSearch) { showCircleSearch = false }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
@@ -452,7 +455,7 @@ private fun OverlayScreen(
                                     .clip(CircleShape)
                                     .background(FoolmoonColors.Crimson)
                             ) {
-                                Icon(Icons.Default.Send, contentDescription = "Gönder", tint = Color.White)
+                                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Gönder", tint = Color.White)
                             }
                         } else {
                             GeminiVoiceWaveOrb(

@@ -38,6 +38,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Close
@@ -682,7 +683,7 @@ fun CircleToSearchOverlay(
                                     .clip(CircleShape)
                                     .background(FoolmoonColors.Crimson)
                             ) {
-                                Icon(Icons.Default.Send, contentDescription = "Sor", tint = Color.White, modifier = Modifier.size(18.dp))
+                                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Sor", tint = Color.White, modifier = Modifier.size(18.dp))
                             }
                         }
                     }

@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -11,6 +12,7 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -46,6 +48,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AddComment
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bookmark
@@ -58,7 +61,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FlashlightOff
 import androidx.compose.material.icons.filled.FlashlightOn
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Tune
@@ -97,6 +99,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -349,18 +352,31 @@ private fun FoolmoonSimplifiedMobileApp(
     }
     val activeAudio = if (playback.speaking) playback.audioLevel else inlineMicLevel
     val auraPhase = rememberGeminiAuraPhase(2800)
+    val rootView = LocalView.current
+
+    BackHandler(enabled = showCircleSearch) { showCircleSearch = false }
+
+    fun captureCurrentViewBitmap(): Bitmap? {
+        if (rootView.width <= 0 || rootView.height <= 0) return null
+        return runCatching {
+            val bmp = Bitmap.createBitmap(rootView.width, rootView.height, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bmp)
+            rootView.draw(canvas)
+            bmp
+        }.getOrNull()
+    }
 
     fun launchCircleToSearch() {
         val svc = FoolmoonAccessibilityService.current()
         if (svc != null) {
             svc.captureScreenSnapshot { bmp, nodes ->
-                capturedBmp = bmp
+                capturedBmp = bmp ?: captureCurrentViewBitmap()
                 capturedNodes = nodes
                 capturedSummary = FoolmoonAccessibilityService.lastCapturedSummary
                 showCircleSearch = true
             }
         } else {
-            capturedBmp = FoolmoonAccessibilityService.lastCapturedBitmap
+            capturedBmp = captureCurrentViewBitmap() ?: FoolmoonAccessibilityService.lastCapturedBitmap
             capturedNodes = FoolmoonAccessibilityService.lastCapturedNodes
             capturedSummary = buildString {
                 appendLine("Foolmoon Mobile Aktif Ekranı")
@@ -774,7 +790,7 @@ private fun FoolmoonSimplifiedMobileApp(
                                     .clip(CircleShape)
                                     .background(FoolmoonColors.Crimson)
                             ) {
-                                Icon(Icons.Default.Send, contentDescription = "Gönder", tint = Color.White, modifier = Modifier.size(19.dp))
+                                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Gönder", tint = Color.White, modifier = Modifier.size(19.dp))
                             }
                         } else {
                             GeminiVoiceWaveOrb(
