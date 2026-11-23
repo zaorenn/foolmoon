@@ -64,7 +64,7 @@ _CODING_TOOLS = _core_without("image_generate", "text_to_speech", "cronjob_manag
 
 # Toolsets a CLIENT adds to its own sessions (tui_gateway/server.py::_gui_surface_toolsets), never
 # config: another surface lacking them made no configuration choice.
-CLIENT_SURFACE_TOOLSETS = frozenset({"project", "desktop_ui", "catalog"})
+CLIENT_SURFACE_TOOLSETS = frozenset({"project", "desktop_ui", "catalog", "mobile"})
 
 # Core toolset definitions: individual tools or references to other toolsets.
 TOOLSETS = {
@@ -143,6 +143,10 @@ TOOLSETS = {
         "Foolmoon Studio Architect — custom app themes, surface materials, SVG patterns, and stickers (Studio Architect mode only)",
         ["customize_foolmoon_studio", "stylize_theme_from_image", "set_theme"],
         platforms=frozenset({"desktop"}),
+    ),
+    "mobile": _ts(
+        "Paired Android mobile device status and remote actions (Foolmoon Mobile bridge)",
+        ["android_device_status", "android_device_action"],
     ),
     "onboarding": _ts("First-run onboarding cards; folded in only for the onboarding chat (tui_gateway/methods_onboarding.py)",
                       ["setup_beat"], platforms=frozenset({"desktop"})),

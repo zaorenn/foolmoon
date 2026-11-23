@@ -61,8 +61,21 @@ def _route_deferred_call(agent, tc) -> bool:
 
     # A legacy alias (``process``) names a deferred tool too, and hints still spell it that way.
     name = _canonical_tool_name(tc.function.name)
-    if TOOL_CALL_NAME not in agent.valid_tool_names or name not in _tool_search_scoped_names(agent):
+    if TOOL_CALL_NAME not in agent.valid_tool_names:
         return False
+    scoped = _tool_search_scoped_names(agent)
+    if name not in scoped:
+        # Local models often call an MCP tool by its bare suffix (e.g. ``launch_app`` or
+        # ``system_volume``) instead of ``mcp__windows_os__launch_app``. Auto-resolve when unique.
+        suffix = f"__{name}"
+        matches = [cand for cand in scoped if cand.endswith(suffix)]
+        if len(matches) != 1:
+            suffix_lower = suffix.lower()
+            matches = [cand for cand in scoped if cand.lower().endswith(suffix_lower)]
+        if len(matches) == 1:
+            name = matches[0]
+        else:
+            return False
     args = tc.function.arguments or "{}"
     if isinstance(args, str):
         try:

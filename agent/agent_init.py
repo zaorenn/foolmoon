@@ -1965,10 +1965,14 @@ def _compact_tools_for_tight_local_window(agent):
 
     priority_names = (
         "customize_foolmoon_studio",
+        "stylize_theme_from_image",
+        "set_theme",
         "tool_search",
         "tool_describe",
         "tool_call",
         "open_on_computer",
+        "android_device_status",
+        "android_device_action",
         "web_search",
         "read_file",
         "write_file",
@@ -2025,6 +2029,11 @@ def _compact_tools_for_tight_local_window(agent):
             f"{_ctx:,}",
         )
         agent.tools = compacted
+        agent.valid_tool_names = {
+            (t.get("function") or {}).get("name")
+            for t in compacted
+            if isinstance(t, dict) and (t.get("function") or {}).get("name")
+        }
 
 
 def _warn_nonagentic_hermes_model(agent):

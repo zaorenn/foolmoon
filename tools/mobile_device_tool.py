@@ -84,7 +84,6 @@ registry.register(
     toolset="mobile",
     schema=ANDROID_ACTION_SCHEMA,
     handler=_handle_android_action,
-    check_fn=_mobile_tool_available,
     emoji="📱",
 )
 
@@ -93,6 +92,5 @@ registry.register(
     toolset="mobile",
     schema=ANDROID_STATUS_SCHEMA,
     handler=_handle_android_status,
-    check_fn=_mobile_tool_available,
     emoji="📱",
 )

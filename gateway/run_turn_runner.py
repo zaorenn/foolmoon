@@ -1482,7 +1482,59 @@ class TurnRunner(GatewayTurnProgressMixin, GatewaySessionAgentMixin):
             from gateway.session_secret_prompt import secret_prompt_scope
             from gateway.session_sudo_prompt import sudo_prompt_scope
             from gateway.session_vault_prompt import vault_prompt_scope
-            with sudo_prompt_scope(self, agent), secret_prompt_scope(self, agent), vault_prompt_scope(self, agent):
+            from contextlib import contextmanager as _contextmanager
+
+            @_contextmanager
+            def _studio_architect_scope(_agent, _msg):
+                """Strictly isolate Studio Architect turns to dedicated Foolmoon theme/design tools only
+                (no normal MCPs, terminal, browser, or tool_search noise), and keep studio-only tools
+                out of Standard turns."""
+                _ARCHITECT_MARKER = "[Foolmoon Studio Architect mode is active."
+                _STUDIO_ONLY_NAMES = ("customize_foolmoon_studio", "stylize_theme_from_image")
+                _ARCHITECT_TOOLKIT = (
+                    "customize_foolmoon_studio",
+                    "stylize_theme_from_image",
+                    "set_theme",
+                    "vision_analyze",
+                )
+                is_architect = isinstance(_msg, str) and _ARCHITECT_MARKER in _msg
+                orig_tools = getattr(_agent, "tools", None)
+                orig_valid = getattr(_agent, "valid_tool_names", None)
+                try:
+                    if is_architect:
+                        from tools.registry import registry as _tool_registry
+                        arch_tools = list(_tool_registry.get_definitions(set(_ARCHITECT_TOOLKIT), quiet=True))
+                        # Preserve deterministic order with customize_foolmoon_studio first
+                        order = {n: i for i, n in enumerate(_ARCHITECT_TOOLKIT)}
+                        arch_tools.sort(key=lambda t: order.get((t.get("function") or {}).get("name", ""), 99))
+                        arch_names = {
+                            (t.get("function") or {}).get("name")
+                            for t in arch_tools
+                            if isinstance(t, dict) and (t.get("function") or {}).get("name")
+                        }
+                        if arch_tools:
+                            _agent.tools = arch_tools
+                            _agent.valid_tool_names = arch_names
+                    elif isinstance(orig_tools, list):
+                        filtered_tools = [
+                            t for t in orig_tools
+                            if (t.get("function") or {}).get("name") not in _STUDIO_ONLY_NAMES
+                        ]
+                        if len(filtered_tools) != len(orig_tools):
+                            _agent.tools = filtered_tools
+                            if isinstance(orig_valid, set):
+                                _agent.valid_tool_names = orig_valid - set(_STUDIO_ONLY_NAMES)
+                    yield
+                finally:
+                    _agent.tools = orig_tools
+                    _agent.valid_tool_names = orig_valid
+
+            with (
+                sudo_prompt_scope(self, agent),
+                secret_prompt_scope(self, agent),
+                vault_prompt_scope(self, agent),
+                _studio_architect_scope(agent, ctx.message),
+            ):
                 result = run_classic_cli_turn(self, lambda: self._run_conversation_with_approval(
                     agent, agent_history, observed_group_context, persist_msg, persist_ts))
         finally:

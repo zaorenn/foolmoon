@@ -674,15 +674,25 @@ def _sync_agent_daybreak(agent) -> None:
 
 
 _STUDIO_ARCHITECT_TOOLS = frozenset({"customize_foolmoon_studio", "stylize_theme_from_image"})
+_STUDIO_ARCHITECT_ISOLATED_TOOLKIT = (
+    "customize_foolmoon_studio",
+    "stylize_theme_from_image",
+    "set_theme",
+    "vision_analyze",
+)
 
 
 def _sync_studio_architect_tools(session: dict, agent: Any) -> str:
-    """Strictly isolate Studio Architect theme tools from Standard Hermes turns."""
+    """Strictly isolate Studio Architect turns to dedicated theme tools only (zero normal MCPs/coding tools),
+    and restore the full Standard toolset when switching back to Standard mode."""
     is_architect = (session.get("composer_persona") == "architect")
     current_tools = list(getattr(agent, "tools", None) or [])
     valid_names = set(getattr(agent, "valid_tool_names", None) or set())
 
     if not is_architect:
+        saved = session.pop("_standard_tools_snapshot", None)
+        if isinstance(saved, tuple) and len(saved) == 2:
+            current_tools, valid_names = list(saved[0]), set(saved[1])
         filtered = [
             t for t in current_tools
             if (t.get("function") or {}).get("name") not in _STUDIO_ARCHITECT_TOOLS
@@ -691,22 +701,21 @@ def _sync_studio_architect_tools(session: dict, agent: Any) -> str:
         agent.valid_tool_names = valid_names - _STUDIO_ARCHITECT_TOOLS
         return ""
 
+    if "_standard_tools_snapshot" not in session:
+        session["_standard_tools_snapshot"] = (current_tools, valid_names)
+
     from tools.registry import registry
 
-    present = {
+    order = {n: i for i, n in enumerate(_STUDIO_ARCHITECT_ISOLATED_TOOLKIT)}
+    arch_tools = list(registry.get_definitions(set(_STUDIO_ARCHITECT_ISOLATED_TOOLKIT), quiet=True))
+    arch_tools.sort(key=lambda t: order.get((t.get("function") or {}).get("name", ""), 99))
+    arch_names = {
         (t.get("function") or {}).get("name")
-        for t in current_tools
-        if isinstance(t, dict)
+        for t in arch_tools
+        if isinstance(t, dict) and (t.get("function") or {}).get("name")
     }
-    missing = _STUDIO_ARCHITECT_TOOLS - present
-    if missing:
-        for schema in registry.get_definitions(missing, quiet=True):
-            name = (schema.get("function") or {}).get("name")
-            if name and name not in present:
-                current_tools.append(schema)
-                present.add(name)
-    agent.tools = current_tools
-    agent.valid_tool_names = valid_names | (present & _STUDIO_ARCHITECT_TOOLS)
+    agent.tools = arch_tools
+    agent.valid_tool_names = arch_names
     return (
         "[Studio Architect Mode] You are styling the Foolmoon desktop app's own theme, "
         "surface material, patterns, corner geometry, stickers, and bbot aesthetics. Use "
