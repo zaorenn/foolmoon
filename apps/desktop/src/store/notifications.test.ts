@@ -199,6 +199,16 @@ test('an unrelated invalid_params keeps the generic toast', () => {
     'Edit failed'
   )
   expect(lastMessage()).toBe('invalid_params')
+
+  clearNotifications()
+  notifyError(
+    new JsonRpcGatewayError('invalid_params', {
+      code: 4001,
+      data: { reason: 'invalid_params', fields: ['persona'] }
+    }),
+    'Prompt failed'
+  )
+  expect(lastMessage()).toBe('Invalid parameters: persona')
 })
 
 // #143133: a model pick or option change on a chat whose launch API key changed showed the raw

@@ -107,9 +107,7 @@ export function ContextRingPill({
     ? compact
       ? `${percent}%`
       : `${estPrefix}${compactNumber(contextUsed)}/${compactNumber(contextMax)}`
-    : loading
-      ? '…'
-      : 'Ctx'
+    : 'Ctx'
 
   const copy = t.shell.statusbar.contextUsagePanel
   const tooltipText = hasCapacity

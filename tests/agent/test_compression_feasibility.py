@@ -463,6 +463,26 @@ def test_rejects_aux_below_minimum_context(mock_get_client, mock_ctx_len):
     assert "tiny-aux-model" in str(exc_info.value)
 
 
+@patch("agent.model_metadata.get_model_context_length", return_value=8_192)
+@patch("agent.auxiliary_client.get_text_auxiliary_client")
+def test_clamps_local_aux_below_minimum_context(mock_get_client, mock_ctx_len):
+    """Local endpoints (LM Studio / Ollama / llama.cpp) running 8K-32K helper models
+    must clamp the compression threshold cleanly instead of raising ValueError."""
+    agent = _make_agent(main_context=200_000, threshold_percent=0.50)
+    compressor = agent.context_compressor = ContextCompressor(
+        "bonsai-27b", config_context_length=200_000, threshold_percent=0.50, quiet_mode=True,
+    )
+    mock_client = MagicMock()
+    mock_client.base_url = "http://127.0.0.1:1234/v1"
+    mock_client.api_key = "lm-studio"
+    mock_get_client.return_value = (mock_client, "gemma-4-e4b-it")
+    agent._emit_warning = lambda msg: None
+
+    agent._check_compression_model_feasibility()
+
+    assert compressor.threshold_tokens <= 8_192
+
+
 
 
 def test_feasibility_check_passes_live_main_runtime():

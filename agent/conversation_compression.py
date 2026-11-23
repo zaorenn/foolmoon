@@ -1987,7 +1987,7 @@ def check_compression_model_feasibility(agent: Any) -> None:
             _resolve_task_provider_model, _try_configured_fallback_for_unavailable_client,
             get_text_auxiliary_client,
         )
-        from agent.model_metadata import MINIMUM_CONTEXT_LENGTH, get_model_context_length
+        from agent.model_metadata import MINIMUM_CONTEXT_LENGTH, get_model_context_length, is_local_endpoint
         # Provider may be "auto"; fall back to the client's base_url hostname so the
         # user can tell where the compression model is actually called.
         try:
@@ -2040,17 +2040,28 @@ def check_compression_model_feasibility(agent: Any) -> None:
                 provider=_aux_provider, custom_providers=_configured_custom_providers(agent),
             )
         # Aux model must meet MINIMUM_CONTEXT_LENGTH like the main model, else it cannot summarise a full window.
+        # Local endpoints (LM Studio / Ollama / llama.cpp) commonly load 8K-32K helper models; clamp the
+        # compression threshold to their window instead of crashing the session when >= 4,096 tokens.
         if aux_context and aux_context < MINIMUM_CONTEXT_LENGTH:
-            raise ValueError(
-                f"Auxiliary compression model {aux_model} has a context "
-                f"window of {aux_context:,} tokens, which is below the "
-                f"minimum {MINIMUM_CONTEXT_LENGTH:,} required by Hermes "
-                f"Agent.  Choose a compression model with at least "
-                f"{MINIMUM_CONTEXT_LENGTH // 1000}K context (set "
-                f"auxiliary.compression.model in config.yaml), or set "
-                f"auxiliary.compression.context_length to override the "
-                f"detected value if it is wrong."
-            )
+            if is_local_endpoint(aux_base_url) and aux_context >= 4_096:
+                logger.warning(
+                    "Local auxiliary compression model %s has a %s-token window (below %s); "
+                    "clamping compression threshold to fit the local model.",
+                    aux_model,
+                    f"{aux_context:,}",
+                    f"{MINIMUM_CONTEXT_LENGTH:,}",
+                )
+            else:
+                raise ValueError(
+                    f"Auxiliary compression model {aux_model} has a context "
+                    f"window of {aux_context:,} tokens, which is below the "
+                    f"minimum {MINIMUM_CONTEXT_LENGTH:,} required by Hermes "
+                    f"Agent.  Choose a compression model with at least "
+                    f"{MINIMUM_CONTEXT_LENGTH // 1000}K context (set "
+                    f"auxiliary.compression.model in config.yaml), or set "
+                    f"auxiliary.compression.context_length to override the "
+                    f"detected value if it is wrong."
+                )
         if aux_context < agent.context_compressor.threshold_tokens:
             _lower_threshold_to_aux_context(
                 agent, aux_model=aux_model, aux_context=aux_context, aux_provider=_aux_cfg_provider,

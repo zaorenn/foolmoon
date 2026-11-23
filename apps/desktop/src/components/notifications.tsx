@@ -130,7 +130,7 @@ function TopCenterStack({
       aria-label={copy.region}
       className={cn(
         REGION_BASE,
-        'left-1/2 top-[calc(var(--titlebar-height,34px)+0.75rem)] w-[min(28rem,calc(100%-2rem))] -translate-x-1/2 flex-col p-1',
+        'right-4 top-[calc(var(--titlebar-height,34px)+2.75rem)] w-[min(26rem,calc(100%-2rem))] flex-col p-1',
         expanded && 'max-h-[70vh] overflow-y-auto overscroll-contain'
       )}
       role="region"

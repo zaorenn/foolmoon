@@ -285,6 +285,34 @@ function isLaunchCredentialsRefusal(error: unknown): boolean {
   return error instanceof Error && error.message.trim() === 'launch_credentials_unavailable'
 }
 
+function invalidParamsDetail(error: unknown): string | null {
+  const data = error && typeof error === 'object' ? (error as { data?: unknown }).data : undefined
+
+  if (!data || typeof data !== 'object') {
+    return null
+  }
+
+  const { detail, fields, reason } = data as { detail?: unknown; fields?: unknown; reason?: unknown }
+
+  if (reason !== 'invalid_params') {
+    return null
+  }
+
+  if (typeof detail === 'string' && detail.trim()) {
+    return detail.trim()
+  }
+
+  if (Array.isArray(fields) && fields.length > 0) {
+    const names = fields.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+
+    if (names.length > 0) {
+      return `Invalid parameters: ${names.join(', ')}`
+    }
+  }
+
+  return null
+}
+
 // Exported so flows that surface errors inline (e.g. ConfirmDialog's onConfirm
 // rethrow) can reuse the same IPC-unwrapping + summarizing as notifyError.
 export function readableError(
@@ -297,6 +325,12 @@ export function readableError(
     const key = staleRewind === 'compacted' ? 'compactedTurnUnavailable' : 'staleTurnUnavailable'
 
     return { message: translateNow(`promptNotices.${key}`), category: 'other' }
+  }
+
+  const paramDetail = invalidParamsDetail(error)
+
+  if (paramDetail) {
+    return { message: paramDetail, category: 'other' }
   }
 
   if (isLaunchCredentialsRefusal(error)) {

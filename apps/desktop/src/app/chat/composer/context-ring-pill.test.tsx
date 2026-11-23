@@ -77,4 +77,21 @@ describe('ContextRingPill', () => {
     expect(button.textContent).toContain('88%')
     expect(button.className).toContain('text-rose-500')
   })
+
+  it('shows Ctx instead of an ellipsis while context_max is unknown', () => {
+    $currentUsage.set({ calls: 0, input: 0, output: 0, total: 0 })
+    const requestGateway = vi.fn(() => new Promise<never>(() => {}))
+
+    render(
+      <I18nProvider>
+        <TooltipProvider>
+          <ContextRingPill busy={false} requestGateway={requestGateway} sessionId="sess-ctx-1" />
+        </TooltipProvider>
+      </I18nProvider>
+    )
+
+    const button = screen.getByRole('button')
+    expect(button.textContent).toContain('Ctx')
+    expect(button.textContent).not.toContain('…')
+  })
 })

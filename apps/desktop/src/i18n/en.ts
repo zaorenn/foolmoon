@@ -4526,7 +4526,7 @@ export const en: Translations = {
       errorRetryAtResetShort: time => `Retry at ${time}`,
       errorRateLimitResetBody: (provider, time) => `You've hit ${provider}'s rate limit. It resets at ${time}.`,
       errorGenericProvider: 'The AI service',
-      errorToastTitle: "Hermes couldn't finish the reply",
+      errorToastTitle: "Foolmoon couldn't finish the reply",
       errorRetry: 'Retry',
       errorRetryScheduled: (time, wait) => `Retrying at ${time} — in ${wait}`,
       errorRetryScheduledCancel: 'Cancel',

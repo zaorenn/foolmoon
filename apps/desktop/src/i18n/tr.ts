@@ -373,6 +373,34 @@ export const trOverrides: TranslationOverrides = {
       label: 'Gelişmiş',
       description: 'Geliştiriciler için. Terminal, dosyalar, diff, durum çubuğu ve özel yerleşimler.'
     }
+  },
+
+  assistant: {
+    thread: {
+      errorToastTitle: 'Foolmoon yanıtı tamamlayamadı',
+      errorLayers: {
+        auth: 'Oturum açma sorunu',
+        billing: 'Kredi bitti',
+        disk: 'Disk dolu',
+        endpoint: 'Model sunucusuna ulaşılamıyor',
+        gateway: 'Mesaj gönderilemedi',
+        generic: 'Foolmoon bu yanıtı tamamlayamadı',
+        provider: 'Yapay zeka servisi hata döndürdü',
+        runtime: 'Foolmoon bir sorunla karşılaştı',
+        streaming: 'Yanıt yarıda kesildi'
+      },
+      errorLayerBodies: {
+        auth: 'Yapay zeka servisi oturum açma bilgilerini reddetti. Sağlayıcı kimlik bilgilerini kontrol edip tekrar deneyin.',
+        billing: 'Bu sağlayıcıdaki krediniz tükendi. Bakiye yükleyin veya başka bir sağlayıcı seçin.',
+        disk: 'Disk dolu olduğu için Foolmoon bu sohbeti kaydedemedi. Biraz yer açıp tekrar deneyin.',
+        endpoint: 'Foolmoon yerel/özel model sunucusuna ulaşamıyor. Sunucunun çalıştığını kontrol edip tekrar deneyin.',
+        gateway: 'Foolmoon bu yanıtı başlatırken dahili bir sorunla karşılaştı. Mesajı tekrar gönderin.',
+        generic: 'Foolmoon yanıt verirken bir hata oluştu. Tekrar deneyin veya sürerse ayrıntıları kopyalayın.',
+        provider: 'Yapay zeka servisi bu isteği tamamlayamadı. Kısa süre sonra tekrar deneyin veya model değiştirin.',
+        runtime: 'Foolmoon bu yanıtı başlatırken dahili bir sorunla karşılaştı. Mesajı tekrar gönderin.',
+        streaming: 'Yanıt tamamlanmadan bağlantı kesildi. Tekrar göndermek için yeniden deneyin.'
+      }
+    }
   }
 }
 

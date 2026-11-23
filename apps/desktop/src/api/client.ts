@@ -71,7 +71,8 @@ const PARENT_ATTACH_REQUIRED = new Set(['session.branch_stored', 'session.branch
 const LEGACY_STRIP: Record<string, string[]> = {
   'session.create': ['request_id'],
   'session.branch_stored': ['request_id'],
-  'session.branch': ['through_message_id']
+  'session.branch': ['through_message_id'],
+  'prompt.submit': ['api_text']
 }
 
 function legacyParams(method: string, params: Record<string, unknown>): Record<string, unknown> {

@@ -1082,6 +1082,14 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
           .filter(attachment => attachment.kind === 'image' && attachment.mime)
           .map(attachment => ({ path: attachment.path!, mime: attachment.mime! }))
 
+        const architectApiText =
+          $composerPersona.get() === 'architect' &&
+          options?.displayKind !== 'hidden' &&
+          text &&
+          !text.startsWith('/')
+            ? `[Foolmoon Studio Architect mode is active. Use \`customize_foolmoon_studio\` to design and live-apply custom Foolmoon themes, surface textures/materials, corner radii, accent colors, repeating SVG patterns, wallpapers, or corner stickers matching the user's request.]\n\n${text}`
+            : undefined
+
         const submitParams = (targetId: string) => ({
           session_id: targetId,
           text,
@@ -1095,7 +1103,10 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
           // rather than at Hermes. The gateway turns this into a per-turn hint
           // to read the window underneath and work in it.
           ...($hudMode.get() && { surface: 'hud' }),
-          ...($composerPersona.get() === 'architect' && { persona: 'architect' }),
+          // Studio Architect persona rides on the canonical `api_text` field so
+          // the user bubble stays clean while staying inside the authority's
+          // closed prompt.submit contract (never send an uncontracted `persona` key).
+          ...(architectApiText && { api_text: architectApiText }),
           // A GPT-Live delegation: the text is a voice transcript and the reply
           // will be spoken by the voice model. Wins over HUD for this turn.
           ...(options?.surface && { surface: options.surface }),
