@@ -894,6 +894,8 @@ class GatewayTurnPersistenceMixin:
                 status_hint = t("gateway.errors.hint_usage_limit")
         elif status_code == 400:
             status_hint = t("gateway.errors.hint_rejected")
+        elif isinstance(e, ValueError) and source.platform == Platform.LOCAL and "context window" in str(e).lower():
+            status_hint = str(e).strip()[:400]
         from gateway.session_results import record_unexecuted_failure
         if not automatic_notices_allowed(source):
             # The failure is recorded for the operator; the bot peer gets no apology to answer (#137027).

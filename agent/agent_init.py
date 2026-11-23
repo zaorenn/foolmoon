@@ -9,6 +9,7 @@ Symbols that tests patch on ``run_agent.*`` (``OpenAI``, ``get_tool_definitions`
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -1897,13 +1898,29 @@ def _enforce_minimum_context(agent):
     # Only a local endpoint can honour num_ctx, so a stale override never admits a hosted model.
     if agent._ollama_num_ctx and is_local_server(agent.base_url, agent.provider):
         _ctx = max(_ctx or 0, agent._ollama_num_ctx)
-    _allow_lmstudio_explicit_below_floor = (
-        str(agent.provider or "").strip().lower() == "lmstudio"
-        and isinstance(agent._config_context_length, int)
-        and not isinstance(agent._config_context_length, bool)
-        and agent._config_context_length > 0
+    _is_lmstudio = str(agent.provider or "").strip().lower() == "lmstudio"
+    if not _is_lmstudio and is_local_server(agent.base_url, agent.provider):
+        with suppress(Exception):
+            from agent.model_metadata import detect_local_server_type
+            _is_lmstudio = detect_local_server_type(agent.base_url or "", agent.api_key or "") == "lm-studio"
+    _allow_lmstudio_below_floor = _is_lmstudio and (
+        _ctx >= 4_096
+        or (
+            isinstance(agent._config_context_length, int)
+            and not isinstance(agent._config_context_length, bool)
+            and agent._config_context_length > 0
+        )
     )
-    if _ctx and _ctx < MINIMUM_CONTEXT_LENGTH and not _allow_lmstudio_explicit_below_floor:
+    if _ctx and _ctx < MINIMUM_CONTEXT_LENGTH and _allow_lmstudio_below_floor:
+        logger.warning(
+            "LM Studio model %s is loaded with a %s-token context window (below %s); "
+            "proceeding with compact local tool budget.",
+            agent.model,
+            f"{_ctx:,}",
+            f"{MINIMUM_CONTEXT_LENGTH:,}",
+        )
+        return
+    if _ctx and _ctx < MINIMUM_CONTEXT_LENGTH:
         floor_k = MINIMUM_CONTEXT_LENGTH // 1000
         if is_local_server(agent.base_url, agent.provider):
             # Any OpenAI-compatible local server (llama.cpp, vLLM, Ollama, ...) — the window is the
@@ -1927,6 +1944,87 @@ def _enforce_minimum_context(agent):
             f"which is below the minimum {MINIMUM_CONTEXT_LENGTH:,} required "
             f"by Hermes Agent.  {remedy}"
         )
+
+
+def _compact_tools_for_tight_local_window(agent):
+    """Prevent 8K-16K local models (e.g. LM Studio default 8192 ctx) from overflowing on turn 1
+    due to 10K+ tokens of full tool schemas, while keeping studio/core/deferred discovery tools."""
+    _ctx = getattr(agent.context_compressor, "context_length", 0) or 0
+    if not _ctx or _ctx >= 24_000 or not is_local_server(agent.base_url, agent.provider):
+        return
+    tools = getattr(agent, "tools", None)
+    if not isinstance(tools, list) or not tools:
+        return
+    max_tool_chars = max(4_000, int(_ctx * 1.1))
+    try:
+        current_chars = len(json.dumps(tools))
+    except Exception:
+        return
+    if current_chars <= max_tool_chars:
+        return
+
+    priority_names = (
+        "customize_foolmoon_studio",
+        "tool_search",
+        "tool_describe",
+        "tool_call",
+        "open_on_computer",
+        "web_search",
+        "read_file",
+        "write_file",
+        "terminal",
+        "memory",
+    )
+    by_name = {}
+    for item in tools:
+        fn = item.get("function") if isinstance(item, dict) else None
+        name = fn.get("name") if isinstance(fn, dict) else None
+        if isinstance(name, str) and name:
+            by_name[name] = item
+
+    def _shrink_tool(entry: dict) -> dict:
+        fn = entry.get("function")
+        if not isinstance(fn, dict):
+            return entry
+        fn_copy = dict(fn)
+        desc = str(fn_copy.get("description") or "")
+        if len(desc) > 180:
+            fn_copy["description"] = desc[:177].rstrip() + "..."
+        params = fn_copy.get("parameters")
+        if isinstance(params, dict) and isinstance(params.get("properties"), dict):
+            compact_props = {}
+            for pk, pv in params["properties"].items():
+                if isinstance(pv, dict):
+                    pv_copy = dict(pv)
+                    pdesc = str(pv_copy.get("description") or "")
+                    if len(pdesc) > 90:
+                        pv_copy["description"] = pdesc[:87].rstrip() + "..."
+                    compact_props[pk] = pv_copy
+                else:
+                    compact_props[pk] = pv
+            fn_copy["parameters"] = {**params, "properties": compact_props}
+        return {**entry, "function": fn_copy}
+
+    compacted = []
+    used_chars = 0
+    for name in priority_names:
+        if name in by_name:
+            shrunk = _shrink_tool(by_name[name])
+            size = len(json.dumps(shrunk))
+            if used_chars + size <= max_tool_chars or len(compacted) < 4:
+                compacted.append(shrunk)
+                used_chars += size
+
+    if compacted:
+        logger.warning(
+            "Compacted %d tools (%d chars) -> %d tools (%d chars) to fit local %s-token context window.",
+            len(tools),
+            current_chars,
+            len(compacted),
+            used_chars,
+            f"{_ctx:,}",
+        )
+        agent.tools = compacted
 
 
 def _warn_nonagentic_hermes_model(agent):
@@ -2190,6 +2288,7 @@ def init_agent(
     _enforce_minimum_context(agent)
     _warn_nonagentic_hermes_model(agent)
     _inject_context_engine_tools(agent)
+    _compact_tools_for_tight_local_window(agent)
     _init_usage_state(agent)
     _clamp_compressor_to_ollama_num_ctx(agent)
     _emit_compression_summary(agent, cs)
