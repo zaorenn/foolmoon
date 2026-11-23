@@ -493,6 +493,34 @@ _STUDIO_PRESET_DEFAULTS: Dict[str, Dict[str, Any]] = {
 }
 
 
+def _normalize_material_slug(material: Optional[str]) -> str:
+    raw = str(material or "").strip().lower().replace("_", "-")
+    if raw in ("paper", "black-paper", "crafted-paper", "matte-paper", "cardstock", "kraft-paper"):
+        return "warm-matte"
+    if raw in ("warm-matte", "liquid-glass", "brushed-metal", "plush-pastel", "cyber-grid"):
+        return raw
+    return ""
+
+
+def _is_paper_or_material_texture_query(query: str = "", material: str = "") -> bool:
+    q = f"{query} {material}".lower()
+    return any(
+        tok in q
+        for tok in (
+            "paper",
+            "kağıt",
+            "kagit",
+            "cardstock",
+            "parchment",
+            "linen",
+            "grain",
+            "warm-matte",
+            "craft",
+            "kraft",
+        )
+    )
+
+
 def _normalize_studio_config(
     *,
     preset: str = "balanced",
@@ -507,8 +535,9 @@ def _normalize_studio_config(
     bbot_fx_preset: Optional[str] = None,
 ) -> Dict[str, Any]:
     base = dict(_STUDIO_PRESET_DEFAULTS.get(preset, _STUDIO_PRESET_DEFAULTS["balanced"]))
-    if material in ("warm-matte", "liquid-glass", "brushed-metal", "plush-pastel", "cyber-grid"):
-        base["material"] = material
+    norm_mat = _normalize_material_slug(material)
+    if norm_mat:
+        base["material"] = norm_mat
     if corner_radius is not None:
         base["cornerRadius"] = max(6, min(28, int(corner_radius)))
     if pane_floating is not None:
@@ -624,27 +653,85 @@ def _encode_wallpaper_for_css(image_path: Path, max_bytes: int = 20_500) -> str:
         return base64.b64encode(buf.getvalue()).decode("ascii")
 
 
-def _generate_procedural_texture(dest_path: Path, dark: bool = True) -> Path:
-    """Offline fallback: synthesize a realistic organic matte paper-fiber texture image with Pillow."""
+def _generate_crisp_seamless_paper_tile(
+    dest_path: Path,
+    bg_hex: str = "#111010",
+    accent_hex: str = "#e11d48",
+) -> Tuple[Path, str]:
+    """Generate a seamless, borderless 256x256 high-frequency micro-fiber paper texture tile matched
+    to *bg_hex* — crisp 1:1 native pixels when tiled across the whole app with zero dirty borders."""
     import random
     from PIL import Image, ImageFilter
 
-    rng = random.Random(42)
-    w, h = 1024, 640
-    base = 17 if dark else 238
-    img = Image.new("RGB", (w, h), (base, base, base))
+    rng = random.Random(f"paper:{bg_hex}:{accent_hex}")
+    size = 256
+    r0, g0, b0 = _hex_to_rgb(_safe_hex(bg_hex, "#111010"))
+    ar, ag, ab = _hex_to_rgb(_safe_hex(accent_hex, "#e11d48"))
+    is_dark = _rel_luminance((r0, g0, b0)) < 0.42
+
+    # Base pixel field with fine organic cellulose grain (tactile, zero color blotches)
+    img = Image.new("RGB", (size, size))
     px = img.load()
-    for y in range(h):
-        row_shift = rng.randint(-2, 2)
-        for x in range(w):
-            grain = rng.randint(-9, 9) + row_shift
-            v = max(4, min(250, base + grain))
-            # Subtle warm paper fiber nuance
-            px[x, y] = (v, max(4, v - (1 if dark else 2)), max(4, v - (1 if dark else 4)))
-    img = img.filter(ImageFilter.GaussianBlur(radius=0.55))
+    # Slight warm fiber bias anchored to base hue
+    for y in range(size):
+        row_weave = int(round(1.5 * ((y % 4) - 1.5)))
+        for x in range(size):
+            col_weave = int(round(1.2 * ((x % 3) - 1.0)))
+            fine = rng.randint(-7, 7)
+            speck = rng.randint(-12, 14) if rng.random() < 0.08 else 0
+            delta = fine + speck + (row_weave + col_weave) // 2
+            # Subtle 2% paper fiber tint
+            r = max(3, min(252, r0 + delta))
+            g = max(3, min(252, g0 + delta - (0 if is_dark else 1)))
+            b = max(3, min(252, b0 + delta - (1 if is_dark else 2)))
+            px[x, y] = (r, g, b)
+
+    # Wrap-around short cotton/linen paper micro-fibers using modulo coordinates -> 100% seamless tile
+    for _ in range(420):
+        x0 = rng.randint(0, size - 1)
+        y0 = rng.randint(0, size - 1)
+        length = rng.randint(3, 9)
+        dx = rng.choice((-1, 0, 1))
+        dy = rng.choice((-1, 0, 1))
+        if dx == 0 and dy == 0:
+            dx = 1
+        shade = rng.choice((-5, -3, 3, 5, 7))
+        tint_accent = rng.random() < 0.025
+        for step in range(length):
+            xx = (x0 + dx * step) % size
+            yy = (y0 + dy * step) % size
+            cr, cg, cb = px[xx, yy]
+            if tint_accent:
+                cr = max(3, min(252, int(cr * 0.90 + ar * 0.10)))
+                cg = max(3, min(252, int(cg * 0.90 + ag * 0.10)))
+                cb = max(3, min(252, int(cb * 0.90 + ab * 0.10)))
+            else:
+                cr = max(3, min(252, cr + shade))
+                cg = max(3, min(252, cg + shade))
+                cb = max(3, min(252, cb + shade))
+            px[xx, yy] = (cr, cg, cb)
+
+    # Tile 3x3 before a tiny 0.35px anti-alias pass so even the blur wraps seamlessly on all edges
+    tiled = Image.new("RGB", (size * 3, size * 3))
+    for ty in range(3):
+        for tx in range(3):
+            tiled.paste(img, (tx * size, ty * size))
+    tiled = tiled.filter(ImageFilter.GaussianBlur(radius=0.35))
+    tile = tiled.crop((size, size, size * 2, size * 2))
+
     dest_path.parent.mkdir(parents=True, exist_ok=True)
-    img.save(dest_path, format="JPEG", quality=90)
-    return dest_path
+    tile.save(dest_path, format="JPEG", quality=92, optimize=True)
+    buf = io.BytesIO()
+    tile.save(buf, format="JPEG", quality=92, optimize=True)
+    b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+    return dest_path, b64
+
+
+def _generate_procedural_texture(dest_path: Path, dark: bool = True) -> Path:
+    """Offline fallback: synthesize a seamless organic matte paper-fiber texture tile."""
+    bg = "#121112" if dark else "#f2ede4"
+    _path, _b64 = _generate_crisp_seamless_paper_tile(dest_path, bg_hex=bg, accent_hex="#c94a38")
+    return _path
 
 
 def fetch_studio_wallpaper(
@@ -654,16 +741,23 @@ def fetch_studio_wallpaper(
     local_path: str = "",
     slug: str = "studio-wallpaper",
     dark_hint: bool = True,
+    bg_hex: str = "",
+    accent_hex: str = "#e11d48",
+    material: str = "",
 ) -> Dict[str, Any]:
-    """Download a high-resolution real texture/wallpaper from Openverse/Wikimedia (or URL/local path)
-    and save it under $HERMES_HOME/skins/wallpapers/<slug>.jpg."""
+    """Resolve a crisp wallpaper/material asset for $HERMES_HOME/skins/wallpapers/<slug>.jpg:
+    - Paper / matte / linen / grain textures synthesize a crisp, 1:1 native-pixel seamless 256x256 tile
+      matched to *bg_hex* so the entire app gets sharp paper texture without JPEG blur or dirty borders.
+    - Scenic/photo queries download a validated high-res bitmap from Openverse/Wikimedia, crop 6% off
+      outer borders to eliminate vintage frames, and save up to 1920px HD."""
     import urllib.parse
     import urllib.request
-    from PIL import Image
+    from PIL import Image, ImageOps
 
     wallpapers_dir = get_hermes_home() / "skins" / "wallpapers"
     wallpapers_dir.mkdir(parents=True, exist_ok=True)
     dest_path = wallpapers_dir / f"{_slugify(slug) or 'wallpaper'}.jpg"
+    resolved_bg = _safe_hex(bg_hex, "#100f10" if dark_hint else "#f4efe6")
 
     def _download_and_validate(url: str, timeout: int = 12) -> bool:
         req = urllib.request.Request(
@@ -677,64 +771,98 @@ def fetch_studio_wallpaper(
             raw = resp.read(16 * 1024 * 1024)
         with Image.open(io.BytesIO(raw)) as im:
             im = im.convert("RGB")
-            if im.width < 320 or im.height < 200:
+            if im.width < 600 or im.height < 400:
                 return False
+            # Crop 6% off outer edges so vintage grunge/torn frames never appear on canvas edges
+            crop_x = int(im.width * 0.06)
+            crop_y = int(im.height * 0.06)
+            if im.width - 2 * crop_x >= 480 and im.height - 2 * crop_y >= 320:
+                im = ImageOps.crop(im, border=(crop_x, crop_y, crop_x, crop_y))
             if max(im.width, im.height) > 1920:
                 im.thumbnail((1920, 1920))
             im.save(dest_path, format="JPEG", quality=92, optimize=True)
             return True
 
-    # 1. Local file path
+    # 1. Explicit local file path
     if local_path and Path(local_path).is_file():
         with Image.open(local_path) as im:
             im = im.convert("RGB")
             if max(im.width, im.height) > 1920:
                 im.thumbnail((1920, 1920))
             im.save(dest_path, format="JPEG", quality=92, optimize=True)
-        return {"path": str(dest_path), "source": "local", "url": "", "b64": _encode_wallpaper_for_css(dest_path)}
+        return {
+            "path": str(dest_path),
+            "source": "local",
+            "tiled": False,
+            "url": "",
+            "b64": _encode_wallpaper_for_css(dest_path),
+        }
 
     # 2. Explicit direct image URL
     if image_url and image_url.startswith(("http://", "https://")):
         try:
             if _download_and_validate(image_url):
-                return {"path": str(dest_path), "source": "url", "url": image_url, "b64": _encode_wallpaper_for_css(dest_path)}
+                return {
+                    "path": str(dest_path),
+                    "source": "url",
+                    "tiled": False,
+                    "url": image_url,
+                    "b64": _encode_wallpaper_for_css(dest_path),
+                }
         except Exception as exc:
             logger.debug("Direct wallpaper URL failed (%s): %s", image_url, exc)
 
-    # 3. Search Openverse CC-licensed high-res photography (no API key needed)
+    # 3. Crisp seamless 1:1 native-pixel paper/material tile when user wants a tactile paper surface
     clean_query = (query or "").strip()
+    if clean_query and _is_paper_or_material_texture_query(clean_query, material):
+        _path, tile_b64 = _generate_crisp_seamless_paper_tile(dest_path, bg_hex=resolved_bg, accent_hex=accent_hex)
+        return {
+            "path": str(dest_path),
+            "source": "seamless-paper-tile",
+            "tiled": True,
+            "url": "",
+            "b64": tile_b64,
+        }
+
+    # 4. Scenic / illustration internet search via Openverse + Wikimedia Commons
     if clean_query:
         candidates: List[str] = []
         try:
             q_enc = urllib.parse.quote(clean_query)
             req = urllib.request.Request(
-                f"https://api.openverse.org/v1/images/?q={q_enc}&page_size=10",
+                f"https://api.openverse.org/v1/images/?q={q_enc}&page_size=12",
                 headers={"User-Agent": "FoolmoonStudio/1.0"},
             )
             with urllib.request.urlopen(req, timeout=10) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
             results = data.get("results") or []
-            # Prefer wider high-res landscape textures/photos first
+
             def _rank(item: dict) -> tuple:
                 w = int(item.get("width") or 0)
                 h = int(item.get("height") or 0)
-                landscape = 1 if w >= h else 0
+                landscape = 1 if w >= h and min(w, h) >= 600 else 0
                 return (landscape, min(w, 4000) * min(h, 4000))
 
             for item in sorted(results, key=_rank, reverse=True):
+                w = int(item.get("width") or 0)
+                h = int(item.get("height") or 0)
+                if w and h and (w < 600 or h < 400):
+                    continue
                 u = str(item.get("url") or "").strip()
-                if u.startswith(("http://", "https://")) and not u.lower().endswith((".svg", ".pdf", ".tif", ".tiff")):
+                if (
+                    u.startswith(("http://", "https://"))
+                    and not u.lower().endswith((".svg", ".pdf", ".tif", ".tiff"))
+                ):
                     candidates.append(u)
         except Exception as exc:
             logger.debug("Openverse wallpaper search failed: %s", exc)
 
-        # Fallback: Wikimedia Commons bitmap search
         if not candidates:
             try:
                 q_enc = urllib.parse.quote(f"{clean_query} filetype:bitmap")
                 req = urllib.request.Request(
                     f"https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6"
-                    f"&gsrsearch={q_enc}&gsrlimit=6&prop=imageinfo&iiprop=url|size|mime&format=json",
+                    f"&gsrsearch={q_enc}&gsrlimit=8&prop=imageinfo&iiprop=url|size|mime&format=json",
                     headers={"User-Agent": "FoolmoonStudio/1.0"},
                 )
                 with urllib.request.urlopen(req, timeout=10) as resp:
@@ -742,8 +870,10 @@ def fetch_studio_wallpaper(
                 for page in ((data.get("query") or {}).get("pages") or {}).values():
                     ii = (page.get("imageinfo") or [{}])[0]
                     mime = str(ii.get("mime") or "")
+                    w = int(ii.get("width") or 0)
+                    h = int(ii.get("height") or 0)
                     u = str(ii.get("url") or "")
-                    if mime in ("image/jpeg", "image/png", "image/webp") and u:
+                    if mime in ("image/jpeg", "image/png", "image/webp") and u and (not w or w >= 600):
                         candidates.append(u)
             except Exception as exc:
                 logger.debug("Wikimedia wallpaper search failed: %s", exc)
@@ -754,15 +884,21 @@ def fetch_studio_wallpaper(
                     return {
                         "path": str(dest_path),
                         "source": "internet",
+                        "tiled": False,
                         "url": cand_url,
                         "b64": _encode_wallpaper_for_css(dest_path),
                     }
             except Exception as exc:
                 logger.debug("Candidate wallpaper download failed (%s): %s", cand_url, exc)
 
-    # 4. Offline procedural paper-grain fallback so it never leaves the user with nothing
-    _generate_procedural_texture(dest_path, dark=dark_hint)
-    return {"path": str(dest_path), "source": "procedural", "url": "", "b64": _encode_wallpaper_for_css(dest_path)}
+    _path, tile_b64 = _generate_crisp_seamless_paper_tile(dest_path, bg_hex=resolved_bg, accent_hex=accent_hex)
+    return {
+        "path": str(dest_path),
+        "source": "seamless-paper-tile",
+        "tiled": True,
+        "url": "",
+        "b64": tile_b64,
+    }
 
 
 def _build_custom_css(
@@ -773,6 +909,7 @@ def _build_custom_css(
     include_sticker: bool = False,
     studio_config: Optional[Dict[str, Any]] = None,
     wallpaper_tint: float = 0.46,
+    tiled_wallpaper: bool = False,
 ) -> str:
     p = palette["primary"]
     face = palette["face"]
@@ -796,24 +933,35 @@ def _build_custom_css(
         "  inset: 0;",
         "  pointer-events: none;",
         "  z-index: 0;",
-        f"  background: radial-gradient(900px circle at 18% 8%, {accent}22, transparent 58%), "
-        f"radial-gradient(760px circle at 84% 88%, {secondary}1a, transparent 62%);",
+        f"  background: radial-gradient(900px circle at 18% 8%, {accent}1f, transparent 58%), "
+        f"radial-gradient(760px circle at 84% 88%, {secondary}18, transparent 62%);",
         "}",
     ])
 
     if include_wallpaper and wallpaper_b64:
-        tint = max(0.15, min(0.85, float(wallpaper_tint)))
-        alpha_top = f"{int(round(tint * 255)):02x}"
-        alpha_bot = f"{int(round(min(0.92, tint + 0.14) * 255)):02x}"
-        css_parts.extend([
-            '[data-chat-surface=""], body {',
-            f"  background-image: linear-gradient({p['background']}{alpha_top}, {p['background']}{alpha_bot}), "
-            f"url('data:image/jpeg;base64,{wallpaper_b64}') !important;",
-            "  background-size: cover !important;",
-            "  background-position: center !important;",
-            "  background-attachment: fixed !important;",
-            "}",
-        ])
+        if tiled_wallpaper:
+            css_parts.extend([
+                'body, [data-chat-surface=""], [data-slot="sidebar"], .bg-sidebar, [data-tree-group]:not([data-pane-host]), [data-slot="composer-root"], [data-fm-surface] {',
+                f"  background-image: linear-gradient(175deg, {p['background']}14, {p['background']}2e), "
+                f"url('data:image/jpeg;base64,{wallpaper_b64}') !important;",
+                "  background-repeat: no-repeat, repeat !important;",
+                "  background-size: 100% 100%, 256px 256px !important;",
+                "  background-position: 0 0, 0 0 !important;",
+                "}",
+            ])
+        else:
+            tint = max(0.15, min(0.85, float(wallpaper_tint)))
+            alpha_top = f"{int(round(tint * 255)):02x}"
+            alpha_bot = f"{int(round(min(0.92, tint + 0.14) * 255)):02x}"
+            css_parts.extend([
+                '[data-chat-surface=""], body {',
+                f"  background-image: linear-gradient({p['background']}{alpha_top}, {p['background']}{alpha_bot}), "
+                f"url('data:image/jpeg;base64,{wallpaper_b64}') !important;",
+                "  background-size: cover !important;",
+                "  background-position: center !important;",
+                "  background-attachment: fixed !important;",
+                "}",
+            ])
 
     if include_sticker and sticker_b64:
         css_parts.extend([
@@ -1035,6 +1183,14 @@ def customize_foolmoon_studio(
 
     wallpaper_meta: Optional[Dict[str, Any]] = None
     wallpaper_b64 = ""
+    tiled_wallpaper = False
+    resolved_material = _normalize_material_slug(material) or "warm-matte"
+    if (
+        (not material or str(material).strip().lower() == "balanced")
+        and _is_paper_or_material_texture_query(f"{raw_name} {wallpaper_query or ''}", material)
+    ):
+        resolved_material = "warm-matte"
+
     if (wallpaper_query and wallpaper_query.strip()) or (wallpaper_url and wallpaper_url.strip()) or (wallpaper_path and wallpaper_path.strip()):
         try:
             wallpaper_meta = fetch_studio_wallpaper(
@@ -1043,10 +1199,27 @@ def customize_foolmoon_studio(
                 local_path=str(wallpaper_path or ""),
                 slug=slug,
                 dark_hint=dark_primary,
+                bg_hex=bg,
+                accent_hex=_safe_hex(accent, "#c94a38"),
+                material=resolved_material,
             )
             wallpaper_b64 = str(wallpaper_meta.get("b64") or "")
+            tiled_wallpaper = bool(wallpaper_meta.get("tiled"))
         except Exception as exc:
             logger.warning("Wallpaper fetch failed for %s: %s", slug, exc)
+    elif _is_paper_or_material_texture_query(raw_name, resolved_material):
+        # Even without an explicit wallpaper_query, a paper theme gets crisp 1:1 native-pixel paper texture
+        try:
+            wallpapers_dir = get_hermes_home() / "skins" / "wallpapers"
+            wallpapers_dir.mkdir(parents=True, exist_ok=True)
+            dest_path = wallpapers_dir / f"{slug}.jpg"
+            _path, wallpaper_b64 = _generate_crisp_seamless_paper_tile(
+                dest_path, bg_hex=bg, accent_hex=_safe_hex(accent, "#c94a38")
+            )
+            wallpaper_meta = {"path": str(dest_path), "source": "seamless-paper-tile", "tiled": True, "url": ""}
+            tiled_wallpaper = True
+        except Exception as exc:
+            logger.warning("Paper tile generation failed for %s: %s", slug, exc)
 
     acc = _ensure_contrast_hex(_safe_hex(accent, "#c94a38"), bg, 4.5)
     fg = _ensure_contrast_hex(
@@ -1133,7 +1306,7 @@ def customize_foolmoon_studio(
 
     studio_config = _normalize_studio_config(
         preset=preset,
-        material=material,
+        material=resolved_material,
         corner_radius=corner_radius,
         pane_floating=pane_floating,
         motion_level=motion_level,
@@ -1151,6 +1324,7 @@ def customize_foolmoon_studio(
         include_sticker=False,
         studio_config=studio_config,
         wallpaper_tint=wallpaper_tint,
+        tiled_wallpaper=tiled_wallpaper,
     )
 
     tui_assets = _build_foolmoon_tui_assets(

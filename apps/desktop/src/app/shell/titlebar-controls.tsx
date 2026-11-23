@@ -394,10 +394,12 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
   const visiblePaneTools = tools.filter(visibleTool)
   const visibleRightFixedTools = [studioTool, notchTool, flipTool, rightSidebarTool].filter(visibleTool)
 
+  const inlineJarvisVisible = !notchActive && (interfaceMode === 'simple' || jarvisOn)
+
   const voiceCapsule = (
     <div
       aria-label="Foolmoon voice and notch controls"
-      className="mr-1.5 inline-flex h-6.5 items-center gap-1 rounded-full border border-(--ui-stroke-secondary)/80 bg-(--ui-control-background)/88 px-1.5 text-[10px] font-medium shadow-xs backdrop-blur-md select-none"
+      className="mr-1 inline-flex h-6 items-center gap-1 rounded-full border border-border/60 bg-card/85 px-1.5 text-[10px] font-medium text-foreground shadow-2xs select-none"
       onPointerDown={event => event.stopPropagation()}
       role="group"
     >
@@ -405,7 +407,7 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
         aria-hidden="true"
         className={cn(
           'h-1.5 w-1.5 rounded-full transition-colors',
-          jarvisOn ? 'bg-emerald-500 shadow-[0_0_6px_#10b981]' : 'bg-primary/55'
+          jarvisOn ? 'bg-primary shadow-[0_0_6px_var(--dt-primary)]' : 'bg-muted-foreground/50'
         )}
       />
       <span className="hidden px-0.5 text-muted-foreground xl:inline">
@@ -415,9 +417,9 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
         aria-label={jarvisOn ? 'Disable hands-free voice' : 'Enable hands-free voice'}
         aria-pressed={jarvisOn}
         className={cn(
-          'inline-flex h-4.5 items-center gap-1 rounded-full px-2 transition-colors',
+          'inline-flex h-4.5 items-center gap-1 rounded-full px-1.5 transition-colors',
           jarvisOn
-            ? 'bg-emerald-500/18 text-emerald-700 dark:text-emerald-300'
+            ? 'bg-primary/18 text-primary'
             : 'text-foreground/85 hover:bg-muted/80'
         )}
         onClick={() => {
@@ -433,10 +435,10 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
         aria-label={notchActive ? 'Hide hardware notch' : 'Open hardware notch'}
         aria-pressed={notchActive}
         className={cn(
-          'inline-flex h-4.5 items-center gap-1 rounded-full px-2 transition-colors',
+          'inline-flex h-4.5 items-center gap-1 rounded-full px-1.5 transition-colors',
           notchActive
-            ? 'bg-primary text-primary-foreground shadow-xs'
-            : 'bg-muted/75 text-foreground hover:bg-muted'
+            ? 'bg-primary text-primary-foreground shadow-2xs'
+            : 'bg-muted/70 text-foreground hover:bg-muted'
         )}
         onClick={() => {
           triggerHaptic('open')
@@ -452,11 +454,11 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
   const modeSwitcher = (
     <div
       aria-label="Interface mode switcher"
-      className="mr-1 inline-flex h-6.5 items-center rounded-full border border-(--ui-stroke-secondary)/80 bg-(--ui-control-background)/90 p-0.5 text-[10px] font-medium shadow-xs backdrop-blur-md select-none"
+      className="mr-1 inline-flex h-6 items-center rounded-full border border-border/60 bg-card/85 p-0.5 text-[10px] font-medium text-foreground shadow-2xs select-none"
       onPointerDown={event => event.stopPropagation()}
       role="group"
     >
-      <span className="hidden border-r border-(--ui-stroke-secondary)/60 px-2 py-0.5 text-[10px] font-semibold tracking-tight text-foreground/85 sm:inline">
+      <span className="hidden border-r border-border/60 px-2 py-0.5 text-[10px] font-semibold tracking-tight text-foreground/85 sm:inline">
         Foolmoon
       </span>
       <button
@@ -525,7 +527,7 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
         className={cn(titlebarToolClusterClass, 'right-(--titlebar-tools-right) top-(--titlebar-controls-top)')}
         data-titlebar-cluster="right"
       >
-        {interfaceMode === 'advanced' && voiceCapsule}
+        {interfaceMode === 'advanced' && !inlineJarvisVisible && voiceCapsule}
         {modeSwitcher}
         {visibleSystemTools.map(tool => (
           <TitlebarToolButton key={tool.id} navigate={navigate} tool={tool} />

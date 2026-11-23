@@ -551,3 +551,25 @@ async def serve_plugin_asset(plugin_name: str, file_path: str, profile: Optional
     if media_type is None:
         raise HTTPException(status_code=404, detail="File not found")
     return FileResponse(target, media_type=media_type, headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
+
+
+@router.get("/api/themes/wallpaper/{filename}")
+async def get_studio_wallpaper(filename: str, profile: Optional[str] = None):
+    """Serve saved HD studio wallpaper files from $HERMES_HOME/skins/wallpapers cleanly."""
+    clean_name = Path(filename).name
+    if not clean_name or clean_name != filename or Path(clean_name).suffix.lower() not in (".jpg", ".jpeg", ".png", ".webp"):
+        raise HTTPException(status_code=404, detail="Wallpaper not found")
+
+    def _resolve() -> Optional[Path]:
+        from hermes_constants import get_hermes_home
+        base = (get_hermes_home() / "skins" / "wallpapers").resolve()
+        target = (base / clean_name).resolve()
+        if not target.is_relative_to(base) or not target.is_file():
+            return None
+        return target
+
+    target = await config_scoped_to_thread(profile, _resolve)
+    if target is None:
+        raise HTTPException(status_code=404, detail="Wallpaper not found")
+    media_type = _PLUGIN_ASSET_CONTENT_TYPES.get(target.suffix.lower(), "image/jpeg")
+    return FileResponse(target, media_type=media_type, headers={"Cache-Control": "public, max-age=3600"})

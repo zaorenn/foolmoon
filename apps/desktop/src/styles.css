@@ -4290,22 +4290,61 @@ html[data-hermes-desktop-host='browser'] [data-slot='sidebar-container'] {
 :root[data-fm-floating='true'] [data-tree-group]:not([data-pane-host]) {
   margin: 5px;
   border-radius: calc(var(--fm-radius-px, 18px) * 1.05);
-  border: 1px solid color-mix(in srgb, var(--dt-border, currentColor) 72%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dt-border, currentColor) 68%, var(--dt-primary, transparent) 12%);
   overflow: hidden;
   box-shadow:
-    0 1px 0 color-mix(in srgb, white 58%, transparent) inset,
-    0 12px 32px -14px rgb(15 12 10 / 12%),
-    0 2px 8px -4px rgb(15 12 10 / 7%);
+    0 1px 0 color-mix(in srgb, var(--dt-foreground, currentColor) 9%, transparent) inset,
+    0 12px 32px -14px rgb(15 12 10 / 16%),
+    0 2px 8px -4px rgb(15 12 10 / 9%);
 }
 
-/* Surface Materials — applied across split panes, chat composer & studio panels */
+/* Tactile Paper & Craft Surface Materials — applied across split panes, sidebars, composer, bubbles & cards */
+:root[data-fm-material='warm-matte'] {
+  --fm-paper-grain-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='0.075'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23p)'/%3E%3C/svg%3E");
+}
+
+:root[data-fm-material='warm-matte'] body,
+:root[data-fm-material='warm-matte'] [data-chat-surface=''] {
+  background-image:
+    var(--fm-paper-grain-svg),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--dt-foreground, #ffffff) 2.5%, transparent) 0%,
+      transparent 48%,
+      color-mix(in srgb, black 6%, transparent) 100%
+    );
+  background-repeat: repeat, no-repeat;
+  background-size: 180px 180px, 100% 100%;
+}
+
+:root[data-fm-material='warm-matte'] [data-slot='sidebar'],
+:root[data-fm-material='warm-matte'] .bg-sidebar,
+:root[data-fm-material='warm-matte'] [data-tree-group]:not([data-pane-host]),
+:root[data-fm-material='warm-matte'] [data-slot='card'],
+:root[data-fm-material='warm-matte'] .aui-user-message-content,
+:root[data-fm-material='warm-matte'] [data-slot='composer-root'],
+:root[data-fm-material='warm-matte'] [data-fm-surface] {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background-image:
+    var(--fm-paper-grain-svg),
+    linear-gradient(
+      175deg,
+      color-mix(in srgb, var(--dt-foreground, currentColor) 3.5%, transparent) 0%,
+      color-mix(in srgb, var(--dt-background, transparent) 4%, transparent) 100%
+    );
+  background-repeat: repeat, no-repeat;
+  background-size: 180px 180px, 100% 100%;
+  border-color: color-mix(in srgb, var(--dt-border, currentColor) 72%, var(--dt-primary, transparent) 14%);
+  box-shadow:
+    0 1px 0 color-mix(in srgb, var(--dt-foreground, currentColor) 8%, transparent) inset,
+    0 10px 26px -14px rgb(0 0 0 / 26%),
+    0 2px 6px -2px rgb(0 0 0 / 12%);
+}
+
 :root[data-fm-material='warm-matte'] [data-slot='composer-root'],
 :root[data-fm-material='warm-matte'] [data-fm-surface] {
   border-radius: var(--fm-radius-px, 18px);
-  box-shadow:
-    0 1px 0 color-mix(in srgb, white 75%, transparent) inset,
-    0 14px 34px -16px rgb(44 34 30 / 16%),
-    0 2px 8px -2px rgb(44 34 30 / 7%);
 }
 
 :root[data-fm-material='liquid-glass'] [data-tree-group]:not([data-pane-host]),
