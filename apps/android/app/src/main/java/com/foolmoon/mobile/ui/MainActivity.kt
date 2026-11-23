@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.os.Build
 import android.os.Bundle
@@ -11,6 +12,7 @@ import android.provider.Settings
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.util.Base64
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -19,6 +21,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -50,21 +53,34 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AddComment
+import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.CropFree
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.FlashlightOff
 import androidx.compose.material.icons.filled.FlashlightOn
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Launch
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VolumeDown
+import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -98,6 +114,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
@@ -110,7 +128,11 @@ import com.foolmoon.mobile.FoolmoonApp
 import com.foolmoon.mobile.agent.FoolmoonAccessibilityService
 import com.foolmoon.mobile.agent.ScreenElementNode
 import com.foolmoon.mobile.assistant.AssistantOverlayActivity
+import com.foolmoon.mobile.network.DesktopSessionSummary
+import com.foolmoon.mobile.network.MobileBotMode
 import com.foolmoon.mobile.network.PcLinkState
+import com.foolmoon.mobile.network.PcScreenSnapshot
+import com.foolmoon.mobile.network.PcVoiceCloneItem
 import com.foolmoon.mobile.ui.components.BbotCompanionFace
 import com.foolmoon.mobile.ui.components.CircleToSearchOverlay
 import com.foolmoon.mobile.ui.components.CompanionMood
@@ -312,19 +334,33 @@ private fun FoolmoonSimplifiedMobileApp(
     onOpenAccessibilitySettings: () -> Unit
 ) {
     val pcStatus by app.bridge.pcStatus.collectAsState()
+    val botMode by app.bridge.botMode.collectAsState()
     val turns by app.bridge.turns.collectAsState()
+    val desktopTurns by app.bridge.desktopTurns.collectAsState()
+    val desktopSessions by app.bridge.desktopSessions.collectAsState()
+    val activeDesktopSessionId by app.bridge.activeDesktopSessionId.collectAsState()
+    val activeDesktopSessionTitle by app.bridge.activeDesktopSessionTitle.collectAsState()
+    val desktopProgressText by app.bridge.desktopProgressText.collectAsState()
+    val pcScreenSnapshot by app.bridge.pcScreenSnapshot.collectAsState()
+    val activeVoiceId by app.bridge.activeVoiceId.collectAsState()
+    val activeVoiceName by app.bridge.activeVoiceName.collectAsState()
+    val availableVoices by app.bridge.availableVoices.collectAsState()
     val busy by app.bridge.busy.collectAsState()
     val statusLine by app.bridge.statusLine.collectAsState()
     val playback by app.voicePlayer.snapshot.collectAsState()
     val wakeRunning by WakeWordForegroundService.running.collectAsState()
 
+    val shownTurns = if (botMode == MobileBotMode.DESKTOP_CONTINUITY) desktopTurns else turns
+
     var input by remember { mutableStateOf("") }
     var attachScreenContext by remember { mutableStateOf(false) }
     var attachedScreenSnippet by remember { mutableStateOf("") }
     var torchOn by remember { mutableStateOf(app.phoneAgent.isTorchOn) }
+    var pcControlExpanded by remember { mutableStateOf(true) }
 
     var showSettingsSheet by remember { mutableStateOf(openSettingsSheetByDefault) }
     var showCallDialog by remember { mutableStateOf(false) }
+    var showVoiceDialog by remember { mutableStateOf(false) }
     var showCircleSearch by remember { mutableStateOf(false) }
     var capturedBmp by remember { mutableStateOf<Bitmap?>(null) }
     var capturedNodes by remember { mutableStateOf<List<ScreenElementNode>>(emptyList()) }
@@ -338,9 +374,9 @@ private fun FoolmoonSimplifiedMobileApp(
     }
 
     val listState = rememberLazyListState()
-    LaunchedEffect(turns.size, busy) {
-        if (turns.isNotEmpty()) {
-            listState.animateScrollToItem((turns.size - 1).coerceAtLeast(0))
+    LaunchedEffect(shownTurns.size, busy, botMode) {
+        if (shownTurns.isNotEmpty()) {
+            listState.animateScrollToItem((shownTurns.size - 1).coerceAtLeast(0))
         }
     }
 
@@ -466,18 +502,60 @@ private fun FoolmoonSimplifiedMobileApp(
                                     text = if (pcStatus.linkState == PcLinkState.CONNECTED) {
                                         pcStatus.pcName.ifBlank { "PC GPU" }
                                     } else {
-                                        "Mobil"
+                                        "Çevrimdışı"
                                     },
                                     color = if (pcStatus.linkState == PcLinkState.CONNECTED) FoolmoonColors.Emerald else FoolmoonColors.Muted,
                                     fontSize = 11.sp
                                 )
+                                if (pcStatus.linkState == PcLinkState.CONNECTED && activeVoiceName.isNotBlank()) {
+                                    Surface(
+                                        shape = RoundedCornerShape(99.dp),
+                                        color = FoolmoonColors.LunarGold.copy(alpha = 0.14f),
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(99.dp))
+                                            .clickable { showVoiceDialog = true }
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                        ) {
+                                            Icon(Icons.Default.GraphicEq, contentDescription = "PC Sesi", tint = FoolmoonColors.LunarGold, modifier = Modifier.size(11.dp))
+                                            Text(
+                                                text = activeVoiceName.substringBefore("_").take(14),
+                                                color = FoolmoonColors.LunarGold,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+                                } else if (pcStatus.linkState != PcLinkState.CONNECTED && pcStatus.linkState != PcLinkState.CONNECTING) {
+                                    Surface(
+                                        shape = RoundedCornerShape(99.dp),
+                                        color = FoolmoonColors.Crimson.copy(alpha = 0.22f),
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(99.dp))
+                                            .clickable { app.bridge.autoConnectToPc() }
+                                    ) {
+                                        Text(
+                                            text = "Bağla",
+                                            color = FoolmoonColors.Crimson,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
                             }
 
                             SyncedLyricsBar(
                                 playback = playback,
                                 fallbackText = when {
                                     isInlineListening -> "Dinliyorum…"
-                                    wakeRunning -> "Hey Foolmoon açık · $statusLine"
+                                    desktopProgressText.isNotBlank() && botMode == MobileBotMode.DESKTOP_CONTINUITY -> desktopProgressText
+                                    wakeRunning -> "Hey Foolmoon · $statusLine"
                                     else -> statusLine
                                 }
                             )
@@ -502,7 +580,7 @@ private fun FoolmoonSimplifiedMobileApp(
                             }
                         }
 
-                        if (turns.isNotEmpty()) {
+                        if (shownTurns.isNotEmpty() || activeDesktopSessionId != null) {
                             IconButton(
                                 onClick = { app.bridge.clearHistory() },
                                 modifier = Modifier.size(34.dp)
@@ -523,7 +601,32 @@ private fun FoolmoonSimplifiedMobileApp(
                     }
                 }
 
-                // 2. Clean Conversational Chat Stream (Desktop Bubble Parity)
+                // 1.5 Dual Bot Mode Switcher (Separate Mobile Bot vs PC Desktop Continuity & Control)
+                DualBotModeSwitcher(
+                    botMode = botMode,
+                    desktopSessionCount = desktopSessions.size,
+                    onSelectMode = { app.bridge.setBotMode(it) }
+                )
+
+                // Desktop Mode Header Panels (Session Picker + Live PC Control & Screen Preview)
+                AnimatedVisibility(visible = botMode == MobileBotMode.DESKTOP_CONTINUITY) {
+                    DesktopModeControlsDock(
+                        pcConnected = pcStatus.linkState == PcLinkState.CONNECTED,
+                        sessions = desktopSessions,
+                        activeSessionId = activeDesktopSessionId,
+                        screenSnapshot = pcScreenSnapshot,
+                        expanded = pcControlExpanded,
+                        onToggleExpanded = { pcControlExpanded = !pcControlExpanded },
+                        onNewDesktopTask = { app.bridge.startNewDesktopTask() },
+                        onSelectSession = { app.bridge.loadDesktopSession(it) },
+                        onRefreshSessions = { app.bridge.refreshDesktopSessions() },
+                        onRefreshScreen = { app.bridge.requestPcScreenSnapshot() },
+                        onPcControl = { act, params -> app.bridge.sendPcControl(act, params) },
+                        onConnectPc = { app.bridge.autoConnectToPc() }
+                    )
+                }
+
+                // 2. Clean Conversational Chat Stream (Separate Mobil Bot vs Masaüstü & Ödev)
                 LazyColumn(
                     state = listState,
                     modifier = Modifier
@@ -532,34 +635,51 @@ private fun FoolmoonSimplifiedMobileApp(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     contentPadding = PaddingValues(vertical = 4.dp)
                 ) {
-                    if (turns.isEmpty()) {
+                    if (shownTurns.isEmpty()) {
                         item {
-                            GeminiHeroWelcome(
-                                pcConnected = pcStatus.linkState == PcLinkState.CONNECTED,
-                                accessibilityEnabled = FoolmoonAccessibilityService.isEnabled(),
-                                onCircleToSearch = { launchCircleToSearch() },
-                                onAskAboutScreen = {
-                                    val summary = app.phoneAgent.execute("inspect_screen", JSONObject()).data.optString("screen")
-                                    if (summary.isNotBlank()) {
-                                        app.bridge.sendPrompt("Ekranımda ne görüyorsun? Özetle ve önemli noktaları söyle.", includeScreenContext = true, assistContext = summary)
-                                    } else {
-                                        sendUserMessage("Ekranımda ne var?")
+                            if (botMode == MobileBotMode.DESKTOP_CONTINUITY) {
+                                DesktopContinuityHero(
+                                    pcConnected = pcStatus.linkState == PcLinkState.CONNECTED,
+                                    activeSessionTitle = activeDesktopSessionTitle,
+                                    latestSession = desktopSessions.firstOrNull(),
+                                    onStartHomeworkTemplate = {
+                                        input = "Ödevimi araştır ve kapsamlı şekilde hazırlayıp bilgisayarımdaki Masaüstü klasörüne Markdown/Word belgesi olarak kaydet: "
+                                    },
+                                    onStartCodeTemplate = {
+                                        input = "Bilgisayarımdaki projemde şu görevi tamamla ve hazır bırak: "
+                                    },
+                                    onResumeLatest = { sid -> app.bridge.loadDesktopSession(sid) },
+                                    onConnectPc = { app.bridge.autoConnectToPc() }
+                                )
+                            } else {
+                                GeminiHeroWelcome(
+                                    pcConnected = pcStatus.linkState == PcLinkState.CONNECTED,
+                                    activeVoiceName = activeVoiceName,
+                                    accessibilityEnabled = FoolmoonAccessibilityService.isEnabled(),
+                                    onCircleToSearch = { launchCircleToSearch() },
+                                    onAskAboutScreen = {
+                                        val summary = app.phoneAgent.execute("inspect_screen", JSONObject()).data.optString("screen")
+                                        if (summary.isNotBlank()) {
+                                            app.bridge.sendPrompt("Ekranımda ne görüyorsun? Özetle ve önemli noktaları söyle.", includeScreenContext = true, assistContext = summary)
+                                        } else {
+                                            sendUserMessage("Ekranımda ne var?")
+                                        }
+                                    },
+                                    onCallSomeone = { showCallDialog = true },
+                                    onToggleFlashlight = {
+                                        app.bridge.executeAndRecordLocalAction(
+                                            userLabel = if (torchOn) "El fenerini kapat" else "El fenerini aç",
+                                            action = "toggle_flashlight",
+                                            params = JSONObject().put("on", !torchOn)
+                                        )
+                                        torchOn = app.phoneAgent.isTorchOn
                                     }
-                                },
-                                onCallSomeone = { showCallDialog = true },
-                                onToggleFlashlight = {
-                                    app.bridge.executeAndRecordLocalAction(
-                                        userLabel = if (torchOn) "El fenerini kapat" else "El fenerini aç",
-                                        action = "toggle_flashlight",
-                                        params = JSONObject().put("on", !torchOn)
-                                    )
-                                    torchOn = app.phoneAgent.isTorchOn
-                                }
-                            )
+                                )
+                            }
                         }
                     }
 
-                    items(turns, key = { it.id }) { turn ->
+                    items(shownTurns, key = { it.id }) { turn ->
                         val isUser = turn.role == "user"
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -596,8 +716,8 @@ private fun FoolmoonSimplifiedMobileApp(
                                 ) {
                                     if (!isUser) {
                                         Text(
-                                            text = "@bbot",
-                                            color = FoolmoonColors.Crimson,
+                                            text = if (botMode == MobileBotMode.DESKTOP_CONTINUITY) "Foolmoon Masaüstü" else "Mobil Bot",
+                                            color = if (botMode == MobileBotMode.DESKTOP_CONTINUITY) FoolmoonColors.LunarGold else FoolmoonColors.Crimson,
                                             fontSize = 10.sp,
                                             fontWeight = FontWeight.Bold
                                         )
@@ -626,10 +746,11 @@ private fun FoolmoonSimplifiedMobileApp(
                     if (busy) {
                         item(key = "thinking_shimmer") {
                             GeminiThinkingShimmerBar(
-                                label = if (pcStatus.linkState == PcLinkState.CONNECTED) {
-                                    "PC GPU üzerinde hesaplanıyor…"
-                                } else {
-                                    "Foolmoon işliyor…"
+                                label = when {
+                                    botMode == MobileBotMode.DESKTOP_CONTINUITY && desktopProgressText.isNotBlank() -> desktopProgressText
+                                    botMode == MobileBotMode.DESKTOP_CONTINUITY -> "PC Masaüstü ajanı görev üzerinde çalışıyor…"
+                                    pcStatus.linkState == PcLinkState.CONNECTED -> "PC GPU üzerinde hesaplanıyor…"
+                                    else -> "Foolmoon işliyor…"
                                 }
                             )
                         }
@@ -761,7 +882,11 @@ private fun FoolmoonSimplifiedMobileApp(
                             onValueChange = { input = it },
                             placeholder = {
                                 Text(
-                                    text = if (isInlineListening) "Konuşun, dinliyorum…" else "Foolmoon'a sor, ekranı sor veya birini ara…",
+                                    text = when {
+                                        isInlineListening -> "Konuşun, dinliyorum…"
+                                        botMode == MobileBotMode.DESKTOP_CONTINUITY -> "PC'de devam et veya ödev/görev gönder…"
+                                        else -> "Foolmoon'a sor, ekranı sor veya birini ara…"
+                                    },
                                     fontSize = 13.sp,
                                     color = FoolmoonColors.Muted,
                                     maxLines = 1,
@@ -903,6 +1028,75 @@ private fun FoolmoonSimplifiedMobileApp(
         )
     }
 
+    // PC Cloned Voice Picker Modal Dialog
+    if (showVoiceDialog) {
+        AlertDialog(
+            onDismissRequest = { showVoiceDialog = false },
+            containerColor = FoolmoonColors.SurfaceCard,
+            titleContentColor = FoolmoonColors.Cream,
+            textContentColor = FoolmoonColors.Cream,
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.GraphicEq, contentDescription = null, tint = FoolmoonColors.LunarGold)
+                    Text("PC Klonlanmış Sesleri", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Bilgisayarındaki GPU ses klonlarından birini seç; telefondaki tüm yanıtlar bu sesle konuşur.",
+                        color = FoolmoonColors.Muted,
+                        fontSize = 12.sp
+                    )
+                    if (availableVoices.isEmpty()) {
+                        Text("Yüklü ses klonu bulunamadı (PC bağlandığında otomatik yüklenir).", color = FoolmoonColors.Muted, fontSize = 12.sp)
+                    } else {
+                        availableVoices.forEach { voice ->
+                            val selected = voice.id == activeVoiceId
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = if (selected) FoolmoonColors.Crimson.copy(alpha = 0.22f) else FoolmoonColors.SurfaceElevated,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .border(
+                                        1.dp,
+                                        if (selected) FoolmoonColors.Crimson else FoolmoonColors.Border,
+                                        RoundedCornerShape(14.dp)
+                                    )
+                                    .clickable {
+                                        app.bridge.selectPcVoice(voice.id, testSpeak = true)
+                                        showVoiceDialog = false
+                                    }
+                            ) {
+                                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                                    Text(
+                                        text = voice.name,
+                                        color = FoolmoonColors.Cream,
+                                        fontSize = 13.sp,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = "${voice.engine} · ${if (selected) "Aktif Ses ✓" else "Seç ve Test Et"}",
+                                        color = if (selected) FoolmoonColors.LunarGold else FoolmoonColors.Muted,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showVoiceDialog = false }) {
+                    Text("Kapat", color = FoolmoonColors.Cream)
+                }
+            }
+        )
+    }
+
     // Compact Unified Control Sheet (PC Link + Memory + Assistant/Accessibility)
     if (showSettingsSheet) {
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -925,8 +1119,396 @@ private fun FoolmoonSimplifiedMobileApp(
 }
 
 @Composable
+private fun DualBotModeSwitcher(
+    botMode: MobileBotMode,
+    desktopSessionCount: Int,
+    onSelectMode: (MobileBotMode) -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = FoolmoonColors.SurfaceCard.copy(alpha = 0.92f),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, FoolmoonColors.Border, RoundedCornerShape(18.dp))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            val mobileSelected = botMode == MobileBotMode.MOBILE_BOT
+            val desktopSelected = botMode == MobileBotMode.DESKTOP_CONTINUITY
+
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = if (mobileSelected) FoolmoonColors.Crimson.copy(alpha = 0.24f) else Color.Transparent,
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(14.dp))
+                    .border(
+                        width = if (mobileSelected) 1.dp else 0.dp,
+                        color = if (mobileSelected) FoolmoonColors.Crimson.copy(alpha = 0.7f) else Color.Transparent,
+                        shape = RoundedCornerShape(14.dp)
+                    )
+                    .clickable { onSelectMode(MobileBotMode.MOBILE_BOT) }
+            ) {
+                Row(
+                    modifier = Modifier.padding(vertical = 8.dp, horizontal = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        Icons.Default.Smartphone,
+                        contentDescription = null,
+                        tint = if (mobileSelected) FoolmoonColors.Crimson else FoolmoonColors.Muted,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "Mobil Bot",
+                        color = if (mobileSelected) FoolmoonColors.Cream else FoolmoonColors.Muted,
+                        fontSize = 12.sp,
+                        fontWeight = if (mobileSelected) FontWeight.Bold else FontWeight.Medium
+                    )
+                }
+            }
+
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = if (desktopSelected) FoolmoonColors.LunarGold.copy(alpha = 0.18f) else Color.Transparent,
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(14.dp))
+                    .border(
+                        width = if (desktopSelected) 1.dp else 0.dp,
+                        color = if (desktopSelected) FoolmoonColors.LunarGold.copy(alpha = 0.65f) else Color.Transparent,
+                        shape = RoundedCornerShape(14.dp)
+                    )
+                    .clickable { onSelectMode(MobileBotMode.DESKTOP_CONTINUITY) }
+            ) {
+                Row(
+                    modifier = Modifier.padding(vertical = 8.dp, horizontal = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        Icons.Default.Computer,
+                        contentDescription = null,
+                        tint = if (desktopSelected) FoolmoonColors.LunarGold else FoolmoonColors.Muted,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = if (desktopSessionCount > 0) "Masaüstü & Ödev ($desktopSessionCount)" else "Masaüstü & Ödev",
+                        color = if (desktopSelected) FoolmoonColors.Cream else FoolmoonColors.Muted,
+                        fontSize = 12.sp,
+                        fontWeight = if (desktopSelected) FontWeight.Bold else FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DesktopModeControlsDock(
+    pcConnected: Boolean,
+    sessions: List<DesktopSessionSummary>,
+    activeSessionId: String?,
+    screenSnapshot: PcScreenSnapshot?,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
+    onNewDesktopTask: () -> Unit,
+    onSelectSession: (String) -> Unit,
+    onRefreshSessions: () -> Unit,
+    onRefreshScreen: () -> Unit,
+    onPcControl: (String, Map<String, Any?>) -> Unit,
+    onConnectPc: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Desktop Session Picker Chip Strip
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            FilterChip(
+                selected = activeSessionId == null,
+                onClick = onNewDesktopTask,
+                label = { Text("+ Yeni PC Görevi", fontSize = 11.sp) },
+                leadingIcon = { Icon(Icons.Default.Assignment, contentDescription = null, modifier = Modifier.size(14.dp)) },
+                colors = FilterChipDefaults.filterChipColors(
+                    containerColor = FoolmoonColors.SurfaceCard,
+                    selectedContainerColor = FoolmoonColors.LunarGold.copy(alpha = 0.22f),
+                    labelColor = FoolmoonColors.Cream
+                )
+            )
+            sessions.take(8).forEach { sess ->
+                val isSel = sess.id == activeSessionId
+                FilterChip(
+                    selected = isSel,
+                    onClick = { onSelectSession(sess.id) },
+                    label = {
+                        Text(
+                            text = "${sess.title.take(22)}${if (sess.title.length > 22) "…" else ""} (${sess.messageCount})",
+                            fontSize = 11.sp,
+                            maxLines = 1
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        containerColor = FoolmoonColors.SurfaceCard,
+                        selectedContainerColor = FoolmoonColors.Crimson.copy(alpha = 0.24f),
+                        labelColor = FoolmoonColors.Cream
+                    )
+                )
+            }
+            if (pcConnected) {
+                IconButton(onClick = onRefreshSessions, modifier = Modifier.size(30.dp)) {
+                    Icon(Icons.Default.Refresh, contentDescription = "Yenile", tint = FoolmoonColors.Muted, modifier = Modifier.size(16.dp))
+                }
+            }
+        }
+
+        // Collapsible Live PC Screen & Control Panel
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = FoolmoonColors.SurfaceCard.copy(alpha = 0.92f),
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, FoolmoonColors.Border, RoundedCornerShape(18.dp))
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onToggleExpanded() },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.Computer, contentDescription = null, tint = FoolmoonColors.LunarGold, modifier = Modifier.size(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Canlı PC Kontrolü",
+                            color = FoolmoonColors.Cream,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        val infoLine = listOfNotNull(
+                            screenSnapshot?.activeWindow?.takeIf { it.isNotBlank() },
+                            screenSnapshot?.nowPlaying?.takeIf { it.isNotBlank() }?.let { "🎵 $it" }
+                        ).joinToString(" · ").ifBlank {
+                            if (pcConnected) "Ekranı görmek veya PC'yi yönetmek için dokun" else "PC bağlı değil"
+                        }
+                        Text(
+                            text = infoLine,
+                            color = FoolmoonColors.Muted,
+                            fontSize = 10.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    if (pcConnected) {
+                        IconButton(onClick = onRefreshScreen, modifier = Modifier.size(28.dp)) {
+                            Icon(Icons.Default.Refresh, contentDescription = "PC Ekranını Yenile", tint = FoolmoonColors.SkyGlow, modifier = Modifier.size(16.dp))
+                        }
+                    } else {
+                        TextButton(onClick = onConnectPc, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)) {
+                            Text("Bağla", color = FoolmoonColors.Crimson, fontSize = 11.sp)
+                        }
+                    }
+                    Icon(
+                        if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = null,
+                        tint = FoolmoonColors.Muted,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                AnimatedVisibility(visible = expanded && pcConnected) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val bmp = remember(screenSnapshot?.timestampMs) {
+                            val b64 = screenSnapshot?.screenshotBase64.orEmpty()
+                            if (b64.isBlank()) null else runCatching {
+                                val bytes = Base64.decode(b64, Base64.DEFAULT)
+                                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+                            }.getOrNull()
+                        }
+                        if (bmp != null) {
+                            Image(
+                                bitmap = bmp,
+                                contentDescription = "Canlı PC Ekranı",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(126.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .border(1.dp, FoolmoonColors.Border, RoundedCornerShape(12.dp))
+                            )
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            FilterChip(
+                                selected = false,
+                                onClick = { onPcControl("media", mapOf("command" to "play_pause")) },
+                                label = { Text("Medya", fontSize = 11.sp) },
+                                leadingIcon = { Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(14.dp), tint = FoolmoonColors.Emerald) }
+                            )
+                            FilterChip(
+                                selected = false,
+                                onClick = { onPcControl("media", mapOf("command" to "next")) },
+                                label = { Text("Sonraki", fontSize = 11.sp) },
+                                leadingIcon = { Icon(Icons.Default.SkipNext, null, modifier = Modifier.size(14.dp), tint = FoolmoonColors.SkyGlow) }
+                            )
+                            FilterChip(
+                                selected = false,
+                                onClick = { onPcControl("volume", mapOf("command" to "down")) },
+                                label = { Text("Ses -", fontSize = 11.sp) },
+                                leadingIcon = { Icon(Icons.Default.VolumeDown, null, modifier = Modifier.size(14.dp)) }
+                            )
+                            FilterChip(
+                                selected = false,
+                                onClick = { onPcControl("volume", mapOf("command" to "up")) },
+                                label = { Text("Ses +", fontSize = 11.sp) },
+                                leadingIcon = { Icon(Icons.Default.VolumeUp, null, modifier = Modifier.size(14.dp)) }
+                            )
+                            FilterChip(
+                                selected = false,
+                                onClick = { onPcControl("volume", mapOf("command" to "toggle_mute")) },
+                                label = { Text("Sessiz", fontSize = 11.sp) },
+                                leadingIcon = { Icon(Icons.Default.VolumeOff, null, modifier = Modifier.size(14.dp), tint = FoolmoonColors.Crimson) }
+                            )
+                            FilterChip(
+                                selected = false,
+                                onClick = { onPcControl("launch", mapOf("target" to "chrome")) },
+                                label = { Text("Chrome Aç", fontSize = 11.sp) },
+                                leadingIcon = { Icon(Icons.Default.Launch, null, modifier = Modifier.size(14.dp), tint = FoolmoonColors.LunarGold) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DesktopContinuityHero(
+    pcConnected: Boolean,
+    activeSessionTitle: String,
+    latestSession: DesktopSessionSummary?,
+    onStartHomeworkTemplate: () -> Unit,
+    onStartCodeTemplate: () -> Unit,
+    onResumeLatest: (String) -> Unit,
+    onConnectPc: () -> Unit
+) {
+    val phase = rememberGeminiAuraPhase(3600)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Surface(
+            shape = RoundedCornerShape(22.dp),
+            color = FoolmoonColors.SurfaceCard.copy(alpha = 0.92f),
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.2.dp, geminiSweepBrush(phase, alpha = 0.55f), RoundedCornerShape(22.dp))
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = activeSessionTitle,
+                    color = FoolmoonColors.Cream,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = if (pcConnected) {
+                        "Burada gönderdiğin mesajlar doğrudan bilgisayarındaki Foolmoon Masaüstü'nde çalışır, dosya/ödev hazırlar ve state.db oturumuna kaydolur. Eve geldiğinde PC'nde hazır bulursun."
+                    } else {
+                        "Masaüstü oturumlarına devam etmek ve uzaktan ödev/görev çalıştırmak için PC'ye bağlan."
+                    },
+                    color = FoolmoonColors.Muted,
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp
+                )
+                if (!pcConnected) {
+                    Button(
+                        onClick = onConnectPc,
+                        colors = ButtonDefaults.buttonColors(containerColor = FoolmoonColors.Crimson)
+                    ) {
+                        Text("PC'ye Bağlan", color = Color.White, fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            StarterActionTile(
+                title = "Ödev / Araştırma Gönder",
+                subtitle = "PC araştırıp dosyaya yazsın",
+                icon = Icons.Default.Assignment,
+                accent = FoolmoonColors.LunarGold,
+                modifier = Modifier.weight(1f),
+                onClick = onStartHomeworkTemplate
+            )
+            StarterActionTile(
+                title = "PC Kod / Belge Görevi",
+                subtitle = "Bilgisayarda projeyi hazırla",
+                icon = Icons.Default.Code,
+                accent = FoolmoonColors.SkyGlow,
+                modifier = Modifier.weight(1f),
+                onClick = onStartCodeTemplate
+            )
+        }
+
+        if (latestSession != null) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = FoolmoonColors.SurfaceCard.copy(alpha = 0.90f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .border(1.dp, FoolmoonColors.Crimson.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
+                    .clickable { onResumeLatest(latestSession.id) }
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(Icons.Default.Computer, null, tint = FoolmoonColors.Emerald, modifier = Modifier.size(20.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Son Masaüstü Sohbetine Devam Et", color = FoolmoonColors.Muted, fontSize = 11.sp)
+                        Text(
+                            text = latestSession.title,
+                            color = FoolmoonColors.Cream,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Text("Aç →", color = FoolmoonColors.LunarGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun GeminiHeroWelcome(
     pcConnected: Boolean,
+    activeVoiceName: String,
     accessibilityEnabled: Boolean,
     onCircleToSearch: () -> Unit,
     onAskAboutScreen: () -> Unit,
@@ -952,17 +1534,22 @@ private fun GeminiHeroWelcome(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "Merhaba, ben Foolmoon",
+                    text = "Foolmoon Mobil Bot",
                     color = FoolmoonColors.Cream,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
                     text = buildString {
-                        append(
-                            if (pcConnected) "Bilgisayarındaki GPU ve Foolmoon Desktop hafızasıyla bağlısın."
-                            else "Masaüstü deneyimi cebinde. Eşleştirdiğinde PC GPU'nu kullanır, çevrimdışıyken telefon görevlerini anında yapar."
-                        )
+                        if (pcConnected) {
+                            append("PC GPU + CUDA ses sistemi ile bağlısın")
+                            if (activeVoiceName.isNotBlank()) {
+                                append(" (🎙️ ${activeVoiceName.substringBefore("_")})")
+                            }
+                            append(". Arama yapabilir, ekranı analiz edebilir veya 'Masaüstü & Ödev' sekmesinden PC'ni yönetebilirsin.")
+                        } else {
+                            append("Gemini düzeyinde hızlı telefon asistanı. Yukarıdan PC'ye bağladığında PC GPU'nu ve klonlanmış sesini otomatik alır.")
+                        }
                         if (!accessibilityEnabled) {
                             append("\nİpucu: Ekran okuma ve Ekranda Seç & Ara için Ayarlar düğmesinden Erişilebilirlik iznini açın.")
                         }
@@ -1148,6 +1735,27 @@ private fun UnifiedControlSheetContent(
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 13.sp
             )
+            Button(
+                enabled = !pairing,
+                onClick = {
+                    pairing = true
+                    pairMessage = "Yerel PC köprüsü aranıyor…"
+                    app.bridge.autoConnectToPc { ok, msg ->
+                        pairing = false
+                        pairMessage = msg
+                        if (ok) {
+                            host = app.prefs.pcHost
+                            port = app.prefs.pcPort.toString()
+                        }
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = FoolmoonColors.Emerald.copy(alpha = 0.22f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Computer, contentDescription = null, tint = FoolmoonColors.Emerald, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("⚡ Otomatik Bağla (USB / Yerel PC)", color = FoolmoonColors.Emerald, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
             OutlinedTextField(
                 value = host,
                 onValueChange = { host = it },

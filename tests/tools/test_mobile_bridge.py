@@ -83,3 +83,77 @@ def test_mobile_pairing_and_memory_sync(tmp_path, monkeypatch):
     )
     assert len(sync2["entries"]) == 1
     assert "1.1x" in sync2["entries"][0]["content"]
+
+
+def test_auto_pair_local_companion_and_voice_info(tmp_path, monkeypatch):
+    monkeypatch.setattr(mb, "get_hermes_home", lambda: tmp_path)
+
+    class _FakeClient:
+        host = "127.0.0.1"
+
+    class _FakeReq:
+        client = _FakeClient()
+
+    res = asyncio.run(
+        mb.auto_pair_local_companion(
+            _FakeReq(),  # type: ignore[arg-type]
+            device_id="emulator-5554",
+            device_name="Android Emulator",
+            model="sdk_gphone64_x86_64",
+        )
+    )
+    assert res["ok"] is True
+    assert res["device_id"] == "emulator-5554"
+    assert str(res["token"]).startswith("fm_mob_")
+    assert "activeVoiceName" in res
+    assert isinstance(res.get("voices"), list)
+    assert mb.verify_mobile_token(res["token"])["device_id"] == "emulator-5554"
+
+    # Reject non-loopback caller on auto-local pairing
+    class _RemoteClient:
+        host = "192.168.1.99"
+
+    class _RemoteReq:
+        client = _RemoteClient()
+
+    import pytest
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(mb.auto_pair_local_companion(_RemoteReq()))  # type: ignore[arg-type]
+    assert exc.value.status_code == 403
+
+
+def test_desktop_sessions_list_and_detail_roundtrip(tmp_path, monkeypatch):
+    from persistence.conversation.sessions import NewSession
+    from persistence_assembly import open_persistence, profile_scope
+
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    with open_persistence(profile_scope(home=tmp_path), eager=True) as store:
+        store.sessions.create(
+            NewSession(
+                session_id="sess_mobile_hw_1",
+                source="desktop",
+                model="bonsai-27b",
+                profile_name="default",
+            )
+        )
+        store.sessions.set_title("sess_mobile_hw_1", "Matematik Ödevi")
+        from persistence.conversation.messages import NewMessage
+        store.messages.append(
+            "sess_mobile_hw_1",
+            NewMessage.from_live({"role": "user", "content": "Ödevimi masaüstünde hazırla."}),
+        )
+        store.messages.append(
+            "sess_mobile_hw_1",
+            NewMessage.from_live({"role": "assistant", "content": "Hazırlayıp kaydettim."}),
+        )
+
+    sessions = mb._list_desktop_sessions_sync(limit=10)
+    assert any(s["id"] == "sess_mobile_hw_1" and s["title"] == "Matematik Ödevi" for s in sessions)
+
+    detail = mb._get_desktop_session_detail_sync("sess_mobile_hw_1")
+    assert detail["ok"] is True
+    assert detail["sessionId"] == "sess_mobile_hw_1"
+    assert [m["role"] for m in detail["messages"]] == ["user", "assistant"]
+    assert "Hazırlayıp kaydettim." in detail["messages"][1]["content"]

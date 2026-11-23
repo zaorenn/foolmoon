@@ -384,6 +384,10 @@ def should_require_dashboard_auth(
 @app.middleware("http")
 async def host_header_middleware(request: Request, call_next):
     """Reject requests whose Host header doesn't match the bound interface (DNS rebinding, GHSA-ppp5-vxwm-4cf7)."""
+    # Mobile companion bridge routes carry their own device bearer / pairing code auth and may
+    # arrive over adb reverse (127.0.0.1:8765), emulator gateway (10.0.2.2), or LAN/Tailscale IP.
+    if request.url.path.startswith("/api/mobile/"):
+        return await call_next(request)
     # app.state.bound_host is set by start_server() at listen time.
     bound_host = getattr(app.state, "bound_host", None)
     if bound_host and not _is_accepted_host(
@@ -466,6 +470,10 @@ async def auth_middleware(request: Request, call_next):
     path = request.url.path
     if path == "/api/mobile/pair/complete":
         return await call_next(request)
+    if path in ("/api/mobile/pair/auto-local", "/api/mobile/pair/start"):
+        client_host = (request.client.host if request.client else "") or ""
+        if client_host in ("127.0.0.1", "::1", "localhost"):
+            return await call_next(request)
     if path.startswith(("/api/mobile/", "/api/audio/")):
         from hermes_cli.web_routers.mobile_bridge import verify_mobile_request_token
         if verify_mobile_request_token(request) is not None:
@@ -1305,6 +1313,39 @@ def _on_server_started(
     _best_effort("host rendezvous publish", lambda: _publish_host_rendezvous(host, actual_port))
 
     _write_dashboard_ready_file(actual_port)
+
+    def _publish_mobile_bridge_port() -> None:
+        try:
+            port_file = get_hermes_home() / "mobile_bridge_port.txt"
+            port_file.write_text(str(actual_port), encoding="utf-8")
+        except Exception:
+            pass
+        try:
+            import shutil as _shutil
+            import subprocess as _subprocess
+            import threading as _threading
+
+            def _adb_reverse_worker() -> None:
+                adb = _shutil.which("adb")
+                if not adb and os.name == "nt":
+                    cand = Path(os.environ.get("LOCALAPPDATA", "")) / "Android" / "Sdk" / "platform-tools" / "adb.exe"
+                    if cand.is_file():
+                        adb = str(cand)
+                if not adb:
+                    return
+                kw: dict[str, Any] = {"capture_output": True, "timeout": 4}
+                if os.name == "nt":
+                    kw["creationflags"] = getattr(_subprocess, "CREATE_NO_WINDOW", 0x08000000)
+                try:
+                    _subprocess.run([adb, "reverse", "tcp:8765", f"tcp:{actual_port}"], **kw)
+                except Exception:
+                    pass
+
+            _threading.Thread(target=_adb_reverse_worker, name="mobile-adb-reverse", daemon=True).start()
+        except Exception:
+            pass
+
+    _best_effort("mobile bridge port publish", _publish_mobile_bridge_port)
     # Port-discovery sentinel parsed by the Desktop spawn. Written to fd 1:
     # tui_gateway.server redirects sys.stdout to stderr at import, and the
     # Desktop watches child.stdout (#96282). A headless `serve` announces the
