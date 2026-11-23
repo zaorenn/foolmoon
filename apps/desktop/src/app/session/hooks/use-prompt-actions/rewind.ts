@@ -23,6 +23,7 @@ import {
   hasUnresolvedToolCall,
   textPart
 } from '@/lib/chat-messages'
+import { buildStudioArchitectApiText } from '@/store/composer-persona'
 import type { ConfirmRequest } from '@/store/confirm'
 
 import {
@@ -349,9 +350,11 @@ export async function runRewindSubmit(
   let deepConfirmUnsupported = false
 
   const submitFor = async (targetId: string) => {
+    const architectApiText = buildStudioArchitectApiText(text)
     const params = {
       session_id: targetId,
       text,
+      ...(architectApiText && { api_text: architectApiText }),
       ...truncateSubmitParams(
         resolvedOrdinal,
         resolvedMessageId,

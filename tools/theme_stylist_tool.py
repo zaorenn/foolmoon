@@ -573,6 +573,198 @@ def _normalize_studio_config(
     return base
 
 
+def _broadcast_skin_live(payload: Dict[str, Any]) -> None:
+    """Push `skin.changed` immediately to every open Foolmoon Desktop window (canonical + legacy)."""
+    if not isinstance(payload, dict) or not payload:
+        return
+    try:
+        from tools import desktop_ui
+        emitter = getattr(desktop_ui, "_emitter", None)
+        if callable(emitter):
+            emitter("", "skin.changed", payload)
+    except Exception:
+        pass
+    try:
+        import sys
+        srv = sys.modules.get("tui_gateway.server")
+        if srv is not None and hasattr(srv, "_broadcast_global_event"):
+            srv._broadcast_global_event("skin.changed", payload)
+    except Exception:
+        pass
+
+
+def _encode_wallpaper_for_css(image_path: Path, max_bytes: int = 20_500) -> str:
+    """Resize/compress *image_path* into a crisp JPEG base64 string guaranteed to fit inside skin_engine's 32 KiB CSS cap."""
+    from PIL import Image
+
+    with Image.open(image_path) as raw:
+        img = raw.convert("RGB")
+        # Try progressively lighter sizes/qualities until raw JPEG fits under max_bytes (~27 KiB base64)
+        for max_dim, quality in (
+            (1280, 82),
+            (1080, 78),
+            (960, 74),
+            (800, 70),
+            (680, 66),
+            (560, 62),
+            (480, 56),
+        ):
+            copy = img.copy()
+            copy.thumbnail((max_dim, max_dim))
+            buf = io.BytesIO()
+            copy.save(buf, format="JPEG", quality=quality, optimize=True)
+            data = buf.getvalue()
+            if len(data) <= max_bytes:
+                return base64.b64encode(data).decode("ascii")
+        # Final safe fallback
+        copy = img.copy()
+        copy.thumbnail((420, 420))
+        buf = io.BytesIO()
+        copy.save(buf, format="JPEG", quality=48, optimize=True)
+        return base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def _generate_procedural_texture(dest_path: Path, dark: bool = True) -> Path:
+    """Offline fallback: synthesize a realistic organic matte paper-fiber texture image with Pillow."""
+    import random
+    from PIL import Image, ImageFilter
+
+    rng = random.Random(42)
+    w, h = 1024, 640
+    base = 17 if dark else 238
+    img = Image.new("RGB", (w, h), (base, base, base))
+    px = img.load()
+    for y in range(h):
+        row_shift = rng.randint(-2, 2)
+        for x in range(w):
+            grain = rng.randint(-9, 9) + row_shift
+            v = max(4, min(250, base + grain))
+            # Subtle warm paper fiber nuance
+            px[x, y] = (v, max(4, v - (1 if dark else 2)), max(4, v - (1 if dark else 4)))
+    img = img.filter(ImageFilter.GaussianBlur(radius=0.55))
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    img.save(dest_path, format="JPEG", quality=90)
+    return dest_path
+
+
+def fetch_studio_wallpaper(
+    query: str = "",
+    *,
+    image_url: str = "",
+    local_path: str = "",
+    slug: str = "studio-wallpaper",
+    dark_hint: bool = True,
+) -> Dict[str, Any]:
+    """Download a high-resolution real texture/wallpaper from Openverse/Wikimedia (or URL/local path)
+    and save it under $HERMES_HOME/skins/wallpapers/<slug>.jpg."""
+    import urllib.parse
+    import urllib.request
+    from PIL import Image
+
+    wallpapers_dir = get_hermes_home() / "skins" / "wallpapers"
+    wallpapers_dir.mkdir(parents=True, exist_ok=True)
+    dest_path = wallpapers_dir / f"{_slugify(slug) or 'wallpaper'}.jpg"
+
+    def _download_and_validate(url: str, timeout: int = 12) -> bool:
+        req = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": "FoolmoonStudio/1.0 (https://github.com/zaorenn/foolmoon)",
+                "Accept": "image/jpeg,image/png,image/webp,image/*,*/*;q=0.8",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read(16 * 1024 * 1024)
+        with Image.open(io.BytesIO(raw)) as im:
+            im = im.convert("RGB")
+            if im.width < 320 or im.height < 200:
+                return False
+            if max(im.width, im.height) > 1920:
+                im.thumbnail((1920, 1920))
+            im.save(dest_path, format="JPEG", quality=92, optimize=True)
+            return True
+
+    # 1. Local file path
+    if local_path and Path(local_path).is_file():
+        with Image.open(local_path) as im:
+            im = im.convert("RGB")
+            if max(im.width, im.height) > 1920:
+                im.thumbnail((1920, 1920))
+            im.save(dest_path, format="JPEG", quality=92, optimize=True)
+        return {"path": str(dest_path), "source": "local", "url": "", "b64": _encode_wallpaper_for_css(dest_path)}
+
+    # 2. Explicit direct image URL
+    if image_url and image_url.startswith(("http://", "https://")):
+        try:
+            if _download_and_validate(image_url):
+                return {"path": str(dest_path), "source": "url", "url": image_url, "b64": _encode_wallpaper_for_css(dest_path)}
+        except Exception as exc:
+            logger.debug("Direct wallpaper URL failed (%s): %s", image_url, exc)
+
+    # 3. Search Openverse CC-licensed high-res photography (no API key needed)
+    clean_query = (query or "").strip()
+    if clean_query:
+        candidates: List[str] = []
+        try:
+            q_enc = urllib.parse.quote(clean_query)
+            req = urllib.request.Request(
+                f"https://api.openverse.org/v1/images/?q={q_enc}&page_size=10",
+                headers={"User-Agent": "FoolmoonStudio/1.0"},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            results = data.get("results") or []
+            # Prefer wider high-res landscape textures/photos first
+            def _rank(item: dict) -> tuple:
+                w = int(item.get("width") or 0)
+                h = int(item.get("height") or 0)
+                landscape = 1 if w >= h else 0
+                return (landscape, min(w, 4000) * min(h, 4000))
+
+            for item in sorted(results, key=_rank, reverse=True):
+                u = str(item.get("url") or "").strip()
+                if u.startswith(("http://", "https://")) and not u.lower().endswith((".svg", ".pdf", ".tif", ".tiff")):
+                    candidates.append(u)
+        except Exception as exc:
+            logger.debug("Openverse wallpaper search failed: %s", exc)
+
+        # Fallback: Wikimedia Commons bitmap search
+        if not candidates:
+            try:
+                q_enc = urllib.parse.quote(f"{clean_query} filetype:bitmap")
+                req = urllib.request.Request(
+                    f"https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6"
+                    f"&gsrsearch={q_enc}&gsrlimit=6&prop=imageinfo&iiprop=url|size|mime&format=json",
+                    headers={"User-Agent": "FoolmoonStudio/1.0"},
+                )
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                for page in ((data.get("query") or {}).get("pages") or {}).values():
+                    ii = (page.get("imageinfo") or [{}])[0]
+                    mime = str(ii.get("mime") or "")
+                    u = str(ii.get("url") or "")
+                    if mime in ("image/jpeg", "image/png", "image/webp") and u:
+                        candidates.append(u)
+            except Exception as exc:
+                logger.debug("Wikimedia wallpaper search failed: %s", exc)
+
+        for cand_url in candidates[:5]:
+            try:
+                if _download_and_validate(cand_url):
+                    return {
+                        "path": str(dest_path),
+                        "source": "internet",
+                        "url": cand_url,
+                        "b64": _encode_wallpaper_for_css(dest_path),
+                    }
+            except Exception as exc:
+                logger.debug("Candidate wallpaper download failed (%s): %s", cand_url, exc)
+
+    # 4. Offline procedural paper-grain fallback so it never leaves the user with nothing
+    _generate_procedural_texture(dest_path, dark=dark_hint)
+    return {"path": str(dest_path), "source": "procedural", "url": "", "b64": _encode_wallpaper_for_css(dest_path)}
+
+
 def _build_custom_css(
     palette: Dict[str, Any],
     wallpaper_b64: str,
@@ -580,6 +772,7 @@ def _build_custom_css(
     include_wallpaper: bool = True,
     include_sticker: bool = False,
     studio_config: Optional[Dict[str, Any]] = None,
+    wallpaper_tint: float = 0.46,
 ) -> str:
     p = palette["primary"]
     face = palette["face"]
@@ -603,18 +796,22 @@ def _build_custom_css(
         "  inset: 0;",
         "  pointer-events: none;",
         "  z-index: 0;",
-        f"  background: radial-gradient(900px circle at 18% 8%, {accent}18, transparent 58%), "
-        f"radial-gradient(760px circle at 84% 88%, {secondary}16, transparent 62%);",
+        f"  background: radial-gradient(900px circle at 18% 8%, {accent}22, transparent 58%), "
+        f"radial-gradient(760px circle at 84% 88%, {secondary}1a, transparent 62%);",
         "}",
     ])
 
     if include_wallpaper and wallpaper_b64:
+        tint = max(0.15, min(0.85, float(wallpaper_tint)))
+        alpha_top = f"{int(round(tint * 255)):02x}"
+        alpha_bot = f"{int(round(min(0.92, tint + 0.14) * 255)):02x}"
         css_parts.extend([
-            '[data-chat-surface=""] {',
-            f"  background-image: linear-gradient({p['background']}e0, {p['background']}ec), "
+            '[data-chat-surface=""], body {',
+            f"  background-image: linear-gradient({p['background']}{alpha_top}, {p['background']}{alpha_bot}), "
             f"url('data:image/jpeg;base64,{wallpaper_b64}') !important;",
             "  background-size: cover !important;",
             "  background-position: center !important;",
+            "  background-attachment: fixed !important;",
             "}",
         ])
 
@@ -640,7 +837,7 @@ def _build_custom_css(
     raw = "\n".join(css_parts)
     raw = re.sub(r"(?is)</?script[^>]*>|javascript\s*:|expression\s*\(|@import\b|\bon[a-z]+\s*=", "", raw)
     # Enforce skin_engine's 32 KiB CSS limit gracefully
-    if len(raw.encode("utf-8")) > 30000 and include_wallpaper:
+    if len(raw.encode("utf-8")) > 31500 and include_wallpaper:
         # Drop heavy wallpaper before returning
         return _build_custom_css(
             palette,
@@ -771,6 +968,8 @@ def generate_theme_from_image(
         "tool_prefix": skin_doc["tool_prefix"],
         "customCSS": custom_css,
     }
+    if apply_now:
+        _broadcast_skin_live(payload)
 
     return {
         "ok": True,
@@ -817,9 +1016,14 @@ def customize_foolmoon_studio(
     stickers: Optional[List[Dict[str, Any]]] = None,
     bbot_fx_preset: Optional[str] = None,
     preset: str = "balanced",
+    wallpaper_query: Optional[str] = None,
+    wallpaper_url: Optional[str] = None,
+    wallpaper_path: Optional[str] = None,
+    wallpaper_tint: float = 0.44,
     apply_now: bool = True,
 ) -> Dict[str, Any]:
-    """Create and activate a custom Foolmoon universe theme with palette, material, radius, patterns & corner stickers."""
+    """Create and activate a custom Foolmoon universe theme with optional high-res internet/local wallpaper,
+    palette, material, radius, patterns & corner stickers."""
     raw_name = (name or "").strip() or "custom-foolmoon-studio"
     slug = _slugify(raw_name)
     if slug in _BUILTIN_SKIN_NAMES:
@@ -828,6 +1032,22 @@ def customize_foolmoon_studio(
     bg = _safe_hex(background, "#f5efe6")
     bg_rgb = _hex_to_rgb(bg)
     dark_primary = _rel_luminance(bg_rgb) < 0.42
+
+    wallpaper_meta: Optional[Dict[str, Any]] = None
+    wallpaper_b64 = ""
+    if (wallpaper_query and wallpaper_query.strip()) or (wallpaper_url and wallpaper_url.strip()) or (wallpaper_path and wallpaper_path.strip()):
+        try:
+            wallpaper_meta = fetch_studio_wallpaper(
+                query=str(wallpaper_query or ""),
+                image_url=str(wallpaper_url or ""),
+                local_path=str(wallpaper_path or ""),
+                slug=slug,
+                dark_hint=dark_primary,
+            )
+            wallpaper_b64 = str(wallpaper_meta.get("b64") or "")
+        except Exception as exc:
+            logger.warning("Wallpaper fetch failed for %s: %s", slug, exc)
+
     acc = _ensure_contrast_hex(_safe_hex(accent, "#c94a38"), bg, 4.5)
     fg = _ensure_contrast_hex(
         _safe_hex(foreground, "#f3ece4" if dark_primary else "#2c221e"),
@@ -925,11 +1145,12 @@ def customize_foolmoon_studio(
     )
     custom_css = _build_custom_css(
         palette_bundle,
+        wallpaper_b64,
         "",
-        "",
-        include_wallpaper=False,
+        include_wallpaper=bool(wallpaper_b64),
         include_sticker=False,
         studio_config=studio_config,
+        wallpaper_tint=wallpaper_tint,
     )
 
     tui_assets = _build_foolmoon_tui_assets(
@@ -983,12 +1204,24 @@ def customize_foolmoon_studio(
         "tool_prefix": skin_doc["tool_prefix"],
         "customCSS": custom_css,
     }
+    if apply_now:
+        _broadcast_skin_live(payload)
     return {
         "ok": True,
         "skin": slug,
         "skin_path": str(skin_path),
         "applied": applied,
         "studio_config": studio_config,
+        "wallpaper": (
+            {
+                "path": wallpaper_meta.get("path"),
+                "source": wallpaper_meta.get("source"),
+                "url": wallpaper_meta.get("url"),
+                "embedded": bool(wallpaper_b64),
+            }
+            if wallpaper_meta
+            else None
+        ),
         "skin_payload": payload,
     }
 
@@ -1252,6 +1485,10 @@ def _customize_studio_handler(args: Dict[str, Any]) -> str:
             stickers=args.get("stickers") if isinstance(args.get("stickers"), list) else None,
             bbot_fx_preset=args.get("bbot_fx_preset"),
             preset=str(args.get("preset") or "balanced"),
+            wallpaper_query=args.get("wallpaper_query"),
+            wallpaper_url=args.get("wallpaper_url"),
+            wallpaper_path=args.get("wallpaper_path"),
+            wallpaper_tint=float(args.get("wallpaper_tint", 0.44)),
             apply_now=bool(args.get("apply_now", True)),
         )
         return json.dumps({
@@ -1259,6 +1496,7 @@ def _customize_studio_handler(args: Dict[str, Any]) -> str:
             "skin": res["skin"],
             "skin_path": res["skin_path"],
             "applied": res["applied"],
+            "wallpaper": res.get("wallpaper"),
             "studio_config": res["studio_config"],
         }, ensure_ascii=False)
     except Exception as exc:
@@ -1268,18 +1506,26 @@ def _customize_studio_handler(args: Dict[str, Any]) -> str:
 CUSTOMIZE_STUDIO_SCHEMA = {
     "name": "customize_foolmoon_studio",
     "description": (
-        "Studio Architect ONLY: Design and apply a custom theme to the Foolmoon desktop app itself "
-        "(palette hex colors, 6-28px corner radius, surface material, repeating SVG patterns, and "
-        "corner stickers). NEVER use this to build websites, web apps, or HTML dashboards."
+        "Studio Architect ONLY: Design and live-apply a custom theme to the Foolmoon desktop app itself — "
+        "including searching & downloading a high-resolution background texture/wallpaper from the internet "
+        "via `wallpaper_query` (e.g. 'black paper texture dark'), setting hex background/accent colors, "
+        "surface material, 6-28px corner radius, repeating SVG patterns, and corner stickers."
     ),
     "parameters": {
         "type": "object",
         "properties": {
-            "name": {"type": "string", "description": "Theme slug/title (e.g. 'velvet-ribbon')."},
-            "background": {"type": "string", "description": "Primary hex background (e.g. '#FFF4F7')."},
+            "name": {"type": "string", "description": "Theme slug/title (e.g. 'black-paper-crimson')."},
+            "background": {"type": "string", "description": "Primary hex background (e.g. '#111010' for black paper)."},
             "sidebar_background": {"type": "string", "description": "Optional sidebar hex background."},
             "foreground": {"type": "string", "description": "Optional foreground text hex."},
-            "accent": {"type": "string", "description": "Primary accent hex color (e.g. '#E11D62')."},
+            "accent": {"type": "string", "description": "Primary accent hex color (e.g. '#ff2a3c' for neon red)."},
+            "wallpaper_query": {
+                "type": "string",
+                "description": "Search query to automatically find and download a real high-res background image/texture from the internet (e.g. 'black paper texture dark').",
+            },
+            "wallpaper_url": {"type": "string", "description": "Optional direct image URL to download and apply as background wallpaper."},
+            "wallpaper_path": {"type": "string", "description": "Optional local image path to apply as background wallpaper."},
+            "wallpaper_tint": {"type": "number", "description": "Overlay tint over wallpaper (0.15 to 0.85; lower = more vivid texture, default 0.44)."},
             **_STUDIO_PARAM_PROPERTIES,
             "apply_now": {"type": "boolean"},
         },

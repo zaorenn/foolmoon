@@ -22,7 +22,7 @@ import {
   patchMainComposerAttachmentOccurrence,
   revokeDiscardedAttachmentPreviews
 } from '@/store/composer'
-import { $composerPersona } from '@/store/composer-persona'
+import { buildStudioArchitectApiText } from '@/store/composer-persona'
 import { serverOwnsComposerQueue } from '@/store/composer-queue'
 import { noteMessageSent } from '@/store/desktop-metrics'
 import { $hudMode } from '@/store/hud'
@@ -1083,12 +1083,7 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
           .map(attachment => ({ path: attachment.path!, mime: attachment.mime! }))
 
         const architectApiText =
-          $composerPersona.get() === 'architect' &&
-          options?.displayKind !== 'hidden' &&
-          text &&
-          !text.startsWith('/')
-            ? `[Foolmoon Studio Architect mode is active. Use \`customize_foolmoon_studio\` to design and live-apply custom Foolmoon themes, surface textures/materials, corner radii, accent colors, repeating SVG patterns, wallpapers, or corner stickers matching the user's request.]\n\n${text}`
-            : undefined
+          options?.displayKind !== 'hidden' ? buildStudioArchitectApiText(text) : undefined
 
         const submitParams = (targetId: string) => ({
           session_id: targetId,
