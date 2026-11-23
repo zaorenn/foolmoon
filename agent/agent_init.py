@@ -1955,7 +1955,7 @@ def _compact_tools_for_tight_local_window(agent):
     tools = getattr(agent, "tools", None)
     if not isinstance(tools, list) or not tools:
         return
-    max_tool_chars = max(4_000, int(_ctx * 1.1))
+    max_tool_chars = max(4_000, int(_ctx * 1.35))
     try:
         current_chars = len(json.dumps(tools))
     except Exception:
@@ -1967,17 +1967,25 @@ def _compact_tools_for_tight_local_window(agent):
         "customize_foolmoon_studio",
         "stylize_theme_from_image",
         "set_theme",
-        "tool_search",
-        "tool_describe",
-        "tool_call",
+        "read_window_below",
+        "mcp__windows_os__capture_screen",
+        "mcp__windows_os__list_windows",
+        "memory",
         "open_on_computer",
-        "android_device_status",
-        "android_device_action",
+        "mcp__windows_os__launch_app",
+        "mcp__windows_os__media_control",
+        "mcp__windows_os__system_volume",
+        "mcp__windows_os__control_window",
+        "vision_analyze",
         "web_search",
         "read_file",
         "write_file",
         "terminal",
-        "memory",
+        "tool_search",
+        "tool_describe",
+        "tool_call",
+        "clarify",
+        "mcp__windows_os__clipboard",
     )
     by_name = {}
     for item in tools:
@@ -1992,8 +2000,8 @@ def _compact_tools_for_tight_local_window(agent):
             return entry
         fn_copy = dict(fn)
         desc = str(fn_copy.get("description") or "")
-        if len(desc) > 180:
-            fn_copy["description"] = desc[:177].rstrip() + "..."
+        if len(desc) > 140:
+            fn_copy["description"] = desc[:137].rstrip() + "..."
         params = fn_copy.get("parameters")
         if isinstance(params, dict) and isinstance(params.get("properties"), dict):
             compact_props = {}
@@ -2001,8 +2009,8 @@ def _compact_tools_for_tight_local_window(agent):
                 if isinstance(pv, dict):
                     pv_copy = dict(pv)
                     pdesc = str(pv_copy.get("description") or "")
-                    if len(pdesc) > 90:
-                        pv_copy["description"] = pdesc[:87].rstrip() + "..."
+                    if len(pdesc) > 70:
+                        pv_copy["description"] = pdesc[:67].rstrip() + "..."
                     compact_props[pk] = pv_copy
                 else:
                     compact_props[pk] = pv

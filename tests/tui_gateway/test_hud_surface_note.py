@@ -74,17 +74,19 @@ class TestTurnRouting:
         assert server._hud_surface_note(_session(client_surface="hud")) == hud_surface_note(FULL_KIT)
 
     def test_default_desktop_session_with_tool_search_gets_the_note(self):
-        """Real toolset resolution + real defer list: read_window_below is deferred, not dropped."""
+        """Real toolset resolution + real defer list: read_window_below stays direct (eager)."""
         from tools.registry import discover_builtin_tools
 
         discover_builtin_tools()
         enabled = server._load_enabled_toolsets("desktop")
         agent = types.SimpleNamespace(enabled_toolsets=enabled, disabled_toolsets=None,
-                                      valid_tool_names={"tool_search", "tool_describe", "tool_call"})
+                                      valid_tool_names={"read_window_below", "tool_search", "tool_describe", "tool_call"})
 
         note = server._hud_surface_note(_session(client_surface="hud") | {"agent": agent})
 
-        assert "read_window_below" in note and "through the tool_call bridge" in note
+        assert "read_window_below identifies that app" in note
+        if "Call " in note:
+            assert "read_window_below" not in note[note.index("Call "):]
 
     def test_app_window_turn_gets_nothing(self):
         assert server._hud_surface_note(_session(client_surface="")) == ""

@@ -14,7 +14,9 @@ from tools.registry import registry
 ANDROID_ACTION_SCHEMA: dict[str, Any] = {
     "name": "android_device_action",
     "description": (
-        "Execute an agentic action on the user's paired Android phone via Foolmoon Mobile Companion. "
+        "Run an action on a paired external Android phone (NOT this Windows PC). "
+        "NEVER use this for the user's Windows PC screen, PC apps, or PC music/media — "
+        "use capture_screen or read_window_below for this Windows computer. "
         "Supported actions: open_app(app_name), set_alarm(hour, minute, label), set_timer(seconds, label), "
         "open_url(url), compose_sms(phone, body), dial_number(phone), create_calendar_event(title, start_ms, end_ms), "
         "get_device_status(), get_clipboard(), set_clipboard(text), inspect_screen(), tap_text(text), "
@@ -43,7 +45,10 @@ ANDROID_ACTION_SCHEMA: dict[str, Any] = {
 
 ANDROID_STATUS_SCHEMA: dict[str, Any] = {
     "name": "android_device_status",
-    "description": "List connected Foolmoon Mobile Android devices, their battery/telemetry, and enabled agentic capabilities.",
+    "description": (
+        "EXTERNAL PAIRED ANDROID PHONE ONLY (NEVER for this Windows PC). "
+        "List connected Foolmoon Mobile Android phones, their battery/telemetry, and enabled companion capabilities."
+    ),
     "parameters": {
         "type": "object",
         "properties": {},
@@ -52,6 +57,20 @@ ANDROID_STATUS_SCHEMA: dict[str, Any] = {
 
 
 def _handle_android_action(args: dict[str, Any], **_kwargs: Any) -> str:
+    if not _mobile_tool_available():
+        return json.dumps(
+            {
+                "ok": False,
+                "error": (
+                    "No external Android phone is connected to the PC Mobile Bridge. "
+                    "Do NOT use android_device_action for this Windows computer — use "
+                    "mcp__windows_os__capture_screen, read_window_below, mcp__windows_os__list_windows, "
+                    "or open_on_computer for PC tasks."
+                ),
+            },
+            ensure_ascii=False,
+        )
+
     from hermes_cli.web_routers.mobile_bridge import dispatch_phone_tool_sync
 
     action = str(args.get("action") or "").strip()
@@ -84,6 +103,7 @@ registry.register(
     toolset="mobile",
     schema=ANDROID_ACTION_SCHEMA,
     handler=_handle_android_action,
+    check_fn=_mobile_tool_available,
     emoji="📱",
 )
 
@@ -92,5 +112,6 @@ registry.register(
     toolset="mobile",
     schema=ANDROID_STATUS_SCHEMA,
     handler=_handle_android_status,
+    check_fn=_mobile_tool_available,
     emoji="📱",
 )

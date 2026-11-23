@@ -85,71 +85,15 @@ _APP_ALIASES: dict[str, str] = {
 
 
 def _enumerate_windows(only_visible: bool = True, filter_text: str = "") -> list[dict[str, Any]]:
-    import psutil
-    import win32gui
-    import win32process
+    from tools.win_screen_context import enumerate_windows_win32
 
-    fg_hwnd = win32gui.GetForegroundWindow()
-    needle = (filter_text or "").strip().lower()
-    rows: list[dict[str, Any]] = []
-
-    def _cb(hwnd: int, _extra: Any) -> bool:
-        if only_visible and not win32gui.IsWindowVisible(hwnd):
-            return True
-        title = (win32gui.GetWindowText(hwnd) or "").strip()
-        if only_visible and not title:
-            return True
-        try:
-            left, top, right, bottom = win32gui.GetWindowRect(hwnd)
-        except Exception:
-            return True
-        width, height = right - left, bottom - top
-        if only_visible and (width <= 0 or height <= 0):
-            return True
-        _, pid = win32process.GetWindowThreadProcessId(hwnd)
-        proc_name = ""
-        try:
-            proc_name = psutil.Process(pid).name()
-        except Exception:
-            pass
-        if needle and needle not in title.lower() and needle not in proc_name.lower() and needle != str(hwnd):
-            return True
-        rows.append(
-            {
-                "hwnd": int(hwnd),
-                "title": title,
-                "pid": int(pid),
-                "process": proc_name,
-                "rect": {"x": left, "y": top, "w": width, "h": height},
-                "minimized": bool(win32gui.IsIconic(hwnd)),
-                "active": int(hwnd) == int(fg_hwnd),
-            }
-        )
-        return True
-
-    win32gui.EnumWindows(_cb, None)
-    return rows
+    return enumerate_windows_win32(only_visible=only_visible, filter_text=filter_text)
 
 
 def _find_window(query: str) -> dict[str, Any] | None:
-    q = (query or "").strip()
-    if not q:
-        return None
-    windows = _enumerate_windows(only_visible=True)
-    if q.isdigit():
-        target_hwnd = int(q)
-        for w in windows:
-            if w["hwnd"] == target_hwnd:
-                return w
-    ql = q.lower()
-    # Exact title/process match first, then substring
-    for w in windows:
-        if w["title"].lower() == ql or w["process"].lower() == ql or w["process"].lower().removesuffix(".exe") == ql:
-            return w
-    for w in windows:
-        if ql in w["title"].lower() or ql in w["process"].lower():
-            return w
-    return None
+    from tools.win_screen_context import find_window_win32
+
+    return find_window_win32(query)
 
 
 @mcp.tool(
@@ -683,48 +627,31 @@ def keyboard_input(action: str, value: str, press_enter: bool = False) -> str:
     annotations=ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
 )
 def capture_screen(mode: str = "full", window_query: str = "", save_path: str = "") -> str:
-    """Capture a screenshot (mode: full | primary | window) and save as PNG; returns the exact file path."""
+    """Look at the Windows PC screen, active/underlying windows, and playing media.
+
+    Captures a real PNG screenshot AND returns the active window, window below Foolmoon,
+    open window titles (songs, videos, browser tabs), playing OS media info, and UI text snippets.
+    """
     try:
-        import win32gui
-        from PIL import ImageGrab
+        from tools.win_screen_context import capture_screen_image, inspect_pc_screen_context
 
-        m = (mode or "full").strip().lower()
-        target_win = None
-        if m == "window":
-            if window_query.strip():
-                target_win = _find_window(window_query)
-                if not target_win:
-                    return json_err(f"No visible window found matching '{window_query}'.")
-                r = target_win["rect"]
-                bbox = (r["x"], r["y"], r["x"] + r["w"], r["y"] + r["h"])
-            else:
-                fg = win32gui.GetForegroundWindow()
-                left, top, right, bottom = win32gui.GetWindowRect(fg)
-                bbox = (left, top, right, bottom)
-            img = ImageGrab.grab(bbox=bbox, all_screens=True)
-        elif m == "primary":
-            img = ImageGrab.grab(all_screens=False)
-        else:
-            m = "full"
-            img = ImageGrab.grab(all_screens=True)
-
-        if save_path.strip():
-            out = expand_path(save_path)
-        else:
-            cache_dir = get_hermes_home_path() / "image_cache"
-            cache_dir.mkdir(parents=True, exist_ok=True)
-            out = cache_dir / f"screen_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.png"
-        out.parent.mkdir(parents=True, exist_ok=True)
-        img.save(str(out), format="PNG")
-        return json_ok(
-            {
-                "path": str(out),
-                "width": img.width,
-                "height": img.height,
-                "mode": m,
-                "window": target_win,
-            }
-        )
+        pre_ctx = inspect_pc_screen_context(include_media=True, include_ui_text=True)
+        try:
+            shot = capture_screen_image(
+                mode=mode,
+                window_query=window_query,
+                save_path=save_path,
+                cache_dir=get_hermes_home_path() / "image_cache",
+            )
+            target_hwnd = shot["window"]["hwnd"] if isinstance(shot.get("window"), dict) else None
+            ctx = inspect_pc_screen_context(target_hwnd=target_hwnd, include_media=True, include_ui_text=True) if target_hwnd else pre_ctx
+            return json_ok({**shot, **ctx})
+        except LookupError as exc:
+            return json_err(str(exc))
+        except OSError as exc:
+            if pre_ctx.get("visible_windows") or pre_ctx.get("media_now_playing"):
+                return json_ok({"path": None, "capture_warning": f"Screenshot capture unavailable ({exc})", **pre_ctx})
+            return json_err(f"Screenshot capture failed: {exc}")
     except Exception as exc:
         return json_err(f"Screenshot capture failed: {exc}")
 

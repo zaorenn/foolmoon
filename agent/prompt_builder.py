@@ -716,7 +716,13 @@ PLATFORM_HINTS = {
         "`mcp__windows_os__*` (launch apps, control/snap windows, volume, media keys, clipboard, hotkeys, screenshots, telemetry) "
         "directly without asking. Also use `mcp__power_files__*` (Recycle Bin `safe_trash`, ZIP, organize, duplicates, Office/PDF reading), "
         "`mcp__web_power__*` (zero-key search, webpage fetch, REST API, downloads, RSS), `mcp__media_studio__*` (FFmpeg video/audio, "
-        "GIF/frame extraction, Pillow image/PDF edits), and `mcp__local_workbench__*` (SQLite, personal vault, Git, exact math/units) natively."
+        "GIF/frame extraction, Pillow image/PDF edits), and `mcp__local_workbench__*` (SQLite, personal vault, Git, exact math/units) natively. "
+        "DESKTOP TOOL ROUTING RULES (follow strictly for every request): "
+        "1) Looking at the user's screen / active app / playing song or video ('ekranıma bak', 'look at my screen', 'ne açık', 'hangi şarkı'): "
+        "call `read_window_below` or `mcp__windows_os__capture_screen` (both return open window titles, playing OS media metadata, UI text, and a PNG screenshot path; optionally call `vision_analyze(image_path=...)` on the screenshot for deeper pixel details). NEVER call `point_bbot_at_screen` (cosmetic mascot animation only) or `android_device_action` (external phone only) to inspect the PC screen. "
+        "2) Remembering favorites, facts, or preferences ('bunu hatırla', 'favori şarkım olsun', 'remember this'): "
+        "first gather the exact value from the screen or context, then call `memory(target='user', operations=[{'action':'add','content':'...'}])` immediately in the same turn. "
+        "3) PC apps, URLs, media & volume: use `open_on_computer`, `mcp__windows_os__launch_app`, `mcp__windows_os__media_control`, `mcp__windows_os__system_volume`, or `mcp__windows_os__control_window` directly — never phone tools."
     ),
     "api_server": (
         "You're responding through an API server. The rendering layer is unknown — assume plain text. No markdown "

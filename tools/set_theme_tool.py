@@ -58,8 +58,8 @@ def set_theme_tool(accent: Optional[str] = None, mode: Optional[str] = None, lay
 SET_THEME_SCHEMA = {
     "name": "set_theme",
     "description": (
-        "Change how the Hermes desktop app itself looks: accent colour, light/dark mode, layout. Only use "
-        "when explicitly asked to theme the Hermes/Foolmoon app itself — NEVER use when creating websites, "
+        "Change the Foolmoon desktop app's accent color, mode, or layout. "
+        "Only use when explicitly asked to theme the Foolmoon app itself — NEVER use when creating websites, "
         "web apps, or dashboards. Pass picker instead to show an accent or layout picker card. To reveal "
         "ONE pane, use focus_pane instead."
     ),

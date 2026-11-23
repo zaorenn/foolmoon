@@ -1993,9 +1993,13 @@ DEFAULT_CONFIG = {
                 "computer_use", "session_search", "image_generate",
                 "todo_list", "process_manage", "cronjob_manage", "browser_vault", "text_to_speech", "manage_connections",
                 # Desktop GUI surface (desktop_ui, project and catalog toolsets)
+                # read_window_below stays EAGER so screen/window inspection works in 1 direct call;
+                # ornamental/cosmetic UI tools (point_bbot_at_screen, react_to_message, gui_tour, show_tip)
+                # stay deferred so small/local models do not mistake mascot/reaction tools for OS actions.
                 "drive_preview", "gui_tour", "desktop_preview", "annotate_preview", "manage_catalog",
                 "show_tip", "desktop_project", "close_terminal",
-                "set_theme", "read_terminal", "read_window_below", "focus_pane",
+                "set_theme", "read_terminal", "focus_pane",
+                "point_bbot_at_screen", "react_to_message",
             ],
         },
         # Remote connector discovery/lifecycle through the Nous tool gateway.

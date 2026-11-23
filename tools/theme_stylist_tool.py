@@ -1568,7 +1568,7 @@ def _stylize_theme_handler(
 STYLIZE_THEME_SCHEMA = {
     "name": "stylize_theme_from_image",
     "description": (
-        "Studio Architect ONLY: Generate a stylized Foolmoon Desktop, Notch, and CLI app theme from one image. "
+        "Studio Architect ONLY: Generate a Foolmoon theme from one image. "
         "Extracts a WCAG-verified palette (light & dark), custom @bwnd/bbot face tokens, "
         "surface material, rounded corner geometry, SVG patterns, non-blocking corner stickers, and "
         "ambient backdrop styling, writes it under "
@@ -1680,8 +1680,8 @@ def _customize_studio_handler(args: Dict[str, Any]) -> str:
 CUSTOMIZE_STUDIO_SCHEMA = {
     "name": "customize_foolmoon_studio",
     "description": (
-        "Studio Architect ONLY: Design and live-apply a custom theme to the Foolmoon desktop app itself — "
-        "including searching & downloading a high-resolution background texture/wallpaper from the internet "
+        "Studio Architect ONLY: Customize the Foolmoon app theme live. "
+        "Supports searching & downloading a high-resolution background texture/wallpaper from the internet "
         "via `wallpaper_query` (e.g. 'black paper texture dark'), setting hex background/accent colors, "
         "surface material, 6-28px corner radius, repeating SVG patterns, and corner stickers."
     ),
@@ -1718,6 +1718,8 @@ registry.register(
 
 
 def _point_bbot_at_screen_handler(args: Dict[str, Any]) -> str:
+    import sys
+
     try:
         x_pct = float(args.get("x_percent", 50.0))
         y_pct = float(args.get("y_percent", 50.0))
@@ -1727,19 +1729,30 @@ def _point_bbot_at_screen_handler(args: Dict[str, Any]) -> str:
         expression = str(args.get("expression") or "excited").strip() or "excited"
         duration_ms = int(args.get("duration_ms", 4000))
         duration_ms = max(1500, min(12000, duration_ms))
-        return json.dumps(
-            {
-                "success": True,
-                "bbot_spotlight": {
-                    "x_norm": round(x_norm, 4),
-                    "y_norm": round(y_norm, 4),
-                    "label": label,
-                    "expression": expression,
-                    "duration_ms": duration_ms,
-                },
+        payload: Dict[str, Any] = {
+            "success": True,
+            "bbot_spotlight": {
+                "x_norm": round(x_norm, 4),
+                "y_norm": round(y_norm, 4),
+                "label": label,
+                "expression": expression,
+                "duration_ms": duration_ms,
             },
-            ensure_ascii=False,
-        )
+            "note": (
+                "point_bbot_at_screen only plays a visual pointer animation — it does NOT read pixels. "
+                "To inspect what is on screen, use read_window_below or mcp__windows_os__capture_screen."
+            ),
+        }
+        if sys.platform == "win32":
+            try:
+                from tools.win_screen_context import inspect_pc_screen_context
+
+                ctx = inspect_pc_screen_context(include_media=True, include_ui_text=False, max_windows=10)
+                if ctx:
+                    payload["screen_context_hint"] = ctx
+            except Exception:
+                pass
+        return json.dumps(payload, ensure_ascii=False)
     except Exception as exc:
         return tool_error(f"Could not move bbot spotlight: {exc}")
 
@@ -1747,9 +1760,10 @@ def _point_bbot_at_screen_handler(args: Dict[str, Any]) -> str:
 POINT_BBOT_SCHEMA = {
     "name": "point_bbot_at_screen",
     "description": (
-        "Dynamically fly the bbot companion away from the macOS Notch to point at a specific "
-        "location on the user's screen (e.g., when answering 'where is X on my screen?'), "
-        "highlight it with a glowing beacon and short label, then smoothly fly bbot back to the Notch."
+        "COSMETIC ONLY: Animate @bbot mascot pointing at screen. "
+        "Visually moves @bbot to point at (x_percent, y_percent) with a beacon caption; "
+        "NEVER use this to look at, read, capture, or inspect what is on the user's screen "
+        "(use read_window_below or mcp__windows_os__capture_screen instead)."
     ),
     "parameters": {
         "type": "object",
@@ -1875,11 +1889,11 @@ def _open_on_computer_handler(args: Dict[str, Any]) -> str:
 OPEN_ON_COMPUTER_SCHEMA = {
     "name": "open_on_computer",
     "description": (
-        "Open ANY file (HTML website, PDF, document, image, folder), web URL (e.g. YouTube), "
-        "or desktop application/URI ('notepad', 'calc', 'code', 'spotify:', 'ms-settings:') "
-        "on the user's computer AND/OR in Foolmoon's in-app live preview pane. "
-        "Use mode='both' (default) to show previewable HTML/PDF/URLs inside the app AND launch "
-        "them with the OS default handler, or mode='preview' / mode='system'."
+        "Open any file, folder, URL, or desktop app on this PC. "
+        "Supports websites (e.g. YouTube), local HTML/PDF/images, and Windows URIs ('notepad', 'calc', 'code', "
+        "'spotify:', 'ms-settings:'), in Foolmoon's in-app live preview pane and/or the OS handler. "
+        "Use mode='both' (default) to show previewable items inside the app AND launch via OS, "
+        "or mode='preview' / mode='system'."
     ),
     "parameters": {
         "type": "object",

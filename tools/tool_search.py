@@ -139,6 +139,19 @@ def _core_tool_names() -> frozenset[str]:
 # their schema; once enabled they stay direct unless the deferral list names them.
 _DIRECT_SURFACE_TOOLSETS = CLIENT_SURFACE_TOOLSETS | TOOLSET_SESSION_PLATFORMS.keys()
 
+# Everyday Windows desktop MCP tools kept direct/eager by default (unless explicitly
+# named in ``defer_tools``) so models can inspect the screen, list open windows, launch apps,
+# and control playback/volume in 1 call without a 3-step tool_search bridge round-trip.
+_EAGER_DESKTOP_MCP_TOOLS = frozenset({
+    "mcp__windows_os__capture_screen",
+    "mcp__windows_os__list_windows",
+    "mcp__windows_os__control_window",
+    "mcp__windows_os__launch_app",
+    "mcp__windows_os__media_control",
+    "mcp__windows_os__system_volume",
+    "mcp__windows_os__clipboard",
+})
+
 # Event-triggered tools deferred BY DEFAULT (a catalog stub suffices). Keep the curated
 # list in DEFAULT_CONFIG so config discovery and runtime behavior cannot drift. An explicit
 # ``defer`` list replaces this wholesale ([] = everything eager). ``clarify`` is deliberately
@@ -152,13 +165,13 @@ _DEFAULT_DEFERRED_TOOLS = frozenset(DEFAULT_CONFIG["tools"]["tool_search"]["defe
 
 def is_deferrable_tool_name(name: str, defer_tools: Optional[frozenset] = None) -> bool:
     """True if a tool is *eligible* for deferral: named in ``defer_tools`` (curated set or
-    user override), OR an MCP tool, OR neither core nor a session-gated GUI surface (i.e. a
-    plugin tool). Bridge names never defer."""
+    user override), OR an MCP tool (except ``_EAGER_DESKTOP_MCP_TOOLS``), OR neither core nor
+    a session-gated GUI surface (i.e. a plugin tool). Bridge names never defer."""
     if name in BRIDGE_TOOL_NAMES:
         return False
     if defer_tools is not None and name in defer_tools:
         return True
-    if name in _core_tool_names():
+    if name in _core_tool_names() or name in _EAGER_DESKTOP_MCP_TOOLS:
         return False
     toolset = _registry_toolset(name)  # None (unregistered/malformed) never defers
     return toolset is not None and (
