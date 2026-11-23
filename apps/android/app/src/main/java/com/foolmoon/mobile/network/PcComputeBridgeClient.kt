@@ -87,6 +87,18 @@ class PcComputeBridgeClient(
         _turns.value = emptyList()
     }
 
+    fun executeAndRecordLocalAction(userLabel: String, action: String, params: JSONObject = JSONObject()) {
+        val label = userLabel.trim()
+        if (label.isNotEmpty()) {
+            memoryStore.saveTurn(ChatTurn(role = "user", content = label))
+        }
+        val res = phoneAgent.execute(action, params)
+        refreshLocalMemories()
+        val icon = if (res.ok) "⚡" else "⚠️"
+        memoryStore.saveTurn(ChatTurn(role = "assistant", content = "$icon ${res.message}", model = "on-device"))
+        _turns.value = memoryStore.recentTurns(50)
+    }
+
     fun connectIfPaired() {
         if (!prefs.isPaired) {
             _pcStatus.value = PcLinkStatus(linkState = PcLinkState.UNPAIRED)

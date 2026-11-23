@@ -3,6 +3,7 @@ package com.foolmoon.mobile.assistant
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
@@ -10,9 +11,13 @@ import android.speech.SpeechRecognizer
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,11 +31,13 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.CropFree
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
@@ -51,27 +58,34 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.foolmoon.mobile.FoolmoonApp
+import com.foolmoon.mobile.agent.FoolmoonAccessibilityService
+import com.foolmoon.mobile.agent.ScreenElementNode
 import com.foolmoon.mobile.network.PcLinkState
 import com.foolmoon.mobile.ui.MainActivity
 import com.foolmoon.mobile.ui.components.BbotCompanionFace
+import com.foolmoon.mobile.ui.components.CircleToSearchOverlay
 import com.foolmoon.mobile.ui.components.CompanionMood
+import com.foolmoon.mobile.ui.components.GeminiThinkingShimmerBar
+import com.foolmoon.mobile.ui.components.GeminiVoiceWaveOrb
 import com.foolmoon.mobile.ui.components.SyncedLyricsBar
+import com.foolmoon.mobile.ui.components.geminiSweepBrush
+import com.foolmoon.mobile.ui.components.rememberGeminiAuraPhase
 import com.foolmoon.mobile.ui.theme.FoolmoonColors
 import com.foolmoon.mobile.ui.theme.FoolmoonTheme
+import org.json.JSONObject
 import java.util.Locale
 
 /**
- * Gemini-style floating translucent bottom-sheet overlay summoned by:
+ * Gemini-style floating translucent bottom-sheet overlay summoned over ANY Android app via:
  * - Default Digital Assistant gesture / power-button hold
  * - "Hey Foolmoon" wake word detection
- * - Quick Settings Tile
+ * - Quick Settings Tile or in-app voice orb
  */
 class AssistantOverlayActivity : ComponentActivity() {
 
@@ -105,7 +119,7 @@ class AssistantOverlayActivity : ComponentActivity() {
                     isListening = isListeningState.value,
                     partialTranscript = livePartialState.value,
                     micLevel = micLevelState.value,
-                    hasScreenContext = capturedScreenContext.isNotBlank(),
+                    initialScreenContext = capturedScreenContext,
                     onToggleMic = { toggleVoiceCapture() },
                     onSendPrompt = { text, withScreen ->
                         stopVoiceCapture()
@@ -143,27 +157,23 @@ class AssistantOverlayActivity : ComponentActivity() {
         val autoListen = intent?.getBooleanExtra(EXTRA_AUTO_LISTEN, true) ?: true
 
         if (initialPrompt.isNotEmpty()) {
-            app.bridge.sendPrompt(initialPrompt, includeScreenContext = capturedScreenContext.isNotBlank(), assistContext = capturedScreenContext)
+            app.bridge.sendPrompt(
+                initialPrompt,
+                includeScreenContext = capturedScreenContext.isNotBlank(),
+                assistContext = capturedScreenContext
+            )
         } else if (autoListen) {
             ensureMicAndListen()
         }
     }
 
     private fun toggleVoiceCapture() {
-        if (isListeningState.value) {
-            stopVoiceCapture()
-        } else {
-            ensureMicAndListen()
-        }
+        if (isListeningState.value) stopVoiceCapture() else ensureMicAndListen()
     }
 
     private fun ensureMicAndListen() {
         val hasPerm = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-        if (hasPerm) {
-            startVoiceCapture()
-        } else {
-            micPermLauncher.launch(Manifest.permission.RECORD_AUDIO)
-        }
+        if (hasPerm) startVoiceCapture() else micPermLauncher.launch(Manifest.permission.RECORD_AUDIO)
     }
 
     private fun startVoiceCapture() {
@@ -237,7 +247,7 @@ private fun OverlayScreen(
     isListening: Boolean,
     partialTranscript: String,
     micLevel: Float,
-    hasScreenContext: Boolean,
+    initialScreenContext: String,
     onToggleMic: () -> Unit,
     onSendPrompt: (String, Boolean) -> Unit,
     onOpenFullApp: () -> Unit,
@@ -250,7 +260,10 @@ private fun OverlayScreen(
     val playback by app.voicePlayer.snapshot.collectAsState()
 
     var draft by remember { mutableStateOf("") }
-    var askScreen by remember { mutableStateOf(hasScreenContext) }
+    var askScreen by remember { mutableStateOf(initialScreenContext.isNotBlank()) }
+    var showCircleSearch by remember { mutableStateOf(false) }
+    var capturedBmp by remember { mutableStateOf<Bitmap?>(FoolmoonAccessibilityService.lastCapturedBitmap) }
+    var capturedNodes by remember { mutableStateOf<List<ScreenElementNode>>(FoolmoonAccessibilityService.lastCapturedNodes) }
 
     val mood = when {
         playback.speaking -> CompanionMood.SPEAKING
@@ -260,182 +273,238 @@ private fun OverlayScreen(
     }
     val activeAudio = if (playback.speaking) playback.audioLevel else micLevel
     val latestAssistant = turns.lastOrNull { it.role == "assistant" }?.content.orEmpty()
+    val auraPhase = rememberGeminiAuraPhase(2400)
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .clickable(
-                indication = null,
-                interactionSource = remember { MutableInteractionSource() },
-                onClick = onDismiss
-            ),
-        contentAlignment = Alignment.BottomCenter
-    ) {
-        Surface(
+    Box(modifier = Modifier.fillMaxSize()) {
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 12.dp)
-                .navigationBarsPadding()
-                .imePadding()
+                .fillMaxSize()
                 .clickable(
                     indication = null,
                     interactionSource = remember { MutableInteractionSource() },
-                    onClick = {}
-                )
-                .border(
-                    width = 1.5.dp,
-                    brush = Brush.horizontalGradient(
-                        listOf(
-                            FoolmoonColors.Coral.copy(alpha = 0.85f),
-                            FoolmoonColors.LunarGold.copy(alpha = 0.85f),
-                            FoolmoonColors.SkyGlow.copy(alpha = 0.85f)
-                        )
-                    ),
-                    shape = RoundedCornerShape(28.dp)
+                    onClick = onDismiss
                 ),
-            shape = RoundedCornerShape(28.dp),
-            color = FoolmoonColors.SurfaceCard.copy(alpha = 0.96f),
-            tonalElevation = 12.dp
+            contentAlignment = Alignment.BottomCenter
         ) {
-            Column(
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(horizontal = 10.dp, vertical = 12.dp)
+                    .navigationBarsPadding()
+                    .imePadding()
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() },
+                        onClick = {}
+                    )
+                    .border(
+                        width = 1.8.dp,
+                        brush = geminiSweepBrush(auraPhase, alpha = 0.92f),
+                        shape = RoundedCornerShape(28.dp)
+                    ),
+                shape = RoundedCornerShape(28.dp),
+                color = FoolmoonColors.SurfaceCard.copy(alpha = 0.96f),
+                tonalElevation = 14.dp
             ) {
-                // Header row: Bbot + PC Compute badge + actions
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    BbotCompanionFace(mood = mood, audioLevel = activeAudio, size = 48.dp)
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Foolmoon Assistant",
-                            color = FoolmoonColors.Cream,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        val computeTag = if (pcStatus.linkState == PcLinkState.CONNECTED) {
-                            "PC GPU · ${pcStatus.activeModel.ifBlank { pcStatus.pcName }}"
-                        } else {
-                            "On-Device Agent · Offline"
-                        }
-                        Text(
-                            text = "$computeTag · $statusLine",
-                            color = if (pcStatus.linkState == PcLinkState.CONNECTED) FoolmoonColors.Emerald else FoolmoonColors.Muted,
-                            fontSize = 11.sp,
-                            maxLines = 1
-                        )
-                    }
-                    IconButton(onClick = onOpenFullApp) {
-                        Icon(Icons.Default.OpenInFull, contentDescription = "Open full app", tint = FoolmoonColors.Muted)
-                    }
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "Dismiss", tint = FoolmoonColors.Muted)
-                    }
-                }
-
-                // Live synced captions or latest assistant reply
-                Box(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(FoolmoonColors.Obsidian.copy(alpha = 0.65f))
-                        .padding(12.dp)
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    val fallback = when {
-                        isListening && partialTranscript.isNotBlank() -> "“$partialTranscript”"
-                        isListening -> "Listening… say anything or give a phone command"
-                        busy -> "Computing on your PC…"
-                        latestAssistant.isNotBlank() -> latestAssistant.take(260)
-                        else -> "Ask anything, inspect your screen, or control your phone."
-                    }
-                    SyncedLyricsBar(playback = playback, fallbackText = fallback)
-                }
-
-                // Quick Gemini-style context & action chips
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    AssistChip(
-                        onClick = { askScreen = !askScreen },
-                        label = { Text(if (askScreen) "Screen Context ON" else "Ask about screen", fontSize = 11.sp) },
-                        leadingIcon = {
-                            Icon(
-                                Icons.Default.Visibility,
-                                contentDescription = null,
-                                modifier = Modifier.size(14.dp),
-                                tint = if (askScreen) FoolmoonColors.Coral else FoolmoonColors.Muted
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        BbotCompanionFace(mood = mood, audioLevel = activeAudio, size = 46.dp)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Foolmoon",
+                                color = FoolmoonColors.Cream,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            val computeTag = if (pcStatus.linkState == PcLinkState.CONNECTED) {
+                                "PC GPU · ${pcStatus.activeModel.ifBlank { pcStatus.pcName }}"
+                            } else {
+                                "Mobil Asistan"
+                            }
+                            Text(
+                                text = "$computeTag · $statusLine",
+                                color = if (pcStatus.linkState == PcLinkState.CONNECTED) FoolmoonColors.Emerald else FoolmoonColors.Muted,
+                                fontSize = 11.sp,
+                                maxLines = 1
                             )
                         }
-                    )
-                    if (playback.speaking) {
+                        IconButton(onClick = onOpenFullApp) {
+                            Icon(Icons.Default.OpenInFull, contentDescription = "Tam uygulamayı aç", tint = FoolmoonColors.Muted)
+                        }
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.Default.Close, contentDescription = "Kapat", tint = FoolmoonColors.Muted)
+                        }
+                    }
+
+                    if (busy) {
+                        GeminiThinkingShimmerBar(label = "Yanıt hazırlanıyor…")
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(FoolmoonColors.Obsidian.copy(alpha = 0.72f))
+                                .padding(12.dp)
+                        ) {
+                            val fallback = when {
+                                isListening && partialTranscript.isNotBlank() -> "“$partialTranscript”"
+                                isListening -> "Dinliyorum… konuşun veya bir komut verin"
+                                latestAssistant.isNotBlank() -> latestAssistant.take(300)
+                                else -> "Ekranı seçip arayabilir, ekrandaki içerik hakkında soru sorabilir veya birini arayabilirsiniz."
+                            }
+                            SyncedLyricsBar(playback = playback, fallbackText = fallback)
+                        }
+                    }
+
+                    // Gemini-style quick pills inside overlay
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         AssistChip(
-                            onClick = { app.voicePlayer.stop() },
-                            label = { Text("Stop Voice", fontSize = 11.sp) },
+                            onClick = {
+                                val svc = FoolmoonAccessibilityService.current()
+                                if (svc != null && capturedNodes.isEmpty()) {
+                                    svc.captureScreenSnapshot { bmp, nodes ->
+                                        capturedBmp = bmp
+                                        capturedNodes = nodes
+                                        showCircleSearch = true
+                                    }
+                                } else {
+                                    showCircleSearch = true
+                                }
+                            },
+                            label = { Text("Seç & Ara", fontSize = 11.sp) },
+                            leadingIcon = { Icon(Icons.Default.CropFree, contentDescription = null, modifier = Modifier.size(14.dp), tint = FoolmoonColors.LunarGold) }
+                        )
+                        AssistChip(
+                            onClick = { askScreen = !askScreen },
+                            label = { Text(if (askScreen) "Ekran Bağlamı Açık" else "Ekranı Sor", fontSize = 11.sp) },
                             leadingIcon = {
-                                Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Icon(
+                                    Icons.Default.Visibility,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp),
+                                    tint = if (askScreen) FoolmoonColors.Crimson else FoolmoonColors.SkyGlow
+                                )
                             }
                         )
-                    }
-                }
-
-                // Composer + glowing Voice Orb
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedTextField(
-                        value = draft,
-                        onValueChange = { draft = it },
-                        placeholder = { Text("Ask Foolmoon…", fontSize = 13.sp, color = FoolmoonColors.Muted) },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(22.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = FoolmoonColors.Coral,
-                            unfocusedBorderColor = FoolmoonColors.Border,
-                            focusedTextColor = FoolmoonColors.Cream,
-                            unfocusedTextColor = FoolmoonColors.Cream
-                        )
-                    )
-
-                    if (draft.isNotBlank()) {
-                        IconButton(
+                        AssistChip(
                             onClick = {
-                                val text = draft.trim()
-                                draft = ""
-                                onSendPrompt(text, askScreen)
+                                app.bridge.executeAndRecordLocalAction(
+                                    userLabel = "Telefon çeviriciyi aç",
+                                    action = "dial_number",
+                                    params = JSONObject()
+                                )
                             },
-                            modifier = Modifier
-                                .size(46.dp)
-                                .clip(CircleShape)
-                                .background(FoolmoonColors.Coral)
-                        ) {
-                            Icon(Icons.Default.Send, contentDescription = "Send", tint = Color.Black)
-                        }
-                    } else {
-                        IconButton(
-                            onClick = onToggleMic,
-                            modifier = Modifier
-                                .size(46.dp)
-                                .clip(CircleShape)
-                                .background(if (isListening) FoolmoonColors.Emerald else FoolmoonColors.Coral)
-                        ) {
-                            Icon(
-                                if (isListening) Icons.Default.Stop else Icons.Default.Mic,
-                                contentDescription = "Voice",
-                                tint = Color.Black
+                            label = { Text("Birini Ara", fontSize = 11.sp) },
+                            leadingIcon = { Icon(Icons.Default.Call, contentDescription = null, modifier = Modifier.size(14.dp), tint = FoolmoonColors.Emerald) }
+                        )
+                        if (playback.speaking) {
+                            AssistChip(
+                                onClick = { app.voicePlayer.stop() },
+                                label = { Text("Durdur", fontSize = 11.sp) },
+                                leadingIcon = { Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(14.dp)) }
                             )
                         }
                     }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = draft,
+                            onValueChange = { draft = it },
+                            placeholder = { Text("Foolmoon'a sor…", fontSize = 13.sp, color = FoolmoonColors.Muted) },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(22.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = FoolmoonColors.Crimson,
+                                unfocusedBorderColor = FoolmoonColors.Border,
+                                focusedTextColor = FoolmoonColors.Cream,
+                                unfocusedTextColor = FoolmoonColors.Cream
+                            )
+                        )
+
+                        if (draft.isNotBlank()) {
+                            IconButton(
+                                onClick = {
+                                    val text = draft.trim()
+                                    draft = ""
+                                    onSendPrompt(text, askScreen)
+                                },
+                                modifier = Modifier
+                                    .size(46.dp)
+                                    .clip(CircleShape)
+                                    .background(FoolmoonColors.Crimson)
+                            ) {
+                                Icon(Icons.Default.Send, contentDescription = "Gönder", tint = Color.White)
+                            }
+                        } else {
+                            GeminiVoiceWaveOrb(
+                                isListening = isListening,
+                                isSpeaking = playback.speaking,
+                                isThinking = busy,
+                                audioLevel = activeAudio,
+                                size = 46.dp,
+                                onClick = onToggleMic
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
                 }
-                Spacer(modifier = Modifier.height(2.dp))
             }
+        }
+
+        AnimatedVisibility(
+            visible = showCircleSearch,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            CircleToSearchOverlay(
+                capturedBitmap = capturedBmp,
+                capturedNodes = capturedNodes,
+                fallbackScreenText = initialScreenContext.ifBlank { FoolmoonAccessibilityService.lastCapturedSummary },
+                onDismiss = { showCircleSearch = false },
+                onAskAboutSelection = { selectedText, userQuestion ->
+                    showCircleSearch = false
+                    app.bridge.sendPrompt(
+                        prompt = userQuestion,
+                        includeScreenContext = true,
+                        assistContext = "Ekranda Seçilen Bölge:\n$selectedText"
+                    )
+                },
+                onSearchWeb = { query ->
+                    showCircleSearch = false
+                    app.bridge.executeAndRecordLocalAction(
+                        userLabel = "Web'de ara: $query",
+                        action = "search_web",
+                        params = JSONObject().put("query", query)
+                    )
+                },
+                onCallTarget = { number ->
+                    showCircleSearch = false
+                    app.bridge.executeAndRecordLocalAction(
+                        userLabel = "Ara: $number",
+                        action = "call_contact",
+                        params = JSONObject().put("phone", number)
+                    )
+                }
+            )
         }
     }
 }

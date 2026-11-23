@@ -17,9 +17,11 @@ ANDROID_ACTION_SCHEMA: dict[str, Any] = {
         "Run an action on a paired external Android phone (NOT this Windows PC). "
         "NEVER use this for the user's Windows PC screen, PC apps, or PC music/media — "
         "use capture_screen or read_window_below for this Windows computer. "
-        "Supported actions: open_app(app_name), set_alarm(hour, minute, label), set_timer(seconds, label), "
-        "open_url(url), compose_sms(phone, body), dial_number(phone), create_calendar_event(title, start_ms, end_ms), "
-        "get_device_status(), get_clipboard(), set_clipboard(text), inspect_screen(), tap_text(text), "
+        "Supported actions: open_app(app_name), call_contact(name_or_phone), set_alarm(hour, minute, label), "
+        "set_timer(seconds, label), open_url(url), search_web(query), compose_sms(phone, body), "
+        "dial_number(phone), create_calendar_event(title, start_ms, end_ms), toggle_flashlight(on), "
+        "media_control(command), open_settings(section), get_device_status(), get_clipboard(), set_clipboard(text), "
+        "inspect_screen(), inspect_screen_region(left, top, right, bottom), tap_text(text), "
         "scroll_screen(direction), memory_recall(query), memory_remember(content, category), speak_on_phone(text)."
     ),
     "parameters": {

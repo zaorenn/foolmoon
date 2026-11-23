@@ -5,24 +5,30 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
+/**
+ * Matches Foolmoon Desktop's "black-paper-crimson" tactile theme while incorporating
+ * fluid Gemini Mobile aurora spectrum tokens for animated voice orbs and Circle-to-Search.
+ */
 object FoolmoonColors {
-    val Obsidian = Color(0xFF14100F)
-    val SurfaceCard = Color(0xFF1F1816)
-    val SurfaceElevated = Color(0xFF2B211E)
-    val Coral = Color(0xFFEA745E)
-    val LunarGold = Color(0xFFF5C28B)
-    val Cream = Color(0xFFF5EFE6)
-    val Muted = Color(0xFFA9968B)
-    val Emerald = Color(0xFF58C97E)
-    val SkyGlow = Color(0xFF7DD3FC)
-    val Border = Color(0xFF3A2C27)
+    val Obsidian = Color(0xFF0E0C0D)        // Deep black paper base
+    val SurfaceCard = Color(0xFF171314)     // Matte dark paper card / composer pill
+    val SurfaceElevated = Color(0xFF221B1D) // Elevated sheet & user bubble tint
+    val Crimson = Color(0xFFFF2A3C)         // Desktop accent crimson
+    val Coral = Color(0xFFEA5455)           // Warm crimson-coral orb highlight
+    val LunarGold = Color(0xFFF5C28B)       // Warm moon highlight
+    val Cream = Color(0xFFF5EFE6)           // Tactile cream-white typography
+    val Muted = Color(0xFFA79995)           // Secondary ink
+    val Emerald = Color(0xFF58C97E)         // Listening / connected state
+    val SkyGlow = Color(0xFF60A5FA)         // Gemini aura blue
+    val GeminiViolet = Color(0xFFA855F7)    // Gemini aura violet
+    val Border = Color(0xFF312729)          // Subtle paper edge
 }
 
-private val FoolmoonNocturneScheme = darkColorScheme(
-    primary = FoolmoonColors.Coral,
-    onPrimary = Color(0xFF19110E),
+private val FoolmoonDesktopIntegratedScheme = darkColorScheme(
+    primary = FoolmoonColors.Crimson,
+    onPrimary = Color.White,
     secondary = FoolmoonColors.LunarGold,
-    onSecondary = Color(0xFF19110E),
+    onSecondary = Color(0xFF140E0F),
     tertiary = FoolmoonColors.SkyGlow,
     background = FoolmoonColors.Obsidian,
     onBackground = FoolmoonColors.Cream,
@@ -36,7 +42,7 @@ private val FoolmoonNocturneScheme = darkColorScheme(
 @Composable
 fun FoolmoonTheme(content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = FoolmoonNocturneScheme,
+        colorScheme = FoolmoonDesktopIntegratedScheme,
         content = content
     )
 }

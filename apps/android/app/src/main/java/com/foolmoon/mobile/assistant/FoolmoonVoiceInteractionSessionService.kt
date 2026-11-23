@@ -7,6 +7,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.service.voice.VoiceInteractionSession
 import android.service.voice.VoiceInteractionSessionService
+import com.foolmoon.mobile.agent.FoolmoonAccessibilityService
 
 class FoolmoonVoiceInteractionSessionService : VoiceInteractionSessionService() {
     override fun onNewSession(args: Bundle?): VoiceInteractionSession {
@@ -25,6 +26,16 @@ class FoolmoonVoiceInteractionSession(private val ctx: Context) : VoiceInteracti
 
     override fun onShow(args: Bundle?, showFlags: Int) {
         super.onShow(args, showFlags)
+        // Snapshot the foreground screen nodes & bitmap right before our overlay opens
+        val svc = FoolmoonAccessibilityService.current()
+        if (svc != null) {
+            svc.captureScreenSnapshot { _, _ -> launchOverlay() }
+        } else {
+            launchOverlay()
+        }
+    }
+
+    private fun launchOverlay() {
         val intent = Intent(ctx, AssistantOverlayActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             putExtra(AssistantOverlayActivity.EXTRA_AUTO_LISTEN, true)
