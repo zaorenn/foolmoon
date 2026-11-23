@@ -5,6 +5,7 @@ import type { OwnerScope } from '@/api/client'
 import { getApiRequestConnection, getApiRequestProfile, speakText } from '@/hermes'
 import { directTtsConfig, type DirectTtsConfig, synthesizeSpeechClientDirect } from '@/lib/voice-client-direct'
 import { RECONNECT_ATTEMPT_TIMEOUT_MS, withTimeout } from '@/lib/with-timeout'
+import { notify } from '@/store/notifications'
 import {
   $voicePlayback,
   setVoicePlaybackState,
@@ -33,6 +34,21 @@ const liveStops = new Set<() => void>()
 let sequence = 0
 let claimTurnKey: string | null = null
 let inFlight: { done: Promise<boolean>; turnKey: string } | null = null
+
+let lastFallbackNoticeAt = 0
+
+function notifyTtsFallbackOnce(fallbackProvider?: string) {
+  const now = Date.now()
+  if (now - lastFallbackNoticeAt < 15_000) {
+    return
+  }
+  lastFallbackNoticeAt = now
+  const label = fallbackProvider === 'edge' ? 'Edge Neural' : fallbackProvider || 'fallback'
+  notify({
+    kind: 'warning',
+    message: `CUDA voice engine unavailable — temporarily using ${label} TTS.`
+  })
+}
 
 // A shared, lazily-created AudioContext used only to nudge the browser's
 // autoplay state out of "suspended". A wake-word-started voice turn has no
@@ -607,10 +623,12 @@ function openSpeechStream(wsUrl: string, options: VoicePlaybackOptions): SpeechS
   let meterRafId = 0
   let streamRate = 24_000
   let nextStartAt = 0
+  let cueTailAudioTime = 0
   let carry: null | Uint8Array = null
   let started = false
   let settled = false
   let finished = false
+  const ownSequence = sequence
   const pendingSends: string[] = []
 
   const sentenceCues: Array<{
@@ -715,7 +733,12 @@ function openSpeechStream(wsUrl: string, options: VoicePlaybackOptions): SpeechS
 
   const finishWhenDrained = () => {
     const remainingMs = context ? Math.max(0, nextStartAt - context.currentTime) * 1_000 : 0
-    window.setTimeout(() => settle('done'), remainingMs + 100)
+    window.setTimeout(() => {
+      if (ownSequence === sequence) {
+        setVoicePlaybackState(currentState('idle'))
+      }
+      settle('done')
+    }, remainingMs + 100)
   }
 
   const schedule = (data: ArrayBuffer) => {
@@ -759,6 +782,7 @@ function openSpeechStream(wsUrl: string, options: VoicePlaybackOptions): SpeechS
     const startAt = Math.max(context.currentTime + 0.05, nextStartAt)
     source.start(startAt)
     nextStartAt = startAt + buffer.duration
+    cueTailAudioTime = Math.max(cueTailAudioTime, nextStartAt)
 
     if (!started) {
       started = true
@@ -798,6 +822,7 @@ function openSpeechStream(wsUrl: string, options: VoicePlaybackOptions): SpeechS
       channels?: number
       durationMs?: number
       duration_ms?: number
+      fallbackProvider?: string
       sampleRate?: number
       sample_rate?: number
       sentence?: string
@@ -835,6 +860,9 @@ function openSpeechStream(wsUrl: string, options: VoicePlaybackOptions): SpeechS
 
       nextStartAt = 0
     } else if (frame.type === 'sentence') {
+      if (frame.fallbackProvider) {
+        notifyTtsFallbackOnce(frame.fallbackProvider)
+      }
       const sentenceText =
         typeof frame.text === 'string' ? frame.text : typeof frame.sentence === 'string' ? frame.sentence : ''
 
@@ -847,7 +875,18 @@ function openSpeechStream(wsUrl: string, options: VoicePlaybackOptions): SpeechS
           ? frame.words
           : estimateWordTimings(sentenceText, frame.durationMs ?? frame.duration_ms ?? 0)
 
-      const scheduledAt = context ? Math.max(context.currentTime + 0.05, nextStartAt) : 0
+      const scheduledAt = context ? Math.max(context.currentTime + 0.04, nextStartAt, cueTailAudioTime) : 0
+      const estDurationSec =
+        typeof frame.durationMs === 'number' && frame.durationMs > 0
+          ? frame.durationMs / 1_000
+          : typeof frame.duration_ms === 'number' && frame.duration_ms > 0
+            ? frame.duration_ms / 1_000
+            : words.length > 0
+              ? words[words.length - 1].endMs / 1_000
+              : 0
+      if (context && estDurationSec > 0) {
+        cueTailAudioTime = Math.max(cueTailAudioTime, scheduledAt + estDurationSec)
+      }
 
       sentenceCues.push({
         activated: false,
@@ -984,6 +1023,10 @@ async function playSpeechDataUrl(
 
   if (!isCurrent()) {
     return false
+  }
+
+  if (response.fallbackProvider || response.provider === 'tts-fallback') {
+    notifyTtsFallbackOnce(response.fallbackProvider || 'edge')
   }
 
   const audio = new Audio(response.data_url)

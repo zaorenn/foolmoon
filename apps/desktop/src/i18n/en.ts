@@ -3331,12 +3331,12 @@ export const en: Translations = {
   composer: {
     message: 'Message',
     wakingProfile: profile => `Waking up ${profile}…`,
-    placeholderStarting: 'Starting Hermes...',
-    placeholderReconnecting: 'Reconnecting to Hermes…',
+    placeholderStarting: 'Starting Foolmoon...',
+    placeholderReconnecting: 'Reconnecting to Foolmoon…',
     placeholderFollowUp: 'Send follow-up',
     newSessionPlaceholders: [
       'What are we building?',
-      'Give Hermes a task',
+      'Give Foolmoon a task',
       "What's on your mind?",
       'Describe what you need',
       'What should we tackle?',
@@ -3374,8 +3374,8 @@ export const en: Translations = {
     transcribingDictation: 'Transcribing dictation',
     voiceControls: 'Voice',
     voiceEngine: 'Voice chat engine',
-    voiceEngineChained: 'Speech-to-text + Hermes voice',
-    voiceEngineLive: 'GPT-Live (full-duplex, delegates to Hermes)',
+    voiceEngineChained: 'Speech-to-text + Foolmoon voice',
+    voiceEngineLive: 'GPT-Live (full-duplex, delegates to Foolmoon)',
     voiceEngineLiveNeedsKey: 'Needs an OpenAI API key',
     voiceEngineChangeFailed: 'Could not change the voice chat engine',
     voiceEngineChainedShort: 'speech-to-text',
@@ -4387,11 +4387,11 @@ export const en: Translations = {
 
   interfaceMode: {
     title: 'Interface mode',
-    hint: 'Changes what is shown, not what Hermes can do.',
+    hint: 'Changes what is shown, not what Foolmoon can do.',
     sessionNote: 'Set by Simple mode. A change here lasts for this session; switch to Advanced to make it yours.',
     simple: {
       label: 'Simple',
-      description: 'For talking to Hermes. Sidebar and chat; no terminal, file or diff panes.'
+      description: 'For talking to Foolmoon. Sidebar and chat; no terminal, file or diff panes.'
     },
     advanced: {
       label: 'Advanced',

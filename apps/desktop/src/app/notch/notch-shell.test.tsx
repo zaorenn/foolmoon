@@ -627,40 +627,63 @@ describe('Hardware Notch, Live Lyrics & Dual-Mode Controls', () => {
     }
   })
 
-  it('replaces Notch wavelength visualizer with synced LiveLyrics during active speech and across IPC mirror', () => {
+  it('renders single non-duplicated LiveLyrics with markdown stripped, in tray when expanded or in top bar when collapsed', () => {
     const prevState = $notchState.get()
+    const prevConfig = $notchConfig.get()
 
     try {
       render(<NotchShell inAppPreview />)
       expect(screen.getByTestId('notch-aurora-wave')).toBeTruthy()
 
+      // 1. Default autoExpandOnActivity=true: tray opens and shows lyrics ONLY inside tray (never duplicated in top bar)
       act(() => {
         setVoicePlaybackState({
+          audioElement: null,
           audioLevel: 0.72,
-          sentence: 'Synced Notch captions active',
+          messageId: null,
+          sentence: 'Synced **2026** Notch captions active',
           sentenceStartTimeMs: performance.now(),
+          sequence: 1,
+          source: 'read-aloud',
           status: 'speaking',
           words: [
             { endMs: 300, startMs: 0, word: 'Synced' },
-            { endMs: 650, startMs: 300, word: 'Notch' },
-            { endMs: 1100, startMs: 650, word: 'captions' },
-            { endMs: 1500, startMs: 1100, word: 'active' }
+            { endMs: 600, startMs: 300, word: '**2026**' },
+            { endMs: 900, startMs: 600, word: 'Notch' },
+            { endMs: 1200, startMs: 900, word: 'captions' },
+            { endMs: 1500, startMs: 1200, word: 'active' }
           ]
         })
       })
 
-      expect($notchState.get().voicePlayback?.sentence).toBe('Synced Notch captions active')
-      expect(screen.queryByTestId('notch-aurora-wave')).toBeNull()
+      expect($notchState.get().voicePlayback?.sentence).toBe('Synced **2026** Notch captions active')
+      // Top bar keeps aurora wave while tray shows the single lyrics block (zero duplication)
+      expect(screen.getByTestId('notch-aurora-wave')).toBeTruthy()
+      expect(screen.getAllByText('captions').length).toBe(1)
+      expect(screen.getByTestId('notch-glass-tray').textContent).toContain('2026')
+      expect(screen.getByTestId('notch-glass-tray').textContent).not.toContain('**')
 
+      // 2. When autoExpandOnActivity=false (collapsed pill), top bar replaces wavelength with singleLine lyrics
+      act(() => {
+        $notchConfig.set({ ...prevConfig, autoExpandOnActivity: false })
+      })
+
+      expect(screen.queryByTestId('notch-aurora-wave')).toBeNull()
       const waveSlot = screen.getByTestId('notch-scifi-waveform')
       expect(waveSlot.textContent).toContain('Synced')
-      expect(waveSlot.textContent).toContain('captions')
+      expect(waveSlot.textContent).toContain('2026')
+      expect(waveSlot.textContent).not.toContain('**')
+      expect(screen.getAllByText('captions').length).toBe(1)
 
       act(() => {
         setVoicePlaybackState({
+          audioElement: null,
           audioLevel: 0,
+          messageId: null,
           sentence: '',
           sentenceStartTimeMs: 0,
+          sequence: 2,
+          source: null,
           status: 'idle',
           words: []
         })
@@ -669,7 +692,7 @@ describe('Hardware Notch, Live Lyrics & Dual-Mode Controls', () => {
       expect($notchState.get().voicePlayback).toBeNull()
       expect(screen.getByTestId('notch-aurora-wave')).toBeTruthy()
 
-      // Separate Notch OS window receives playback only through mirrored IPC state
+      // 3. Separate Notch OS window receives playback only through mirrored IPC state
       act(() => {
         $notchState.set({
           ...$notchState.get(),
@@ -679,11 +702,11 @@ describe('Hardware Notch, Live Lyrics & Dual-Mode Controls', () => {
             elapsedMs: 100,
             mouthRound: 0.4,
             mouthWide: 0.3,
-            sentence: 'Mirrored edge caption',
+            sentence: 'Mirrored **edge** caption',
             status: 'speaking',
             words: [
               { endMs: 250, startMs: 0, word: 'Mirrored' },
-              { endMs: 550, startMs: 250, word: 'edge' },
+              { endMs: 550, startMs: 250, word: '**edge**' },
               { endMs: 900, startMs: 550, word: 'caption' }
             ]
           }
@@ -692,15 +715,20 @@ describe('Hardware Notch, Live Lyrics & Dual-Mode Controls', () => {
 
       expect(screen.queryByTestId('notch-aurora-wave')).toBeNull()
       expect(screen.getByTestId('notch-scifi-waveform').textContent).toContain('Mirrored')
-      expect(screen.getByTestId('notch-scifi-waveform').textContent).toContain('caption')
+      expect(screen.getByTestId('notch-scifi-waveform').textContent).toContain('edge')
+      expect(screen.getByTestId('notch-scifi-waveform').textContent).not.toContain('**')
     } finally {
+      $notchConfig.set(prevConfig)
       $voicePlayback.set({
         audioElement: null,
         audioLevel: 0,
+        messageId: null,
         mouthRound: 0,
         mouthWide: 0,
         sentence: '',
         sentenceStartTimeMs: 0,
+        sequence: 0,
+        source: null,
         status: 'idle',
         words: []
       })

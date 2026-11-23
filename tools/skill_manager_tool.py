@@ -146,7 +146,10 @@ def _validate_frontmatter(content: str) -> Optional[str]:
         return "Content cannot be empty."
     content = content.lstrip("\ufeff")  # tolerate a Windows UTF-8 BOM
     if not content.startswith("---"):
-        return "SKILL.md must start with YAML frontmatter (---). See existing skills for format."
+        return (
+            "SKILL.md must start with YAML frontmatter (---). "
+            "Example:\n---\nname: my-skill\ndescription: Short one-line summary\n---\n\n# Instructions"
+        )
     end_match = _FRONTMATTER_END_RE.search(content[3:])
     if not end_match:
         return "SKILL.md frontmatter is not closed. Ensure you have a closing '---' line."
@@ -158,7 +161,10 @@ def _validate_frontmatter(content: str) -> Optional[str]:
         return "Frontmatter must be a YAML mapping (key: value pairs)."
     for field in ("name", "description"):
         if field not in parsed:
-            return f"Frontmatter must include '{field}' field."
+            return (
+                f"Frontmatter must include '{field}' field. "
+                "Start the file with:\n---\nname: my-skill\ndescription: Short summary\n---"
+            )
     desc = str(parsed["description"])
     if len(desc) > MAX_DESCRIPTION_LENGTH:
         return f"Description exceeds {MAX_DESCRIPTION_LENGTH} characters."

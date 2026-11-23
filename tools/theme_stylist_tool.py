@@ -19,7 +19,41 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.request import Request, urlopen
 
-import yaml
+try:
+    import hermes_yaml as yaml
+except ImportError:
+    try:
+        import yaml  # type: ignore[no-redef]
+    except ImportError:
+        yaml = None  # type: ignore[assignment]
+
+
+def _safe_yaml_load(text: str) -> Any:
+    if yaml is not None:
+        return yaml.safe_load(text)
+    stripped = text.strip()
+    if not stripped:
+        return {}
+    try:
+        return json.loads(stripped)
+    except Exception:
+        parsed: dict[str, Any] = {}
+        for line in stripped.splitlines():
+            s = line.strip()
+            if not s or s.startswith("#") or ":" not in s:
+                continue
+            key, val = s.split(":", 1)
+            k = key.strip()
+            v = val.strip().strip('"').strip("'")
+            if k and v:
+                parsed[k] = v
+        return parsed
+
+
+def _safe_yaml_dump(doc: Any) -> str:
+    if yaml is not None:
+        return yaml.safe_dump(doc, sort_keys=False, allow_unicode=True)
+    return json.dumps(doc, indent=2, ensure_ascii=False) + "\n"
 
 from hermes_cli.config import load_config, save_config
 from hermes_cli.skin_engine import set_active_skin
@@ -714,7 +748,7 @@ def generate_theme_from_image(
     skins_dir = home / "skins"
     skins_dir.mkdir(parents=True, exist_ok=True)
     skin_path = skins_dir / f"{slug}.yaml"
-    skin_path.write_text(yaml.safe_dump(skin_doc, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    skin_path.write_text(_safe_yaml_dump(skin_doc), encoding="utf-8")
 
     applied = False
     if apply_now:
@@ -926,7 +960,7 @@ def customize_foolmoon_studio(
     skins_dir = home / "skins"
     skins_dir.mkdir(parents=True, exist_ok=True)
     skin_path = skins_dir / f"{slug}.yaml"
-    skin_path.write_text(yaml.safe_dump(skin_doc, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    skin_path.write_text(_safe_yaml_dump(skin_doc), encoding="utf-8")
 
     applied = False
     if apply_now:
@@ -970,7 +1004,7 @@ def list_user_generated_skins() -> List[Dict[str, Any]]:
         if slug in _BUILTIN_SKIN_NAMES:
             continue
         try:
-            doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            doc = _safe_yaml_load(path.read_text(encoding="utf-8")) or {}
         except Exception:
             continue
         if not isinstance(doc, dict):

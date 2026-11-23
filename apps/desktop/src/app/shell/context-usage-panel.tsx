@@ -29,6 +29,7 @@ export function ContextUsagePanel({ breakdown, compact, loading, usage }: Contex
   const copy = t.shell.statusbar.contextUsagePanel
   const contextMax = usage.context_max ?? 0
   const contextUsed = usage.context_used ?? 0
+  const contextRemaining = Math.max(0, contextMax - contextUsed)
   const contextPercent = Math.max(0, Math.min(100, Math.round(usage.context_percent ?? 0)))
 
   const categories = useMemo(
@@ -56,9 +57,16 @@ export function ContextUsagePanel({ breakdown, compact, loading, usage }: Contex
       </div>
 
       <p className="flex items-center justify-between gap-2 text-[0.6875rem] text-foreground">
-        <span>
-          {usage.context_estimated ? '~' : ''}
-          {copy.percentFull(contextPercent)}
+        <span className="inline-flex items-center gap-1.5 tabular-nums">
+          <span>
+            {usage.context_estimated ? '~' : ''}
+            {copy.percentFull(contextPercent)}
+          </span>
+          {contextMax > 0 && (
+            <span className="text-muted-foreground" data-testid="context-panel-remaining">
+              · {compactNumber(contextRemaining)} left
+            </span>
+          )}
         </span>
 
         {usage.compressions !== undefined && (

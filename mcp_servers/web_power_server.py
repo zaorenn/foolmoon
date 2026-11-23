@@ -5,11 +5,15 @@ import re
 import sys
 import urllib.parse
 import xml.etree.ElementTree as ET
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
 import httpx
-from lxml import html as lxml_html
+try:
+    from lxml import html as lxml_html
+except ImportError:
+    lxml_html = None  # type: ignore[assignment]
 from mcp.server import MCPServer
 from mcp.types import ToolAnnotations
 
@@ -50,6 +54,104 @@ def _normalize_http_url(url: str) -> str:
     if "://" not in raw:
         raw = f"https://{raw}"
     return validate_public_http_url(raw)
+
+
+class _StdlibHTMLTextExtractor(HTMLParser):
+    """Lightweight stdlib fallback when ``lxml`` is not installed."""
+
+    _SKIP_TAGS = frozenset({"script", "style", "noscript", "svg"})
+
+    def __init__(self, base_url: str, extract_links: bool) -> None:
+        super().__init__(convert_charrefs=True)
+        self._base_url = base_url
+        self._extract_links = extract_links
+        self._skip_depth = 0
+        self._in_title = False
+        self._title_parts: list[str] = []
+        self._text_parts: list[str] = []
+        self._active_href: str | None = None
+        self._active_link_text: list[str] = []
+        self._seen_hrefs: set[str] = set()
+        self.links: list[dict[str, str]] = []
+
+    @property
+    def title(self) -> str:
+        return " ".join(self._title_parts).strip()
+
+    @property
+    def clean_text(self) -> str:
+        raw = "\n".join(line.strip() for line in "".join(self._text_parts).splitlines() if line.strip())
+        return re.sub(r"\n{3,}", "\n\n", raw).strip()
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        t = tag.lower()
+        if t in self._SKIP_TAGS:
+            self._skip_depth += 1
+            return
+        if self._skip_depth:
+            return
+        if t == "title":
+            self._in_title = True
+        elif t in ("p", "div", "br", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6", "section", "article"):
+            self._text_parts.append("\n")
+        if self._extract_links and t == "a" and len(self.links) < 40:
+            href = dict(attrs).get("href") or ""
+            if href.strip():
+                self._active_href = urllib.parse.urljoin(self._base_url, href.strip())
+                self._active_link_text = []
+
+    def handle_endtag(self, tag: str) -> None:
+        t = tag.lower()
+        if t in self._SKIP_TAGS:
+            self._skip_depth = max(0, self._skip_depth - 1)
+            return
+        if t == "title":
+            self._in_title = False
+        elif t == "a" and self._active_href is not None:
+            href = self._active_href
+            label = " ".join(self._active_link_text).strip()
+            self._active_href = None
+            self._active_link_text = []
+            if href.startswith(("http://", "https://")) and href not in self._seen_hrefs and len(self.links) < 40:
+                self._seen_hrefs.add(href)
+                self.links.append({"text": label[:100], "url": href})
+
+    def handle_data(self, data: str) -> None:
+        if self._skip_depth or not data:
+            return
+        if self._in_title:
+            self._title_parts.append(data)
+        if self._active_href is not None:
+            self._active_link_text.append(data)
+        self._text_parts.append(data)
+
+
+def _extract_html_content(html_text: str, base_url: str, extract_links: bool) -> tuple[str, str, list[dict[str, str]]]:
+    if lxml_html is not None:
+        doc = lxml_html.fromstring(html_text)
+        title_list = doc.xpath("//title/text()")
+        title = title_list[0].strip() if title_list else ""
+        links: list[dict[str, str]] = []
+        if extract_links:
+            seen_href: set[str] = set()
+            for a in doc.xpath("//a[@href]"):
+                href = urllib.parse.urljoin(base_url, a.get("href", "").strip())
+                label = " ".join(a.itertext()).strip()
+                if href.startswith(("http://", "https://")) and href not in seen_href:
+                    seen_href.add(href)
+                    links.append({"text": label[:100], "url": href})
+                    if len(links) >= 40:
+                        break
+        for bad in doc.xpath("//script|//style|//noscript|//svg"):
+            bad.drop_tree()
+        raw_text = "\n".join(line.strip() for line in doc.itertext() if line.strip())
+        clean_text = re.sub(r"\n{3,}", "\n\n", raw_text).strip()
+        return title, clean_text, links
+
+    parser = _StdlibHTMLTextExtractor(base_url=base_url, extract_links=extract_links)
+    parser.feed(html_text)
+    parser.close()
+    return parser.title, parser.clean_text, parser.links
 
 
 @mcp.tool(
@@ -101,24 +203,7 @@ async def fetch_webpage(url: str, max_chars: int = 12000, extract_links: bool = 
                     "text": resp.text[:cap],
                 }
             )
-        doc = lxml_html.fromstring(resp.text)
-        title_list = doc.xpath("//title/text()")
-        title = title_list[0].strip() if title_list else ""
-        links: list[dict[str, str]] = []
-        if extract_links:
-            seen_href: set[str] = set()
-            for a in doc.xpath("//a[@href]"):
-                href = urllib.parse.urljoin(str(resp.url), a.get("href", "").strip())
-                label = " ".join(a.itertext()).strip()
-                if href.startswith(("http://", "https://")) and href not in seen_href:
-                    seen_href.add(href)
-                    links.append({"text": label[:100], "url": href})
-                    if len(links) >= 40:
-                        break
-        for bad in doc.xpath("//script|//style|//noscript|//svg"):
-            bad.drop_tree()
-        raw_text = "\n".join(line.strip() for line in doc.itertext() if line.strip())
-        clean_text = re.sub(r"\n{3,}", "\n\n", raw_text).strip()
+        title, clean_text, links = _extract_html_content(resp.text, str(resp.url), extract_links)
         payload: dict[str, Any] = {
             "url": str(resp.url),
             "status": resp.status_code,

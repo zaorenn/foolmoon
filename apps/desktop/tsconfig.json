@@ -18,6 +18,8 @@
     "noEmit": true,
     "paths": {
       "@/*": ["./src/*"],
+      "@bwnd/bbot": ["./src/types/bbot-face.d.ts"],
+      "@bwnd/bbot/fx": ["./src/types/bbot-fx.d.ts"],
       "@hermes/plugin-sdk": ["./src/sdk/index.ts"],
       "@hermes/shared/ansi": ["../shared/src/ansi.ts"],
       "@hermes/shared/billing": ["../shared/src/billing-types.ts"],

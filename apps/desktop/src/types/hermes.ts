@@ -37,6 +37,7 @@ export interface VoiceWordTiming {
 export interface AudioSpeakResponse {
   ok: boolean
   data_url: string
+  fallbackProvider?: string
   mime_type: string
   provider?: string
   sentence?: string
@@ -62,6 +63,7 @@ export interface VoiceCloneEntry {
 
 export interface VoiceCloneEngineInfo {
   description?: string
+  downloadedLabel?: string
   error?: string | null
   id: string
   installed: boolean
@@ -71,6 +73,7 @@ export interface VoiceCloneEngineInfo {
   progress?: number
   running: boolean
   sizeLabel?: string
+  speedLabel?: string
   step?: string
   supportsCloning: boolean
 }
@@ -78,6 +81,7 @@ export interface VoiceCloneEngineInfo {
 export interface VoiceSttModelInfo {
   active: boolean
   description?: string
+  downloadedLabel?: string
   error?: string | null
   id: string
   installed: boolean
@@ -85,15 +89,18 @@ export interface VoiceSttModelInfo {
   label?: string
   progress?: number
   sizeLabel?: string
+  speedLabel?: string
   step?: string
 }
 
 export interface VoiceEngineInstallJob {
+  downloadedLabel?: string
   error?: string | null
   key: string
   logs?: string[]
   progress: number
-  status: 'running' | 'completed' | 'failed'
+  speedLabel?: string
+  status: 'running' | 'completed' | 'failed' | 'cancelled'
   step: string
   targetId: string
   targetType: 'tts' | 'stt'
@@ -109,6 +116,7 @@ export interface VoiceCloneListResponse {
   clones: VoiceCloneEntry[]
   cuda?: boolean
   engines?: VoiceCloneEngineInfo[]
+  freedMb?: number
   gpu_name?: string | null
   installJobs?: VoiceEngineInstallJob[]
   ok: boolean

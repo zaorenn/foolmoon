@@ -182,3 +182,46 @@ def sync_bundled_mcp_servers(
     finally:
         if token is not None:
             reset_hermes_home_override(token)
+
+
+COMPACT_MCP_SERVERS: frozenset[str] = frozenset({"web_power", "power_files"})
+
+
+def apply_mcp_context_preset(
+    preset: str = "compact",
+    hermes_home: Path | None = None,
+) -> dict[str, Any]:
+    """Toggle bundled MCP servers between ``compact`` (low-context local LLMs) and ``full``."""
+    from hermes_cli.config import _CONFIG_LOCK, get_config_path, read_user_config_raw, save_config
+
+    mode = (preset or "compact").strip().lower()
+    if mode not in ("compact", "full"):
+        raise ValueError(f"Unsupported MCP preset '{preset}'; expected 'compact' or 'full'")
+
+    token = set_hermes_home_override(str(hermes_home)) if hermes_home is not None else None
+    try:
+        enabled_list: list[str] = []
+        disabled_list: list[str] = []
+        with _CONFIG_LOCK:
+            cfg_path = get_config_path()
+            config = read_user_config_raw(cfg_path) if cfg_path.exists() else {}
+            if not isinstance(config, dict):
+                config = {}
+            mcp_servers = config.get("mcp_servers")
+            if not isinstance(mcp_servers, dict):
+                mcp_servers = {}
+
+            for name in BUNDLED_MCP_SERVERS:
+                entry = mcp_servers.get(name)
+                if not isinstance(entry, dict):
+                    continue
+                should_enable = mode == "full" or name in COMPACT_MCP_SERVERS
+                entry["enabled"] = should_enable
+                (enabled_list if should_enable else disabled_list).append(name)
+
+            config["mcp_servers"] = mcp_servers
+            save_config(config)
+        return {"preset": mode, "enabled": enabled_list, "disabled": disabled_list}
+    finally:
+        if token is not None:
+            reset_hermes_home_override(token)

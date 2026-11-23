@@ -3,10 +3,11 @@ import { readKey } from '@/lib/storage'
 import { modeBound } from '@/store/interface-mode'
 
 // v1 (`hermes.desktop.statusbarHidden`) was seeded with the approval pill
-// hidden, so every existing store carries an `approval-mode` the user never
-// chose. v2 seeds from v1 minus that id: other customizations survive, the
-// pill appears once on update, and hiding it again persists here.
-const STATUSBAR_HIDDEN_STORAGE_KEY = 'hermes.desktop.statusbarHidden.v2'
+// hidden; v2 unhid `approval-mode`; v3 unhides `context-usage` and
+// `tokens-per-second` so users can immediately see remaining context and
+// generation speed without digging through statusbar menus.
+const STATUSBAR_HIDDEN_STORAGE_KEY = 'hermes.desktop.statusbarHidden.v3'
+const PREVIOUS_HIDDEN_STORAGE_KEY = 'hermes.desktop.statusbarHidden.v2'
 const LEGACY_HIDDEN_STORAGE_KEY = 'hermes.desktop.statusbarHidden'
 // v1 (`hermes.desktop.statusbarVisible`) shipped a stretch where the bar was
 // opt-in, so many stores hold a `false` the user never chose. v2 is read fresh
@@ -40,13 +41,11 @@ export function toggleStatusbarVisible() {
 export const STATUSBAR_HIDDEN_BY_DEFAULT: readonly string[] = [
   'agents',
   'cache-hit-rate',
-  'context-usage',
   'cron',
   'running-timer',
   'session-timer',
   'system-resources',
   'terminal',
-  'tokens-per-second',
   'webhooks'
 ]
 
@@ -59,6 +58,17 @@ const sanitizeHiddenIds = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string' && id.length > 0) : []
 
 function legacyHiddenSeed(): string[] {
+  const prevV2 = readKey(PREVIOUS_HIDDEN_STORAGE_KEY)
+  if (prevV2 !== null) {
+    try {
+      return sanitizeHiddenIds(JSON.parse(prevV2)).filter(
+        id => id !== 'context-usage' && id !== 'tokens-per-second'
+      )
+    } catch {
+      return [...STATUSBAR_HIDDEN_BY_DEFAULT]
+    }
+  }
+
   const raw = readKey(LEGACY_HIDDEN_STORAGE_KEY)
 
   if (raw === null) {
@@ -66,7 +76,9 @@ function legacyHiddenSeed(): string[] {
   }
 
   try {
-    return sanitizeHiddenIds(JSON.parse(raw)).filter(id => id !== 'approval-mode')
+    return sanitizeHiddenIds(JSON.parse(raw)).filter(
+      id => id !== 'approval-mode' && id !== 'context-usage' && id !== 'tokens-per-second'
+    )
   } catch {
     return [...STATUSBAR_HIDDEN_BY_DEFAULT]
   }

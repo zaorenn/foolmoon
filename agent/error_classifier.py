@@ -321,7 +321,7 @@ _CONTEXT_OVERFLOW_PATTERNS = (
     "prompt exceeds max length", "max_tokens", "maximum number of tokens",
     "exceeds the max_model_len", "max_model_len", "prompt length", "input is too long", "maximum model length",
     "context length exceeded", "truncating input",
-    "slot context", "n_ctx_slot",
+    "slot context", "n_ctx_slot", "exceed_context_size_error", "n_ctx",
     "超过最大长度", "上下文长度",
     "tokens in request more than max tokens allowed",
     "input is too long", "max input token", "input token", "exceeds the maximum number of input tokens",

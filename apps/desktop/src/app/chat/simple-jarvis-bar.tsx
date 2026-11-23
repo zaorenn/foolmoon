@@ -76,7 +76,9 @@ export function SimpleJarvisBar() {
     notch.agentStatus === 'listening' ||
     notch.agentStatus === 'transcribing'
 
-  if (mode !== 'simple' && !voiceTurnActive) {
+  // When the Top Notch is visible it already renders the companion avatar,
+  // voice controls, and synced lyrics — hide the duplicate inline bar.
+  if (notchVisible || (mode !== 'simple' && !voiceTurnActive)) {
     return null
   }
 

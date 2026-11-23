@@ -99,7 +99,9 @@ function syncVoicePlaybackToNotch(
   elapsedMs: number,
   now: number,
 ): void {
-  const key = `${state.status}|${state.sentence}|${state.words.length}|${state.sentenceStartTimeMs}`
+  const words = state.words ?? []
+  const sentence = state.sentence ?? ''
+  const key = `${state.status}|${sentence}|${words.length}|${state.sentenceStartTimeMs ?? 0}`
   const isStateChange = key !== lastNotchKey
 
   if (!isStateChange && now - lastNotchPushAt < NOTCH_METRIC_THROTTLE_MS) {
@@ -119,20 +121,20 @@ function syncVoicePlaybackToNotch(
 
   const hasContent =
     state.status === 'speaking' ||
-    Boolean(state.sentence) ||
-    state.words.length > 0
+    Boolean(sentence) ||
+    words.length > 0
 
   publishNotchState({
     ...(nextAgentStatus !== undefined ? { agentStatus: nextAgentStatus } : {}),
     voicePlayback: hasContent
       ? {
-          audioLevel: state.audioLevel,
+          audioLevel: state.audioLevel ?? 0,
           elapsedMs,
-          mouthRound: state.mouthRound,
-          mouthWide: state.mouthWide,
-          sentence: state.sentence,
+          mouthRound: state.mouthRound ?? 0,
+          mouthWide: state.mouthWide ?? 0,
+          sentence,
           status: state.status,
-          words: state.words,
+          words,
         }
       : null,
   })

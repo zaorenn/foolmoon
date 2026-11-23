@@ -9,6 +9,7 @@ import binascii
 import contextlib
 import logging
 import queue
+import re
 import tempfile
 import threading
 import asyncio
@@ -300,6 +301,21 @@ async def get_elevenlabs_voices(profile: Optional[str] = None):
     return {"available": True, "voices": voices}
 
 
+_CAPTION_MD_LINK_RE = re.compile(r"\[([^\]]+)\]\([^)]+\)")
+_CAPTION_MD_EMPH_RE = re.compile(r"(?:\*{1,3}|_{1,3}|~~|`+)")
+_CAPTION_MD_HEADING_RE = re.compile(r"(?m)^\s*(?:#{1,6}\s+|>\s*|[-*+]\s+)")
+
+
+def _clean_caption_text(raw: str) -> str:
+    """Strip markdown syntax (e.g. **bold**, `code`, [links](url)) for clean synced captions."""
+    if not raw:
+        return ""
+    cleaned = _CAPTION_MD_LINK_RE.sub(r"\1", raw)
+    cleaned = _CAPTION_MD_HEADING_RE.sub("", cleaned)
+    cleaned = _CAPTION_MD_EMPH_RE.sub("", cleaned)
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
 @router.post("/api/audio/speak")
 async def speak_text(payload: TTSSpeakRequest, profile: Optional[str] = None):
     """Synthesize speech and return audio as base64 data URL.
@@ -311,6 +327,7 @@ async def speak_text(payload: TTSSpeakRequest, profile: Optional[str] = None):
     text = (payload.text or "").strip()
     if not text:
         raise HTTPException(status_code=400, detail="Text is required")
+    clean_caption = _clean_caption_text(text) or text
 
     # Fast-path CUDA cloning providers: returns WAV + native/acoustic word_timings directly
     from tools.tts_cloning_cuda import CUDA_CLONING_PROVIDERS, synthesize_cuda_pcm_with_timings
@@ -324,13 +341,13 @@ async def speak_text(payload: TTSSpeakRequest, profile: Optional[str] = None):
         if prov not in CUDA_CLONING_PROVIDERS:
             return None
         try:
-            pcm, sr, timings = synthesize_cuda_pcm_with_timings(text, engine=prov, tts_config=cfg)
+            pcm, sr, timings = synthesize_cuda_pcm_with_timings(clean_caption, engine=prov, tts_config=cfg)
         except Exception as cuda_exc:
             _log.warning("CUDA TTS /api/audio/speak failed (%s); falling back to TTS fallback", cuda_exc)
-            pcm, sr = _sync_edge_fallback_pcm(text, cfg)
+            pcm, sr = _sync_edge_fallback_pcm(clean_caption, cfg)
             prov = "tts-fallback"
             from tools.tts_cloning_cuda import compute_word_timings_ms
-            timings = compute_word_timings_ms(text, pcm, sr)
+            timings = compute_word_timings_ms(clean_caption, pcm, sr)
         buf = io.BytesIO()
         with wave.open(buf, "wb") as wf:
             wf.setnchannels(1)
@@ -345,14 +362,17 @@ async def speak_text(payload: TTSSpeakRequest, profile: Optional[str] = None):
     if cuda_res is not None:
         wav_bytes, prov, timings = cuda_res
         encoded = base64.b64encode(wav_bytes).decode("ascii")
-        return {
+        resp_payload: dict[str, Any] = {
             "ok": True,
             "data_url": f"data:audio/wav;base64,{encoded}",
             "mime_type": "audio/wav",
             "provider": prov,
-            "sentence": text,
+            "sentence": clean_caption,
             "word_timings": timings,
         }
+        if prov == "tts-fallback":
+            resp_payload["fallbackProvider"] = "edge"
+        return resp_payload
 
     # _config_profile_scope raises 400/404 for a bad profile — pass it
     # through instead of masking it as a 500 synthesis failure.
@@ -389,13 +409,14 @@ async def speak_text(payload: TTSSpeakRequest, profile: Optional[str] = None):
                 from tools.tts_cloning_cuda import compute_word_timings_ms
                 pcm, sr = _audio_file_to_pcm(file_path)
                 if pcm:
-                    timings = compute_word_timings_ms(text, pcm, sr)
+                    timings = compute_word_timings_ms(clean_caption, pcm, sr)
             except Exception:
                 timings = []
             return raw, timings
         finally:
             _unlink_quietly(file_path)
 
+    clean_caption = _clean_caption_text(text) or text
     try:
         audio_bytes, word_timings = await asyncio.to_thread(_read_timings_and_unlink)
     except OSError as exc:
@@ -407,7 +428,7 @@ async def speak_text(payload: TTSSpeakRequest, profile: Optional[str] = None):
         "data_url": f"data:{mime_type};base64,{encoded}",
         "mime_type": mime_type,
         "provider": result.get("provider"),
-        "sentence": text,
+        "sentence": clean_caption,
         "word_timings": word_timings,
     }
 
@@ -465,6 +486,32 @@ async def activate_voice_engine(payload: VoiceEngineInstallRequest, profile: Opt
 
     await _run_config_scoped(profile, lambda: _persist_voice_selection(ttype, tid))
     status = await _run_config_scoped(profile, list_voice_clones)
+    return {"ok": True, **status}
+
+
+@router.post("/api/audio/engines/cancel")
+async def cancel_voice_engine(payload: VoiceEngineInstallRequest, profile: Optional[str] = None):
+    """Cancel an active TTS engine or STT model download/installation."""
+    from tools.tts_cloning_cuda import cancel_voice_engine_install
+
+    with http_failure("Failed to cancel engine installation", 400, "Cancel failed"):
+        status = await _run_config_scoped(
+            profile,
+            lambda: cancel_voice_engine_install(payload.target_type, payload.target_id),
+        )
+    return {"ok": True, **status}
+
+
+@router.delete("/api/audio/engines/{target_type}/{target_id}")
+async def uninstall_voice_engine_route(target_type: str, target_id: str, profile: Optional[str] = None):
+    """Uninstall a downloaded local TTS engine or STT model and free disk space."""
+    from tools.tts_cloning_cuda import uninstall_voice_engine
+
+    with http_failure("Failed to uninstall engine", 400, "Uninstall failed"):
+        status = await _run_config_scoped(
+            profile,
+            lambda: uninstall_voice_engine(target_type, target_id),
+        )
     return {"ok": True, **status}
 
 
@@ -1042,19 +1089,29 @@ async def speak_stream_ws(ws: WebSocket) -> None:
                 for piece in _pieces():
                     if stop.is_set():
                         return
+                    clean_piece = _clean_caption_text(piece) or piece
+                    used_fallback = False
                     try:
-                        pcm, rate, timings = stream_with_timings(piece)
+                        pcm, rate, timings = stream_with_timings(clean_piece)
                     except Exception as cuda_exc:
                         _log.warning("CUDA TTS failed for sentence (%s); falling back to TTS fallback", cuda_exc)
-                        pcm, rate = _sync_edge_fallback_pcm(piece, cfg)
-                        timings = compute_word_timings_ms(piece, pcm, rate)
+                        used_fallback = True
+                        pcm, rate = _sync_edge_fallback_pcm(clean_piece, cfg)
+                        timings = compute_word_timings_ms(clean_piece, pcm, rate)
                     if stop.is_set():
                         return
                     if rate and rate != getattr(streamer, "sample_rate", 24000) and not start_sent:
                         streamer.sample_rate = rate
                     if pcm:
                         dur_ms = max(60, int(round((len(pcm) // 2 / max(8000, rate)) * 1000.0)))
-                        meta = {"type": "sentence", "text": piece, "words": timings, "durationMs": dur_ms, "sampleRate": rate}
+                        meta = {
+                            "type": "sentence",
+                            "text": clean_piece,
+                            "words": timings,
+                            "durationMs": dur_ms,
+                            "sampleRate": rate,
+                            **({"fallbackProvider": "edge"} if used_fallback else {}),
+                        }
                         loop.call_soon_threadsafe(chunks.put_nowait, meta)
                         produced_audio = True
                         loop.call_soon_threadsafe(chunks.put_nowait, pcm)
@@ -1062,10 +1119,11 @@ async def speak_stream_ws(ws: WebSocket) -> None:
                 for piece in _pieces():
                     if stop.is_set():
                         return
+                    clean_piece = _clean_caption_text(piece) or piece
                     yielded_piece = False
                     sent_meta = False
                     try:
-                        for chunk in streamer.stream(piece):
+                        for chunk in streamer.stream(clean_piece):
                             if stop.is_set():
                                 return
                             if not chunk:
@@ -1076,14 +1134,14 @@ async def speak_stream_ws(ws: WebSocket) -> None:
                                 sent_meta = True
                                 cur_rate = getattr(streamer, "sample_rate", 24000) or 24000
                                 if isinstance(streamer, _SyncSentencePCMStreamer):
-                                    w_timings = compute_word_timings_ms(piece, chunk, cur_rate)
+                                    w_timings = compute_word_timings_ms(clean_piece, chunk, cur_rate)
                                     dur_ms = max(60, int(round((len(chunk) // 2 / max(8000, cur_rate)) * 1000.0)))
                                 else:
                                     w_timings = []
                                     dur_ms = 0
                                 meta = {
                                     "type": "sentence",
-                                    "text": piece,
+                                    "text": clean_piece,
                                     "words": w_timings,
                                     "durationMs": dur_ms,
                                     "sampleRate": cur_rate,
@@ -1094,20 +1152,21 @@ async def speak_stream_ws(ws: WebSocket) -> None:
                         if yielded_piece:
                             raise
                         _log.warning("Streaming TTS failed for sentence (%s); falling back to TTS fallback", stream_exc)
-                        pcm, rate = _sync_edge_fallback_pcm(piece, cfg)
+                        pcm, rate = _sync_edge_fallback_pcm(clean_piece, cfg)
                         if stop.is_set():
                             return
                         if rate and rate != getattr(streamer, "sample_rate", 24000) and not start_sent:
                             streamer.sample_rate = rate
                         if pcm:
-                            w_timings = compute_word_timings_ms(piece, pcm, rate)
+                            w_timings = compute_word_timings_ms(clean_piece, pcm, rate)
                             dur_ms = max(60, int(round((len(pcm) // 2 / max(8000, rate)) * 1000.0)))
                             meta = {
                                 "type": "sentence",
-                                "text": piece,
+                                "text": clean_piece,
                                 "words": w_timings,
                                 "durationMs": dur_ms,
                                 "sampleRate": rate,
+                                "fallbackProvider": "edge",
                             }
                             loop.call_soon_threadsafe(chunks.put_nowait, meta)
                             produced_audio = True

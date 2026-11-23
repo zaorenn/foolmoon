@@ -567,13 +567,22 @@ def list_skins() -> list[dict[str, str]]:
     return result
 
 
+_SKIN_ALIASES: dict[str, str] = {
+    "foolmoon-warm": "foolmoon",
+    "foolmoon_warm": "foolmoon",
+}
+
+
 def load_skin(name: str) -> SkinConfig:
     """Load a skin by name: user skins first, then built-in, then default."""
+    canonical = _SKIN_ALIASES.get(name, name)
     user_file = _skins_dir() / f"{name}.yaml"
+    if not user_file.is_file() and canonical != name:
+        user_file = _skins_dir() / f"{canonical}.yaml"
     data = _load_skin_from_yaml(user_file) if user_file.is_file() else None
-    if not data and name not in _BUILTIN_SKINS:
+    if not data and canonical not in _BUILTIN_SKINS:
         logger.warning("Skin '%s' not found, using default", name)
-    return _build_skin_config(data or _BUILTIN_SKINS.get(name) or _BUILTIN_SKINS["default"])
+    return _build_skin_config(data or _BUILTIN_SKINS.get(canonical) or _BUILTIN_SKINS["default"])
 
 
 def get_active_skin() -> SkinConfig:

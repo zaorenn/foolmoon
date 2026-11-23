@@ -129,3 +129,24 @@ def test_isolated_python_env_strips_host_python314_leakage(tmp_path, monkeypatch
     assert env["HF_HOME"] == str(tmp_path / "hf")
     assert "hermes\\installs\\" not in env["PATH"].lower()
     assert str(venv_dir) in env["PATH"].split(";")[0] or str(venv_dir) in env["PATH"].split(":")[0]
+
+
+def test_parse_download_progress_and_uninstall(tmp_path, monkeypatch):
+    parsed = cuda_mod.parse_download_progress_line(
+        "model.safetensors:  42%|####2     | 1.43G/3.40G [00:58<01:20, 24.5MB/s]"
+    )
+    assert parsed["percent"] == 42
+    assert parsed["downloadedLabel"] == "1.43G / 3.40G"
+    assert parsed["speedLabel"] == "24.5MB/s"
+
+    monkeypatch.setattr(cuda_mod, "resolve_voice_root", lambda: tmp_path)
+    cache_dir = cuda_mod.get_engine_cache_dir("kokoro")
+    venv_dir = tmp_path / "voice-venv" / "kokoro"
+    venv_dir.mkdir(parents=True)
+    (cache_dir / "weights.bin").write_bytes(b"\x01" * (2 * 1024 * 1024))
+    (venv_dir / "dummy.bin").write_bytes(b"\x02" * (1024 * 1024))
+
+    res = cuda_mod.uninstall_voice_engine("tts", "kokoro")
+    assert not cache_dir.exists()
+    assert not venv_dir.exists()
+    assert res["freedMb"] >= 2.9

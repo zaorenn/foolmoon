@@ -58,4 +58,15 @@ describe('statusbar hidden items', () => {
 
     expect(reloaded.$statusbarHiddenIds.get()).toContain('approval-mode')
   })
+
+  it('surfaces context-usage and tokens-per-second by default and on v2 migration', async () => {
+    window.localStorage.setItem(
+      'hermes.desktop.statusbarHidden.v2',
+      JSON.stringify(['context-usage', 'tokens-per-second', 'cron'])
+    )
+
+    const { $statusbarHiddenIds } = await loadStore()
+
+    expect($statusbarHiddenIds.get()).toEqual(['cron'])
+  })
 })

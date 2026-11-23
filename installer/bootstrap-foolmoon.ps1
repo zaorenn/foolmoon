@@ -272,7 +272,10 @@ if model_mode == "lmstudio":
     model_cfg["api_key"] = "lm-studio"
     if lm_model:
         model_cfg["default"] = lm_model
-    model_cfg.setdefault("context_length", 131072)
+    # Let Hermes auto-detect LM Studio's real runtime loaded_context_length (n_ctx)
+    # instead of masking it with a hardcoded 131072 default.
+    if model_cfg.get("context_length") == 131072:
+        model_cfg.pop("context_length", None)
     cfg["model"] = model_cfg
 elif model_mode == "custom_api":
     endpoint_url = (payload.get("customBaseUrl") or "").strip()

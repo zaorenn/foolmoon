@@ -456,6 +456,39 @@ export function activateVoiceEngine(
   })
 }
 
+export function cancelVoiceEngineInstall(
+  payload: {
+    target_id: string
+    target_type: 'tts' | 'stt'
+  },
+  profile?: null | string
+): Promise<VoiceCloneListResponse> {
+  return hermesApi<VoiceCloneListResponse>({
+    ...profileScoped(profile),
+    body: {
+      activate: false,
+      target_id: payload.target_id,
+      target_type: payload.target_type
+    },
+    method: 'POST',
+    path: '/api/audio/engines/cancel',
+    timeoutMs: 15_000
+  })
+}
+
+export function uninstallVoiceEngine(
+  targetType: 'tts' | 'stt',
+  targetId: string,
+  profile?: null | string
+): Promise<VoiceCloneListResponse> {
+  return hermesApi<VoiceCloneListResponse>({
+    ...profileScoped(profile),
+    method: 'DELETE',
+    path: `/api/audio/engines/${encodeURIComponent(targetType)}/${encodeURIComponent(targetId)}`,
+    timeoutMs: 60_000
+  })
+}
+
 export function createVoiceClone(
   payload: {
     data_url: string

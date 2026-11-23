@@ -1158,6 +1158,8 @@ export function ChatBar({
       }}
       onSteer={canSteer ? () => steerDraft('steer') : undefined}
       onToggleAutoSpeak={handleToggleAutoSpeak}
+      requestGateway={requestBusyConfig}
+      sessionId={statusSessionId}
       state={state}
       voiceStatus={voiceStatus}
     />

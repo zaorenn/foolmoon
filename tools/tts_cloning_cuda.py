@@ -416,6 +416,60 @@ def is_stt_model_installed(model_id: str) -> bool:
 
 _install_jobs_lock = threading.Lock()
 _install_jobs: dict[str, dict[str, Any]] = {}
+_install_procs: dict[str, subprocess.Popen[Any]] = {}
+_install_cancel_flags: set[str] = set()
+
+
+class InstallCancelledError(RuntimeError):
+    """Raised when the user explicitly cancels an in-flight engine install."""
+
+
+_DL_PERCENT_RE = re.compile(r"(?<!\d)(\d{1,3})%\|")
+_DL_BYTES_PAIR_RE = re.compile(
+    r"(\d+(?:\.\d+)?\s*(?:[KMGT]i?B|[KMGT]))\s*/\s*(\d+(?:\.\d+)?\s*(?:[KMGT]i?B|[KMGT]))",
+    re.IGNORECASE,
+)
+_DL_SPEED_RE = re.compile(
+    r"(\d+(?:\.\d+)?\s*(?:[KMGT]i?B|B)/s)",
+    re.IGNORECASE,
+)
+
+
+def parse_download_progress_line(line: str) -> dict[str, Any]:
+    """Parse tqdm / HuggingFace / uv progress lines for percentage, bytes, and MB/s."""
+    out: dict[str, Any] = {}
+    if not line:
+        return out
+    m_pct = _DL_PERCENT_RE.search(line)
+    if m_pct:
+        pct = int(m_pct.group(1))
+        if 0 <= pct <= 100:
+            out["percent"] = pct
+    m_pair = _DL_BYTES_PAIR_RE.search(line)
+    if m_pair:
+        out["downloadedLabel"] = f"{m_pair.group(1).replace(' ', '')} / {m_pair.group(2).replace(' ', '')}"
+    m_spd = _DL_SPEED_RE.search(line)
+    if m_spd:
+        out["speedLabel"] = m_spd.group(1).replace(" ", "")
+    return out
+
+
+def _dir_size_bytes(path: Path) -> int:
+    if not path.exists():
+        return 0
+    if path.is_file():
+        try:
+            return path.stat().st_size
+        except OSError:
+            return 0
+    total = 0
+    for root, _, files in os.walk(path):
+        for fname in files:
+            try:
+                total += (Path(root) / fname).stat().st_size
+            except OSError:
+                pass
+    return total
 
 
 def _job_key(target_type: str, target_id: str) -> str:
@@ -568,6 +622,8 @@ def list_voice_clones() -> dict[str, Any]:
             "installing": is_installing,
             "progress": int(job.get("progress", 0)) if job else 0,
             "step": str(job.get("step") or "") if job else "",
+            "downloadedLabel": str(job.get("downloadedLabel") or "") if job and is_installing else "",
+            "speedLabel": str(job.get("speedLabel") or "") if job and is_installing else "",
             "error": job.get("error") if job else None,
         })
 
@@ -587,6 +643,8 @@ def list_voice_clones() -> dict[str, Any]:
             "installing": is_installing,
             "progress": int(job.get("progress", 0)) if job else 0,
             "step": str(job.get("step") or "") if job else "",
+            "downloadedLabel": str(job.get("downloadedLabel") or "") if job and is_installing else "",
+            "speedLabel": str(job.get("speedLabel") or "") if job and is_installing else "",
             "error": job.get("error") if job else None,
         })
 
@@ -2397,6 +2455,8 @@ def _run_cmd_with_retry(
         try:
             _run_cmd_logged(cmd, job_key, cwd=cwd, env=env, timeout=timeout)
             return
+        except InstallCancelledError:
+            raise
         except Exception as exc:
             last_exc = exc
             err_str = str(exc)
@@ -2428,6 +2488,10 @@ def _run_cmd_logged(
     env: Optional[dict[str, str]] = None,
     timeout: int = 1800,
 ) -> None:
+    with _install_jobs_lock:
+        if job_key in _install_cancel_flags:
+            raise InstallCancelledError("Installation cancelled by user")
+
     _update_install_job(job_key, log_line="$ " + " ".join(cmd[:6]) + (" ..." if len(cmd) > 6 else ""))
     work_dir = cwd or resolve_voice_root()
     work_dir.mkdir(parents=True, exist_ok=True)
@@ -2443,21 +2507,58 @@ def _run_cmd_logged(
         stdin=subprocess.DEVNULL,
         creationflags=windows_hide_flags(),
     )
+    with _install_jobs_lock:
+        _install_procs[job_key] = proc
+
     tail: collections.deque[str] = collections.deque(maxlen=40)
     deadline = time.monotonic() + timeout
     assert proc.stdout is not None
-    for raw_line in proc.stdout:
-        line = raw_line.strip()
-        if line:
-            tail.append(line)
-            _update_install_job(job_key, log_line=line[:240])
-        if time.monotonic() > deadline:
-            proc.kill()
-            raise RuntimeError(f"Command timed out after {timeout}s")
-    rc = proc.wait()
-    if rc != 0:
-        err_tail = " | ".join(list(tail)[-6:])
-        raise RuntimeError(f"Command exited {rc}: {err_tail}")
+    try:
+        for raw_line in proc.stdout:
+            with _install_jobs_lock:
+                cancelled = job_key in _install_cancel_flags
+            if cancelled:
+                try:
+                    proc.terminate()
+                except Exception:
+                    pass
+                try:
+                    proc.wait(timeout=3)
+                except Exception:
+                    proc.kill()
+                raise InstallCancelledError("Installation cancelled by user")
+
+            # tqdm often emits carriage-return separated frames in a single chunk
+            segments = [seg.strip() for seg in raw_line.replace("\r", "\n").splitlines() if seg.strip()]
+            for line in segments:
+                tail.append(line)
+                telemetry = parse_download_progress_line(line)
+                update_fields: dict[str, Any] = {"log_line": line[:240]}
+                if telemetry.get("downloadedLabel"):
+                    update_fields["downloadedLabel"] = telemetry["downloadedLabel"]
+                if telemetry.get("speedLabel"):
+                    update_fields["speedLabel"] = telemetry["speedLabel"]
+                if "percent" in telemetry:
+                    with _install_jobs_lock:
+                        cur_prog = int((_install_jobs.get(job_key) or {}).get("progress") or 0)
+                    # Blend live download percentage into the 20..95 range without jumping backwards.
+                    blended = min(95, max(cur_prog, 20 + int(telemetry["percent"] * 0.72)))
+                    update_fields["progress"] = blended
+                _update_install_job(job_key, **update_fields)
+            if time.monotonic() > deadline:
+                proc.kill()
+                raise RuntimeError(f"Command timed out after {timeout}s")
+        rc = proc.wait()
+        with _install_jobs_lock:
+            if job_key in _install_cancel_flags:
+                raise InstallCancelledError("Installation cancelled by user")
+        if rc != 0:
+            err_tail = " | ".join(list(tail)[-6:])
+            raise RuntimeError(f"Command exited {rc}: {err_tail}")
+    finally:
+        with _install_jobs_lock:
+            if _install_procs.get(job_key) is proc:
+                _install_procs.pop(job_key, None)
 
 
 def _persist_voice_selection(target_type: str, target_id: str) -> None:
@@ -2686,7 +2787,9 @@ def _run_tts_install_worker(engine_id: str, job_key: str, activate: bool) -> Non
         )
         if activate:
             _persist_voice_selection("tts", engine_id)
-        _update_install_job(job_key, status="completed", progress=100, step="Ready")
+        _update_install_job(job_key, status="completed", progress=100, step="Ready", downloadedLabel="", speedLabel="")
+    except InstallCancelledError:
+        _update_install_job(job_key, status="cancelled", step="Cancelled", error=None, downloadedLabel="", speedLabel="")
     except Exception as exc:
         logger.exception("TTS engine install failed for %s", engine_id)
         _update_install_job(job_key, status="failed", error=str(exc), step="Install failed")
@@ -2745,7 +2848,9 @@ def _run_stt_install_worker(model_id: str, job_key: str, activate: bool) -> None
         )
         if activate:
             _persist_voice_selection("stt", model_id)
-        _update_install_job(job_key, status="completed", progress=100, step="Ready")
+        _update_install_job(job_key, status="completed", progress=100, step="Ready", downloadedLabel="", speedLabel="")
+    except InstallCancelledError:
+        _update_install_job(job_key, status="cancelled", step="Cancelled", error=None, downloadedLabel="", speedLabel="")
     except Exception as exc:
         logger.exception("STT model install failed for %s", model_id)
         _update_install_job(job_key, status="failed", error=str(exc), step="Install failed")
@@ -2777,6 +2882,7 @@ def start_voice_engine_install(
 
     key = _job_key(ttype, tid)
     with _install_jobs_lock:
+        _install_cancel_flags.discard(key)
         existing = _install_jobs.get(key)
         if existing and existing.get("status") == "running":
             return dict(existing)
@@ -2787,6 +2893,8 @@ def start_voice_engine_install(
             "status": "running",
             "progress": 5,
             "step": "Queued...",
+            "downloadedLabel": "",
+            "speedLabel": "",
             "logs": [],
             "error": None,
             "startedAt": time.time(),
@@ -2808,4 +2916,133 @@ def start_voice_engine_install(
 
     threading.Thread(target=_runner, name=f"voice-install-{key}", daemon=True).start()
     return dict(_install_jobs[key])
+
+
+def cancel_voice_engine_install(target_type: str, target_id: str) -> dict[str, Any]:
+    """Cancel an active TTS engine or STT model download/installation."""
+    ttype = (target_type or "tts").strip().lower()
+    if ttype not in ("tts", "stt"):
+        raise ValueError(f"Invalid target_type: {target_type!r}")
+    tid = normalize_cloning_engine(target_id) if ttype == "tts" else (target_id or "").strip().lower()
+    key = _job_key(ttype, tid)
+
+    proc: Optional[subprocess.Popen[Any]] = None
+    with _install_jobs_lock:
+        _install_cancel_flags.add(key)
+        proc = _install_procs.get(key)
+        if key in _install_jobs and _install_jobs[key].get("status") == "running":
+            _install_jobs[key].update({
+                "status": "cancelled",
+                "step": "Cancelled",
+                "error": None,
+                "downloadedLabel": "",
+                "speedLabel": "",
+                "updatedAt": time.time(),
+            })
+
+    if proc is not None:
+        try:
+            proc.terminate()
+            proc.wait(timeout=3)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
+    return list_voice_clones()
+
+
+def uninstall_voice_engine(target_type: str, target_id: str) -> dict[str, Any]:
+    """Remove a downloaded local TTS engine or STT Whisper model to reclaim disk space."""
+    ttype = (target_type or "tts").strip().lower()
+    if ttype not in ("tts", "stt"):
+        raise ValueError(f"Invalid target_type: {target_type!r}")
+
+    if ttype == "tts":
+        tid = normalize_cloning_engine(target_id)
+        if tid == "edge":
+            raise ValueError("Edge Neural TTS is a built-in cloud-free fallback and cannot be uninstalled.")
+        valid_ids = {m["id"] for m in TTS_ENGINE_CATALOG}
+        if tid not in valid_ids:
+            raise ValueError(f"Unknown TTS engine: {target_id!r}")
+    else:
+        tid = (target_id or "").strip().lower()
+        valid_ids = {m["id"] for m in STT_MODEL_CATALOG_INFO}
+        if tid not in valid_ids:
+            raise ValueError(f"Unknown STT model: {target_id!r}")
+
+    # Ensure no install is actively running for this target
+    cancel_voice_engine_install(ttype, tid)
+
+    freed_bytes = 0
+    if ttype == "tts":
+        # Shut down warm CUDA worker if active
+        worker = _active_workers.pop(tid, None)
+        if worker is not None:
+            try:
+                worker.shutdown()
+            except Exception:
+                pass
+
+        cache_dir = get_engine_cache_dir(tid)
+        if cache_dir.exists():
+            freed_bytes += _dir_size_bytes(cache_dir)
+            shutil.rmtree(cache_dir, ignore_errors=True)
+
+        marker = _engine_verified_marker(tid)
+        if marker.exists():
+            marker.unlink(missing_ok=True)
+
+        # Only delete the venv if no sibling engine sharing the same venv subdir remains installed
+        if tid in CUDA_CLONING_PROVIDERS:
+            subdir = _venv_subdir_for_engine(tid)
+            siblings_installed = any(
+                other != tid and _venv_subdir_for_engine(other) == subdir and is_tts_engine_installed(other)
+                for other in CUDA_CLONING_PROVIDERS
+            )
+            if not siblings_installed:
+                venv_dir = resolve_voice_root() / "voice-venv" / subdir
+                if venv_dir.exists():
+                    freed_bytes += _dir_size_bytes(venv_dir)
+                    shutil.rmtree(venv_dir, ignore_errors=True)
+
+        cfg_tts, _, _ = _current_tts_and_stt_selection()
+        if cfg_tts == tid:
+            try:
+                _persist_voice_selection("tts", "edge")
+            except Exception:
+                pass
+    else:
+        marker = _stt_verified_marker(tid, create=False)
+        if marker.exists():
+            marker.unlink(missing_ok=True)
+
+        # Remove matching faster-whisper HF cache snapshots
+        hf_hub_dirs = [
+            Path.home() / ".cache" / "huggingface" / "hub",
+            resolve_voice_root() / "voice-cache" / "stt",
+        ]
+        repo_tokens = [f"faster-whisper-{tid}", f"whisper-{tid}"]
+        if tid == "turbo":
+            repo_tokens.extend(["faster-whisper-large-v3-turbo", "large-v3-turbo"])
+        for hub_dir in hf_hub_dirs:
+            if not hub_dir.is_dir():
+                continue
+            for child in list(hub_dir.iterdir()):
+                cname = child.name.lower()
+                if any(tok in cname for tok in repo_tokens):
+                    freed_bytes += _dir_size_bytes(child)
+                    if child.is_dir():
+                        shutil.rmtree(child, ignore_errors=True)
+                    else:
+                        child.unlink(missing_ok=True)
+
+    with _install_jobs_lock:
+        _install_jobs.pop(_job_key(ttype, tid), None)
+        _install_cancel_flags.discard(_job_key(ttype, tid))
+
+    res = list_voice_clones()
+    res["freedMb"] = round(freed_bytes / (1024.0 * 1024.0), 1)
+    return res
 

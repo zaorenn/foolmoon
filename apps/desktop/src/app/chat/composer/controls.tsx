@@ -12,7 +12,9 @@ import { recordAction } from '@/store/desktop-metrics'
 import { $hudMode, closeHud, resetHudLayout } from '@/store/hud'
 import { $wakeWord, toggleWakeWord } from '@/store/wake-word'
 
+import type { GatewayRequester } from '@/app/contrib/types'
 import { ACTIVE_ICON_BTN, GHOST_ICON_BTN, PRIMARY_ICON_BTN } from './control-classes'
+import { ContextRingPill } from './context-ring-pill'
 import type { ConversationStatus } from './hooks/use-voice-conversation'
 import { ModelPill } from './model-pill'
 import { ReasoningPill } from './reasoning-pill'
@@ -59,6 +61,8 @@ export function ComposerControls({
   hasComposerPayload,
   hideModelPill = false,
   minimal = false,
+  requestGateway,
+  sessionId,
   state,
   voiceStatus,
   onDictate,
@@ -79,6 +83,8 @@ export function ComposerControls({
   hasComposerPayload: boolean
   hideModelPill?: boolean
   minimal?: boolean
+  requestGateway?: GatewayRequester
+  sessionId?: string | null
   state: ChatBarState
   voiceStatus: VoiceStatus
   onDictate: () => void
@@ -149,6 +155,13 @@ export function ComposerControls({
             <>
               <ModelPill compact={compactModelPill} disabled={disabled} model={state.model} />
               {compactModelPill ? null : <ReasoningPill disabled={disabled} model={state.model} />}
+              <ContextRingPill
+                busy={busy}
+                compact={compactModelPill || hudMode}
+                disabled={disabled}
+                requestGateway={requestGateway}
+                sessionId={sessionId}
+              />
             </>
           )}
           {voiceControls}

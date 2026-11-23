@@ -12,7 +12,8 @@ import {
   Square,
   Trash2,
   Upload,
-  Volume2
+  Volume2,
+  X
 } from 'lucide-react'
 import { type ChangeEvent, useCallback, useEffect, useRef, useState } from 'react'
 
@@ -22,6 +23,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   activateVoiceEngine,
+  cancelVoiceEngineInstall,
   createVoiceClone,
   deleteVoiceClone,
   getHermesConfigRecord,
@@ -30,7 +32,8 @@ import {
   installVoiceEngine,
   listVoiceClones,
   saveHermesConfig,
-  setActiveVoiceClone
+  setActiveVoiceClone,
+  uninstallVoiceEngine
 } from '@/hermes'
 import { playSpeechText, stopVoicePlayback } from '@/lib/voice-playback'
 import {
@@ -401,6 +404,36 @@ export function VoiceCloningStudio({ scopeProfile }: { scopeProfile?: string }) 
     }
   }
 
+  const handleCancelInstall = async (targetType: 'tts' | 'stt', targetId: string) => {
+    setBusyAction(`cancel:${targetType}:${targetId}`)
+    try {
+      const res = await cancelVoiceEngineInstall({ target_id: targetId, target_type: targetType }, scopeProfile)
+      setInventory(res)
+      notify({ kind: 'info', message: `Cancelled ${targetId} download.` })
+    } catch (err) {
+      notifyError(err, `Could not cancel ${targetId}`)
+    } finally {
+      setBusyAction(null)
+    }
+  }
+
+  const handleUninstallEngine = async (targetType: 'tts' | 'stt', targetId: string, label: string) => {
+    if (typeof window !== 'undefined' && !window.confirm(`Uninstall ${label} and delete its local weights/cache?`)) {
+      return
+    }
+    setBusyAction(`uninstall:${targetType}:${targetId}`)
+    try {
+      const res = await uninstallVoiceEngine(targetType, targetId, scopeProfile)
+      setInventory(res)
+      const freed = typeof res.freedMb === 'number' && res.freedMb > 0 ? ` (${res.freedMb} MB freed)` : ''
+      notify({ kind: 'info', message: `Uninstalled ${label}${freed}.` })
+    } catch (err) {
+      notifyError(err, `Could not uninstall ${label}`)
+    } finally {
+      setBusyAction(null)
+    }
+  }
+
   const handleDelete = async (clone: VoiceCloneEntry) => {
     setBusyAction(`delete:${clone.id}`)
 
@@ -751,7 +784,14 @@ export function VoiceCloningStudio({ scopeProfile }: { scopeProfile?: string }) 
                       <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
                         <div className="h-full bg-primary transition-all" style={{ width: `${progress}%` }} />
                       </div>
-                      <span className="truncate text-[10px] text-muted-foreground">{eng.step || 'Installing...'}</span>
+                      <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
+                        <span className="truncate">{eng.step || 'Installing...'}</span>
+                        {(eng.downloadedLabel || eng.speedLabel) && (
+                          <span className="shrink-0 tabular-nums font-medium text-foreground/80">
+                            {[eng.downloadedLabel, eng.speedLabel].filter(Boolean).join(' · ')}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   )}
                   {!eng.installing && eng.error && (
@@ -765,26 +805,45 @@ export function VoiceCloningStudio({ scopeProfile }: { scopeProfile?: string }) 
                     {eng.running ? ' · GPU Hot' : ''}
                   </span>
                   {eng.installing ? (
-                    <Button disabled size="xs" variant="outline">
-                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                      Installing
-                    </Button>
-                  ) : eng.installed && !eng.error ? (
                     <Button
                       disabled={busyAction !== null}
-                      onClick={() => void handleActivateEngine('tts', eng.id)}
+                      onClick={() => void handleCancelInstall('tts', eng.id)}
                       size="xs"
-                      variant={isActive ? 'default' : 'outline'}
+                      variant="outline"
                     >
-                      {isActive ? (
-                        <>
-                          <Check className="mr-1 h-3 w-3" />
-                          Active
-                        </>
-                      ) : (
-                        'Use Engine'
-                      )}
+                      <X className="mr-1 h-3 w-3" />
+                      Cancel
                     </Button>
+                  ) : eng.installed && !eng.error ? (
+                    <div className="flex items-center gap-1">
+                      <Button
+                        disabled={busyAction !== null}
+                        onClick={() => void handleActivateEngine('tts', eng.id)}
+                        size="xs"
+                        variant={isActive ? 'default' : 'outline'}
+                      >
+                        {isActive ? (
+                          <>
+                            <Check className="mr-1 h-3 w-3" />
+                            Active
+                          </>
+                        ) : (
+                          'Use Engine'
+                        )}
+                      </Button>
+                      {eng.id !== 'edge' && (
+                        <Button
+                          aria-label={`Uninstall ${eng.label ?? eng.id}`}
+                          disabled={busyAction !== null}
+                          onClick={() => void handleUninstallEngine('tts', eng.id, eng.label ?? eng.id)}
+                          size="xs"
+                          title={`Uninstall ${eng.label ?? eng.id}`}
+                          variant="ghost"
+                        >
+                          <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
+                        </Button>
+                      )}
+                    </div>
                   ) : (
                     <Button
                       disabled={busyAction !== null}
@@ -856,7 +915,14 @@ export function VoiceCloningStudio({ scopeProfile }: { scopeProfile?: string }) 
                       <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
                         <div className="h-full bg-primary transition-all" style={{ width: `${progress}%` }} />
                       </div>
-                      <span className="truncate text-[10px] text-muted-foreground">{model.step || 'Downloading...'}</span>
+                      <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
+                        <span className="truncate">{model.step || 'Downloading...'}</span>
+                        {(model.downloadedLabel || model.speedLabel) && (
+                          <span className="shrink-0 tabular-nums font-medium text-foreground/80">
+                            {[model.downloadedLabel, model.speedLabel].filter(Boolean).join(' · ')}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   )}
                   {!model.installing && model.error && (
@@ -867,26 +933,43 @@ export function VoiceCloningStudio({ scopeProfile }: { scopeProfile?: string }) 
                 <div className="flex items-center justify-between gap-2 pt-1">
                   <span className="text-[10px] text-muted-foreground">{model.sizeLabel ?? ''}</span>
                   {model.installing ? (
-                    <Button disabled size="xs" variant="outline">
-                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                      Downloading
-                    </Button>
-                  ) : model.installed && !model.error ? (
                     <Button
                       disabled={busyAction !== null}
-                      onClick={() => void handleActivateEngine('stt', model.id)}
+                      onClick={() => void handleCancelInstall('stt', model.id)}
                       size="xs"
-                      variant={model.active ? 'default' : 'outline'}
+                      variant="outline"
                     >
-                      {model.active ? (
-                        <>
-                          <Check className="mr-1 h-3 w-3" />
-                          Active
-                        </>
-                      ) : (
-                        'Use STT'
-                      )}
+                      <X className="mr-1 h-3 w-3" />
+                      Cancel
                     </Button>
+                  ) : model.installed && !model.error ? (
+                    <div className="flex items-center gap-1">
+                      <Button
+                        disabled={busyAction !== null}
+                        onClick={() => void handleActivateEngine('stt', model.id)}
+                        size="xs"
+                        variant={model.active ? 'default' : 'outline'}
+                      >
+                        {model.active ? (
+                          <>
+                            <Check className="mr-1 h-3 w-3" />
+                            Active
+                          </>
+                        ) : (
+                          'Use STT'
+                        )}
+                      </Button>
+                      <Button
+                        aria-label={`Uninstall ${model.label ?? model.id}`}
+                        disabled={busyAction !== null}
+                        onClick={() => void handleUninstallEngine('stt', model.id, model.label ?? model.id)}
+                        size="xs"
+                        title={`Uninstall ${model.label ?? model.id}`}
+                        variant="ghost"
+                      >
+                        <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
+                      </Button>
+                    </div>
                   ) : (
                     <Button
                       disabled={busyAction !== null}

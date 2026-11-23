@@ -22,6 +22,12 @@ export const LOCALE_OPTIONS = [
     configValue: 'en'
   },
   {
+    id: 'tr',
+    name: LOCALE_ENDONYMS.tr,
+    englishName: 'Turkish',
+    configValue: 'tr'
+  },
+  {
     id: 'zh',
     name: LOCALE_ENDONYMS.zh,
     englishName: 'Simplified Chinese',
@@ -206,7 +212,13 @@ const LOCALE_ALIASES: Record<string, BundledLocale> = {
   es_419: 'es',
   spanish: 'es',
   español: 'es',
-  espanol: 'es'
+  espanol: 'es',
+  tr: 'tr',
+  'tr-tr': 'tr',
+  tr_tr: 'tr',
+  turkish: 'tr',
+  türkçe: 'tr',
+  turkce: 'tr'
 }
 
 /** A language the app can render right now: bundled or registered. Aliases

@@ -44,6 +44,23 @@ export function ComposerArchitectBar({ onPickImages, target = 'main' }: Composer
     requestComposerFocus(target)
   }
 
+  if (!isArchitect) {
+    return (
+      <div className="flex items-center justify-end pb-0.5 select-none" data-slot="composer-architect-bar">
+        <button
+          aria-pressed={false}
+          className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium text-muted-foreground/80 transition hover:bg-muted/60 hover:text-foreground"
+          onClick={() => setComposerPersona('architect')}
+          title="Open Studio Architect tools (themes, materials, voice studio)"
+          type="button"
+        >
+          <Compass className="h-3 w-3" />
+          Studio Architect
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-1.5 pb-1 select-none" data-slot="composer-architect-bar">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -53,12 +70,8 @@ export function ComposerArchitectBar({ onPickImages, target = 'main' }: Composer
           role="group"
         >
           <button
-            aria-pressed={!isArchitect}
-            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-medium transition ${
-              !isArchitect
-                ? 'bg-card text-foreground shadow-xs'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
+            aria-pressed={false}
+            className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-medium text-muted-foreground transition hover:text-foreground"
             onClick={() => setComposerPersona('standard')}
             type="button"
           >
@@ -66,12 +79,8 @@ export function ComposerArchitectBar({ onPickImages, target = 'main' }: Composer
             Standard
           </button>
           <button
-            aria-pressed={isArchitect}
-            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-medium transition ${
-              isArchitect
-                ? 'bg-primary text-primary-foreground shadow-xs'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
+            aria-pressed
+            className="inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-0.5 font-medium text-primary-foreground shadow-xs transition"
             onClick={() => setComposerPersona('architect')}
             type="button"
           >
@@ -80,67 +89,63 @@ export function ComposerArchitectBar({ onPickImages, target = 'main' }: Composer
           </button>
         </div>
 
-        {isArchitect && (
-          <div className="flex flex-wrap items-center gap-1">
-            {onPickImages && (
-              <button
-                className="inline-flex items-center gap-1 rounded-full border border-border/75 bg-card/85 px-2.5 py-0.5 text-[11px] font-medium text-foreground hover:border-primary/50"
-                onClick={onPickImages}
-                type="button"
-              >
-                <ImagePlus className="h-3 w-3 text-primary" />
-                Attach Ref Image
-              </button>
-            )}
+        <div className="flex flex-wrap items-center gap-1">
+          {onPickImages && (
             <button
               className="inline-flex items-center gap-1 rounded-full border border-border/75 bg-card/85 px-2.5 py-0.5 text-[11px] font-medium text-foreground hover:border-primary/50"
-              onClick={() => goSettings('/settings?tab=config:appearance&page=theme')}
+              onClick={onPickImages}
               type="button"
             >
-              <Palette className="h-3 w-3 text-primary" />
-              Visual Studio
+              <ImagePlus className="h-3 w-3 text-primary" />
+              Attach Ref Image
             </button>
-            <button
-              className="inline-flex items-center gap-1 rounded-full border border-border/75 bg-card/85 px-2.5 py-0.5 text-[11px] font-medium text-foreground hover:border-primary/50"
-              onClick={() => goSettings('/settings?tab=config:voice')}
-              type="button"
-            >
-              <Mic className="h-3 w-3 text-primary" />
-              Voice Cloning
-            </button>
-          </div>
-        )}
+          )}
+          <button
+            className="inline-flex items-center gap-1 rounded-full border border-border/75 bg-card/85 px-2.5 py-0.5 text-[11px] font-medium text-foreground hover:border-primary/50"
+            onClick={() => goSettings('/settings?tab=config:appearance&page=theme')}
+            type="button"
+          >
+            <Palette className="h-3 w-3 text-primary" />
+            Visual Studio
+          </button>
+          <button
+            className="inline-flex items-center gap-1 rounded-full border border-border/75 bg-card/85 px-2.5 py-0.5 text-[11px] font-medium text-foreground hover:border-primary/50"
+            onClick={() => goSettings('/settings?tab=config:voice')}
+            type="button"
+          >
+            <Mic className="h-3 w-3 text-primary" />
+            Voice Cloning
+          </button>
+        </div>
       </div>
 
-      {isArchitect && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/60 bg-background/55 px-2.5 py-1.5 text-[11px] text-muted-foreground">
-          <span className="truncate">
-            Studio Architect mode — unlocks Foolmoon theme, material, pattern &amp; sticker tools. Switch to Standard for pure Hermes.
-          </span>
-          <div className="flex flex-wrap items-center gap-1">
-            <button
-              className="rounded-full border border-border/70 bg-card px-2 py-0.5 font-medium text-foreground hover:border-primary/60"
-              onClick={() => {
-                applyStudioUniverse('velvet-ribbon')
-              }}
-              type="button"
-            >
-              Velvet Ribbon
-            </button>
-            <button
-              className="rounded-full border border-border/70 bg-card px-2 py-0.5 font-medium text-foreground hover:border-primary/60"
-              onClick={() =>
-                stageRecipe(
-                  'Use `customize_foolmoon_studio` to design and immediately apply a custom Foolmoon universe with surface material, 20px rounded corners, repeating SVG pattern, and non-blocking corner character stickers matching my attached reference.'
-                )
-              }
-              type="button"
-            >
-              Stage Architect Recipe
-            </button>
-          </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/60 bg-background/55 px-2.5 py-1.5 text-[11px] text-muted-foreground">
+        <span className="truncate">
+          Studio Architect mode — unlocks Foolmoon theme, material, pattern &amp; sticker tools. Switch to Standard for focused chat.
+        </span>
+        <div className="flex flex-wrap items-center gap-1">
+          <button
+            className="rounded-full border border-border/70 bg-card px-2 py-0.5 font-medium text-foreground hover:border-primary/60"
+            onClick={() => {
+              applyStudioUniverse('velvet-ribbon')
+            }}
+            type="button"
+          >
+            Velvet Ribbon
+          </button>
+          <button
+            className="rounded-full border border-border/70 bg-card px-2 py-0.5 font-medium text-foreground hover:border-primary/60"
+            onClick={() =>
+              stageRecipe(
+                'Use `customize_foolmoon_studio` to design and immediately apply a custom Foolmoon universe with surface material, 20px rounded corners, repeating SVG pattern, and non-blocking corner character stickers matching my attached reference.'
+              )
+            }
+            type="button"
+          >
+            Stage Architect Recipe
+          </button>
         </div>
-      )}
+      </div>
     </div>
   )
 }
