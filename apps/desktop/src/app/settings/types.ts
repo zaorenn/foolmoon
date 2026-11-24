@@ -12,6 +12,7 @@ export type SettingsView =
   | 'gateway'
   | 'keybinds'
   | 'keys'
+  | 'mobile'
   | 'notifications'
   | 'plugins'
   | 'providers'

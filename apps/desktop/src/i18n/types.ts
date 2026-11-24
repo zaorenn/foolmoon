@@ -633,6 +633,43 @@ export interface Translations extends NoticeTranslations {
       notifications: string
       vault: string
       plugins: string
+      mobile: string
+    }
+    mobile: {
+      title: string
+      refresh: string
+      online: string
+      offline: string
+      paired: string
+      pairedUnknown: string
+      lastSeen: string
+      unknownName: string
+      capabilities: (count: number) => string
+      revoke: string
+      revokeDevice: (name: string) => string
+      revokeTitle: (name: string) => string
+      revokeDescription: (name: string) => string
+      revokeFailed: string
+      emptyTitle: string
+      emptyDescription: string
+      errorTitle: string
+      errorDescription: string
+      footnote: string
+      pairTitle: string
+      pairAction: string
+      pairGenerating: string
+      pairRefresh: string
+      pairDescription: string
+      pairCodeLabel: string
+      pairQrAlt: string
+      pairExpires: (minutes: number) => string
+      pairFailed: string
+      copyCode: string
+      bridgeTitle: string
+      bridgeModel: string
+      bridgeVoice: string
+      bridgeAddress: string
+      bridgeGpuReady: string
     }
     plugins: {
       title: string

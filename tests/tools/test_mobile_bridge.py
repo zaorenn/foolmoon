@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from pathlib import Path
 
 from agent.model_metadata import parse_context_limit_from_error
@@ -157,3 +158,89 @@ def test_desktop_sessions_list_and_detail_roundtrip(tmp_path, monkeypatch):
     assert detail["sessionId"] == "sess_mobile_hw_1"
     assert [m["role"] for m in detail["messages"]] == ["user", "assistant"]
     assert "Hazırlayıp kaydettim." in detail["messages"][1]["content"]
+
+
+def test_memory_sync_skips_malformed_entries(tmp_path, monkeypatch):
+    """One bad entry (non-numeric timestamp/importance, non-list tags) must not 500 the sync."""
+    monkeypatch.setattr(mb, "get_hermes_home", lambda: tmp_path)
+    res = mb._merge_mobile_memories([
+        {"id": "bad-ts", "content": "x", "updatedAtMs": "not-a-number"},
+        {"id": "bad-imp", "content": "x", "importance": "high"},
+        {"id": "bad-tags", "content": "x", "tags": 5},
+        {"id": "good", "content": "ok", "updatedAtMs": 10},
+    ])
+    assert res["ok"] is True
+    assert res["accepted"] == 1
+    assert [e["id"] for e in res["entries"]] == ["good"]
+
+
+def test_desktop_turn_slot_serializes_same_session():
+    """A second turn on the same session is refused while one runs; other sessions are free."""
+    with mb._desktop_turn_slot("sess-slot-x") as first:
+        assert first is True
+        with mb._desktop_turn_slot("sess-slot-x") as second:
+            assert second is False
+        with mb._desktop_turn_slot("sess-slot-y") as other:
+            assert other is True
+    assert not mb._DESKTOP_TURN_LOCKS  # registry drains when slots release
+    with mb._desktop_turn_slot("sess-slot-x") as again:
+        assert again is True
+
+
+def test_ws_answers_ping_while_desktop_turn_running(tmp_path, monkeypatch):
+    """The WS receive loop must stay responsive during a long desktop agent turn.
+
+    Awaiting the turn inline stalls ping/telemetry/device.tool_result, so every
+    PC→phone tool call dispatched mid-turn deadlocks to its timeout and the
+    phone's keepalive sees a dead bridge.
+    """
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setattr(mb, "get_hermes_home", lambda: tmp_path)
+    token = "fm_mob_" + "c" * 48
+    mb._save_devices({
+        "dev-ws": {
+            "device_id": "dev-ws",
+            "device_name": "WS Test",
+            "model": "",
+            "capabilities": [],
+            "token": token,
+        }
+    })
+
+    turn_started = threading.Event()
+    turn_release = threading.Event()
+
+    def _blocking_turn(prompt, **kwargs):
+        turn_started.set()
+        assert turn_release.wait(10), "test never released the turn"
+        return {
+            "ok": True,
+            "reply": "Görev tamamlandı.",
+            "sessionId": "sess-ws",
+            "sessionTitle": "WS",
+            "model": "test",
+            "elapsedMs": 1,
+        }
+
+    monkeypatch.setattr(mb, "_run_desktop_agent_turn_sync", _blocking_turn)
+    monkeypatch.setattr(mb, "_list_desktop_sessions_sync", lambda limit=25: [])
+
+    app = FastAPI()
+    app.include_router(mb.router)
+    with TestClient(app) as client:
+        with client.websocket_connect(f"/api/mobile/bridge?token={token}") as ws:
+            assert ws.receive_json()["type"] == "bridge.ready"
+            ws.send_json({"type": "desktop.chat.send", "reqId": "r1", "prompt": "ödev", "speak": False})
+            assert ws.receive_json()["type"] == "chat.thinking"
+            assert turn_started.wait(10), "desktop turn never started"
+
+            # The turn is still running: ping MUST be answered now.
+            ws.send_json({"type": "ping"})
+            assert ws.receive_json()["type"] == "pong"
+
+            turn_release.set()
+            done = ws.receive_json()
+            assert done["type"] == "chat.done"
+            assert done["reply"] == "Görev tamamlandı."

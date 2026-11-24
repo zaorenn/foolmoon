@@ -23,6 +23,7 @@ import threading
 import time
 import uuid
 import wave
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -60,6 +61,32 @@ class ConnectedMobileDevice:
 
 _CONNECTED_LOCK = threading.Lock()
 _CONNECTED_DEVICES: dict[str, ConnectedMobileDevice] = {}
+
+# One in-flight desktop agent turn per session: REST and WS (or two phones) racing the
+# same session_id would interleave writes into its state.db history.
+_DESKTOP_TURN_LOCKS: dict[str, threading.Lock] = {}
+_DESKTOP_TURN_LOCKS_GUARD = threading.Lock()
+
+
+@contextmanager
+def _desktop_turn_slot(session_id: str):
+    """Non-blocking per-session turn slot; yields False when a turn is already running.
+    The registry entry lives only while held, so it never grows with session count."""
+    with _DESKTOP_TURN_LOCKS_GUARD:
+        lock = _DESKTOP_TURN_LOCKS.get(session_id)
+        if lock is None:
+            lock = threading.Lock()
+            _DESKTOP_TURN_LOCKS[session_id] = lock
+        acquired = lock.acquire(blocking=False)
+    if not acquired:
+        yield False
+        return
+    try:
+        yield True
+    finally:
+        with _DESKTOP_TURN_LOCKS_GUARD:
+            lock.release()
+            _DESKTOP_TURN_LOCKS.pop(session_id, None)
 
 
 def _devices_path() -> Path:
@@ -143,6 +170,25 @@ def verify_mobile_request_token(request: Request) -> Optional[dict[str, Any]]:
         if dev:
             return dev
     return None
+
+
+def mobile_auth_gate_pass(request: Request) -> bool:
+    """Credential check shared by the loopback auth middleware and the OAuth gate.
+
+    Pairing routes carry their own credentials (single-use code, or the loopback
+    restriction for adb-bridged devices); every other mobile/audio route needs a
+    verified paired-device bearer token. Both gates MUST use this one seam so a
+    gated LAN/Tailscale bind accepts the same credentials as a loopback bind.
+    """
+    path = request.url.path
+    if path == "/api/mobile/pair/complete":
+        return True
+    if path in ("/api/mobile/pair/auto-local", "/api/mobile/pair/start"):
+        client_host = (request.client.host if request.client else "") or ""
+        return client_host in ("127.0.0.1", "::1", "localhost")
+    if path.startswith(("/api/mobile/", "/api/audio/")):
+        return verify_mobile_request_token(request) is not None
+    return False
 
 
 def list_connected_mobile_devices() -> list[dict[str, Any]]:
@@ -229,11 +275,15 @@ def _merge_mobile_memories(incoming: list[dict[str, Any]], since_ms: int = 0) ->
         for entry in incoming:
             if not isinstance(entry, dict) or not entry.get("id"):
                 continue
-            eid = str(entry["id"])
-            inc_ts = int(entry.get("updatedAtMs") or entry.get("createdAtMs") or now_ms)
-            existing = store.get(eid)
-            if existing is None or inc_ts >= int(existing.get("updatedAtMs") or 0):
-                store[eid] = {
+            # One malformed entry (non-numeric timestamp/importance, non-list tags) must
+            # not 500 the whole sync: skip it, keep merging the rest.
+            try:
+                eid = str(entry["id"])
+                inc_ts = int(entry.get("updatedAtMs") or entry.get("createdAtMs") or now_ms)
+                existing = store.get(eid)
+                if existing is not None and inc_ts < int(existing.get("updatedAtMs") or 0):
+                    continue
+                record = {
                     "id": eid,
                     "content": str(entry.get("content") or "").strip(),
                     "category": str(entry.get("category") or "fact"),
@@ -245,7 +295,10 @@ def _merge_mobile_memories(incoming: list[dict[str, Any]], since_ms: int = 0) ->
                     "createdAtMs": int(entry.get("createdAtMs") or inc_ts),
                     "updatedAtMs": inc_ts,
                 }
-                accepted += 1
+            except (TypeError, ValueError):
+                continue
+            store[eid] = record
+            accepted += 1
 
         tmp = path.with_suffix(".tmp")
         tmp.write_text(json.dumps(list(store.values()), indent=2, ensure_ascii=False), encoding="utf-8")
@@ -697,7 +750,8 @@ def _run_desktop_agent_turn_sync(
     clean_prompt = prompt.strip()
     t0 = time.monotonic()
 
-    with open_persistence(profile_scope(home=get_hermes_home()), eager=True) as store:
+    scope = profile_scope(home=get_hermes_home())
+    with open_persistence(scope, eager=True) as store:
         target_sid = (session_id or "").strip()
         is_existing = False
         if target_sid:
@@ -708,109 +762,116 @@ def _run_desktop_agent_turn_sync(
         if not target_sid:
             target_sid = f"{time.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
 
-        if not is_existing and store.sessions.get(target_sid) is None:
-            new_title = (title_hint or clean_prompt[:52]).strip() or f"Mobil Görev {target_sid[:8]}"
-            store.sessions.create(NewSession(
-                session_id=target_sid,
-                source="desktop",
-                model=model_name,
-                profile_name="default",
-            ))
-            try:
-                store.sessions.set_title(target_sid, new_title)
-            except Exception:
-                pass
+        with _desktop_turn_slot(target_sid) as got_slot:
+            if not got_slot:
+                return {
+                    "ok": False,
+                    "error": "Bu masaüstü oturumunda başka bir görev zaten çalışıyor. Bitmesini bekleyip tekrar deneyin.",
+                }
 
-        prior_history: list[dict[str, Any]] = []
-        if is_existing:
-            try:
-                conv = store.messages.read_conversation(
-                    target_sid,
-                    ConversationRequest(
-                        view=TranscriptView.ACTIVE,
-                        include_lineage=True,
-                        repair_alternation=True,
-                    ),
-                )
-                prior_history = [m.as_openai_message() for m in conv]
-            except Exception as exc:
-                _log.debug("Failed reading prior history for %s: %s", target_sid, exc)
+            if not is_existing and store.sessions.get(target_sid) is None:
+                new_title = (title_hint or clean_prompt[:52]).strip() or f"Mobil Görev {target_sid[:8]}"
+                store.sessions.create(NewSession(
+                    session_id=target_sid,
+                    source="desktop",
+                    model=model_name,
+                    profile_name=scope.name,
+                ))
+                try:
+                    store.sessions.set_title(target_sid, new_title)
+                except Exception:
+                    pass
 
-        def _on_tool_start(*args: Any, **_kwargs: Any) -> None:
-            tool_name = str(args[0]) if args else "araç"
-            _emit_prog(f"💻 PC Çalışıyor: {tool_name}")
+            prior_history: list[dict[str, Any]] = []
+            if is_existing:
+                try:
+                    conv = store.messages.read_conversation(
+                        target_sid,
+                        ConversationRequest(
+                            view=TranscriptView.ACTIVE,
+                            include_lineage=True,
+                            repair_alternation=True,
+                        ),
+                    )
+                    prior_history = [m.as_openai_message() for m in conv]
+                except Exception as exc:
+                    _log.debug("Failed reading prior history for %s: %s", target_sid, exc)
 
-        def _on_tool_progress(*args: Any, **_kwargs: Any) -> None:
-            if not args:
-                return
-            head = str(args[0])
-            if head in ("_thinking", "reasoning.available"):
-                _emit_prog("🧠 PC Düşünüyor…")
-            else:
-                _emit_prog(f"⚙️ PC: {head[:60]}")
+            def _on_tool_start(*args: Any, **_kwargs: Any) -> None:
+                tool_name = str(args[0]) if args else "araç"
+                _emit_prog(f"💻 PC Çalışıyor: {tool_name}")
 
-        remote_context = (
-            "[Masaüstü Devam & Uzaktan Ödev/Görev Modu]\n"
-            "Kullanıcı şu anda telefonundan evdeki/masadaki Foolmoon Desktop oturumuna yazıyor. "
-            "İstek ödev, araştırma, dosya hazırlama, kodlama veya masaüstü işlemi içeriyorsa bilgisayardaki "
-            "araçlarını (dosya yazma, web araştırma, terminal, Windows kontrolleri) aktif şekilde kullan ve "
-            "sonucu masaüstü oturumunda kalıcı olarak hazır bırak.\n\n"
-            f"{clean_prompt}"
-        )
+            def _on_tool_progress(*args: Any, **_kwargs: Any) -> None:
+                if not args:
+                    return
+                head = str(args[0])
+                if head in ("_thinking", "reasoning.available"):
+                    _emit_prog("🧠 PC Düşünüyor…")
+                else:
+                    _emit_prog(f"⚙️ PC: {head[:60]}")
 
-        agent = AIAgent(
-            model=model_name,
-            max_iterations=18,
-            provider=runtime.get("provider"),
-            requested_provider=runtime.get("requested_provider"),
-            base_url=runtime.get("base_url"),
-            api_key=runtime.get("api_key"),
-            api_mode=runtime.get("api_mode"),
-            credential_pool=runtime.get("credential_pool"),
-            quiet_mode=True,
-            verbose_logging=False,
-            enabled_toolsets=enabled_toolsets,
-            platform="desktop",
-            session_id=target_sid,
-            session_db=store,
-            persistence=store,
-            tool_start_callback=_on_tool_start,
-            tool_progress_callback=_on_tool_progress,
-        )
-        try:
-            _emit_prog("⚡ Masaüstü yapay zeka yanıtlıyor…")
-            res = agent.run_conversation(
-                user_message=remote_context,
-                conversation_history=prior_history or None,
-                persist_user_message=clean_prompt,
-                title_user_message=clean_prompt,
+            remote_context = (
+                "[Masaüstü Devam & Uzaktan Ödev/Görev Modu]\n"
+                "Kullanıcı şu anda telefonundan evdeki/masadaki Foolmoon Desktop oturumuna yazıyor. "
+                "İstek ödev, araştırma, dosya hazırlama, kodlama veya masaüstü işlemi içeriyorsa bilgisayardaki "
+                "araçlarını (dosya yazma, web araştırma, terminal, Windows kontrolleri) aktif şekilde kullan ve "
+                "sonucu masaüstü oturumunda kalıcı olarak hazır bırak.\n\n"
+                f"{clean_prompt}"
             )
-        finally:
+
+            agent = AIAgent(
+                model=model_name,
+                max_iterations=18,
+                provider=runtime.get("provider"),
+                requested_provider=runtime.get("requested_provider"),
+                base_url=runtime.get("base_url"),
+                api_key=runtime.get("api_key"),
+                api_mode=runtime.get("api_mode"),
+                credential_pool=runtime.get("credential_pool"),
+                quiet_mode=True,
+                verbose_logging=False,
+                enabled_toolsets=enabled_toolsets,
+                platform="desktop",
+                session_id=target_sid,
+                session_db=store,
+                persistence=store,
+                tool_start_callback=_on_tool_start,
+                tool_progress_callback=_on_tool_progress,
+            )
             try:
-                agent.close()
-            except Exception:
-                pass
+                _emit_prog("⚡ Masaüstü yapay zeka yanıtlıyor…")
+                res = agent.run_conversation(
+                    user_message=remote_context,
+                    conversation_history=prior_history or None,
+                    persist_user_message=clean_prompt,
+                    title_user_message=clean_prompt,
+                )
+            finally:
+                try:
+                    agent.close()
+                except Exception:
+                    pass
 
-        elapsed_ms = int((time.monotonic() - t0) * 1000)
-        reply = str((res or {}).get("final_response") or "").strip()
-        if not reply:
-            reply = "Görev bilgisayarındaki Foolmoon Masaüstü oturumunda işlendi."
+            elapsed_ms = int((time.monotonic() - t0) * 1000)
+            reply = str((res or {}).get("final_response") or "").strip()
+            if not reply:
+                reply = "Görev bilgisayarındaki Foolmoon Masaüstü oturumunda işlendi."
 
-        sess_row = store.sessions.get(target_sid)
-        sess_title = (
-            str(sess_row.title or sess_row.display_name or "").strip()
-            if sess_row is not None else ""
-        ) or (title_hint or clean_prompt[:52])
+            sess_row = store.sessions.get(target_sid)
+            sess_title = (
+                str(sess_row.title or sess_row.display_name or "").strip()
+                if sess_row is not None else ""
+            ) or (title_hint or clean_prompt[:52])
 
-        return {
-            "ok": True,
-            "mode": "desktop",
-            "sessionId": target_sid,
-            "sessionTitle": sess_title,
-            "reply": reply,
-            "model": model_name,
-            "elapsedMs": elapsed_ms,
-        }
+            return {
+                "ok": True,
+                "mode": "desktop",
+                "sessionId": target_sid,
+                "sessionTitle": sess_title,
+                "reply": reply,
+                "model": model_name,
+                "elapsedMs": elapsed_ms,
+            }
 
 
 def _execute_desktop_control_sync(action: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
@@ -1287,6 +1348,183 @@ async def mobile_bridge_ws(websocket: WebSocket):
         **voice_info,
     })
 
+    # Long-running handlers (agent turns, TTS/STT, screen capture) run as background tasks:
+    # awaiting them inline would stall the receive loop, so ping/telemetry/device.tool_result
+    # could not be processed mid-turn and every PC→phone tool call would deadlock to timeout.
+    bg_tasks: set[asyncio.Task] = set()
+
+    def _spawn(coro: Any) -> None:
+        task = asyncio.create_task(coro)
+        bg_tasks.add(task)
+        task.add_done_callback(bg_tasks.discard)
+
+    async def _send(payload: dict[str, Any]) -> None:
+        try:
+            await websocket.send_json(payload)
+        except Exception:
+            pass  # socket closed mid-turn; the receive loop exits on its next read
+
+    async def _handle_memory_sync(msg: dict[str, Any]) -> None:
+        entries = msg.get("entries") if isinstance(msg.get("entries"), list) else []
+        since_ms = int(msg.get("sinceMs") or 0)
+        sync_res = await asyncio.to_thread(_merge_mobile_memories, entries, since_ms)
+        await _send({"type": "memory.synced", **sync_res})
+
+    async def _handle_voice_select(msg: dict[str, Any]) -> None:
+        voice_id = str(msg.get("voiceId") or "").strip()
+        engine = str(msg.get("engine") or "").strip() or None
+        res = await asyncio.to_thread(_select_pc_voice_clone_sync, voice_id, engine)
+        await _send({"type": "voice.updated", **res})
+
+    async def _handle_sessions_list(msg: dict[str, Any]) -> None:
+        limit = int(msg.get("limit") or 25)
+        try:
+            sessions = await asyncio.to_thread(_list_desktop_sessions_sync, limit)
+            await _send({"type": "desktop.sessions", "ok": True, "sessions": sessions})
+        except Exception as exc:
+            await _send({"type": "desktop.sessions", "ok": False, "sessions": [], "error": str(exc)})
+
+    async def _handle_session_get(msg: dict[str, Any]) -> None:
+        sid = str(msg.get("sessionId") or "").strip()
+        try:
+            detail = await asyncio.to_thread(_get_desktop_session_detail_sync, sid, int(msg.get("limit") or 60))
+            await _send({"type": "desktop.session.detail", **detail})
+        except Exception as exc:
+            await _send({"type": "desktop.session.detail", "ok": False, "sessionId": sid, "error": str(exc)})
+
+    async def _handle_desktop_control(msg: dict[str, Any]) -> None:
+        req_id = str(msg.get("reqId") or uuid.uuid4().hex[:8])
+        act = str(msg.get("action") or "").strip()
+        params = msg.get("params") if isinstance(msg.get("params"), dict) else {}
+        try:
+            ctrl_res = await asyncio.to_thread(_execute_desktop_control_sync, act, params)
+            await _send({"type": "desktop.control.result", "reqId": req_id, **ctrl_res})
+        except Exception as exc:
+            await _send({
+                "type": "desktop.control.result",
+                "reqId": req_id,
+                "ok": False,
+                "action": act,
+                "message": f"PC kontrol hatası: {exc}",
+            })
+
+    async def _handle_transcribe(msg: dict[str, Any]) -> None:
+        req_id = str(msg.get("reqId") or uuid.uuid4().hex[:8])
+        audio_b64 = str(msg.get("audioBase64") or "")
+        fname = str(msg.get("filename") or "mobile.wav")
+        try:
+            stt_res = await asyncio.to_thread(_transcribe_mobile_audio_sync, audio_b64, fname)
+            await _send({"type": "voice.transcript", "reqId": req_id, **stt_res})
+        except Exception as exc:
+            await _send({"type": "voice.transcript", "reqId": req_id, "ok": False, "error": str(exc)})
+
+    async def _handle_speak(msg: dict[str, Any]) -> None:
+        req_id = str(msg.get("reqId") or uuid.uuid4().hex[:8])
+        text = str(msg.get("text") or "").strip()
+        voice_id = str(msg.get("voiceId") or "").strip() or None
+        try:
+            tts_res = await asyncio.to_thread(_synthesize_mobile_tts_sync, text, voice_id)
+            await _send({"type": "tts.audio", "reqId": req_id, **tts_res})
+        except Exception as exc:
+            await _send({"type": "tts.audio", "reqId": req_id, "ok": False, "error": str(exc)})
+
+    async def _handle_desktop_chat(msg: dict[str, Any]) -> None:
+        req_id = str(msg.get("reqId") or uuid.uuid4().hex[:8])
+        prompt = str(msg.get("prompt") or "").strip()
+        if not prompt:
+            return
+        target_sid = str(msg.get("sessionId") or "").strip() or None
+        title_hint = str(msg.get("titleHint") or "").strip() or None
+        speak = bool(msg.get("speak", True))
+        voice_id = str(msg.get("voiceId") or "").strip() or None
+        await _send({"type": "chat.thinking", "reqId": req_id, "mode": "desktop"})
+
+        def _push_progress(status_text: str) -> None:
+            try:
+                asyncio.run_coroutine_threadsafe(
+                    websocket.send_json({
+                        "type": "chat.progress",
+                        "reqId": req_id,
+                        "mode": "desktop",
+                        "status": status_text,
+                    }),
+                    loop,
+                )
+            except Exception:
+                pass
+
+        try:
+            dres = await asyncio.to_thread(
+                _run_desktop_agent_turn_sync,
+                prompt,
+                session_id=target_sid,
+                title_hint=title_hint,
+                progress_cb=_push_progress,
+            )
+            reply = dres.get("reply") or ""
+            await _send({
+                "type": "chat.done",
+                "reqId": req_id,
+                "mode": "desktop",
+                "sessionId": dres.get("sessionId"),
+                "sessionTitle": dres.get("sessionTitle"),
+                "reply": reply,
+                "model": dres.get("model"),
+                "elapsedMs": dres.get("elapsedMs"),
+            })
+            # Refresh desktop sessions list so mobile immediately shows the new/updated desktop chat
+            try:
+                sessions = await asyncio.to_thread(_list_desktop_sessions_sync, 25)
+                await _send({"type": "desktop.sessions", "ok": True, "sessions": sessions})
+            except Exception:
+                pass
+            if speak and reply:
+                try:
+                    tts_res = await asyncio.to_thread(_synthesize_mobile_tts_sync, reply, voice_id)
+                    await _send({"type": "tts.audio", "reqId": req_id, **tts_res})
+                except Exception as tts_exc:
+                    _log.warning("Mobile Desktop WS TTS failed: %s", tts_exc)
+        except Exception as exc:
+            await _send({"type": "chat.error", "reqId": req_id, "error": str(exc)})
+
+    async def _handle_chat(msg: dict[str, Any]) -> None:
+        req_id = str(msg.get("reqId") or uuid.uuid4().hex[:8])
+        prompt = str(msg.get("prompt") or "").strip()
+        if not prompt:
+            return
+        speak = bool(msg.get("speak", True))
+        voice_id = str(msg.get("voiceId") or "").strip() or None
+        await _send({"type": "chat.thinking", "reqId": req_id, "mode": "mobile"})
+        try:
+            chat_res = await asyncio.to_thread(
+                _run_pc_compute_chat_sync,
+                prompt,
+                history=msg.get("history") if isinstance(msg.get("history"), list) else [],
+                phone_memories=msg.get("phoneMemories") if isinstance(msg.get("phoneMemories"), list) else [],
+                screen_context=msg.get("screenContext"),
+                device_telemetry=conn.telemetry,
+                device_id=device_id,
+            )
+            reply = chat_res.get("reply") or ""
+            await _send({
+                "type": "chat.done",
+                "reqId": req_id,
+                "mode": "mobile",
+                "reply": reply,
+                "model": chat_res.get("model"),
+                "elapsedMs": chat_res.get("elapsedMs"),
+                "usage": chat_res.get("usage"),
+                "phoneAction": chat_res.get("phoneAction"),
+            })
+            if speak and reply:
+                try:
+                    tts_res = await asyncio.to_thread(_synthesize_mobile_tts_sync, reply, voice_id)
+                    await _send({"type": "tts.audio", "reqId": req_id, **tts_res})
+                except Exception as tts_exc:
+                    _log.warning("Mobile WS TTS failed: %s", tts_exc)
+        except Exception as exc:
+            await _send({"type": "chat.error", "reqId": req_id, "error": str(exc)})
+
     try:
         while True:
             raw = await websocket.receive_text()
@@ -1294,6 +1532,8 @@ async def mobile_bridge_ws(websocket: WebSocket):
             try:
                 msg = json.loads(raw)
             except json.JSONDecodeError:
+                continue
+            if not isinstance(msg, dict):
                 continue
             mtype = str(msg.get("type") or "")
 
@@ -1319,171 +1559,31 @@ async def mobile_bridge_ws(websocket: WebSocket):
                     })
 
             elif mtype == "memory.sync":
-                entries = msg.get("entries") if isinstance(msg.get("entries"), list) else []
-                since_ms = int(msg.get("sinceMs") or 0)
-                sync_res = await asyncio.to_thread(_merge_mobile_memories, entries, since_ms)
-                await websocket.send_json({"type": "memory.synced", **sync_res})
-
+                _spawn(_handle_memory_sync(msg))
             elif mtype == "voice.select":
-                voice_id = str(msg.get("voiceId") or "").strip()
-                engine = str(msg.get("engine") or "").strip() or None
-                res = await asyncio.to_thread(_select_pc_voice_clone_sync, voice_id, engine)
-                await websocket.send_json({"type": "voice.updated", **res})
-
+                _spawn(_handle_voice_select(msg))
             elif mtype == "desktop.sessions.list":
-                limit = int(msg.get("limit") or 25)
-                try:
-                    sessions = await asyncio.to_thread(_list_desktop_sessions_sync, limit)
-                    await websocket.send_json({"type": "desktop.sessions", "ok": True, "sessions": sessions})
-                except Exception as exc:
-                    await websocket.send_json({"type": "desktop.sessions", "ok": False, "sessions": [], "error": str(exc)})
-
+                _spawn(_handle_sessions_list(msg))
             elif mtype == "desktop.session.get":
-                sid = str(msg.get("sessionId") or "").strip()
-                try:
-                    detail = await asyncio.to_thread(_get_desktop_session_detail_sync, sid, int(msg.get("limit") or 60))
-                    await websocket.send_json({"type": "desktop.session.detail", **detail})
-                except Exception as exc:
-                    await websocket.send_json({"type": "desktop.session.detail", "ok": False, "sessionId": sid, "error": str(exc)})
-
+                _spawn(_handle_session_get(msg))
             elif mtype == "desktop.control":
-                req_id = str(msg.get("reqId") or uuid.uuid4().hex[:8])
-                act = str(msg.get("action") or "").strip()
-                params = msg.get("params") if isinstance(msg.get("params"), dict) else {}
-                try:
-                    ctrl_res = await asyncio.to_thread(_execute_desktop_control_sync, act, params)
-                    await websocket.send_json({"type": "desktop.control.result", "reqId": req_id, **ctrl_res})
-                except Exception as exc:
-                    await websocket.send_json({
-                        "type": "desktop.control.result",
-                        "reqId": req_id,
-                        "ok": False,
-                        "action": act,
-                        "message": f"PC kontrol hatası: {exc}",
-                    })
-
+                _spawn(_handle_desktop_control(msg))
             elif mtype == "voice.transcribe":
-                req_id = str(msg.get("reqId") or uuid.uuid4().hex[:8])
-                audio_b64 = str(msg.get("audioBase64") or "")
-                fname = str(msg.get("filename") or "mobile.wav")
-                try:
-                    stt_res = await asyncio.to_thread(_transcribe_mobile_audio_sync, audio_b64, fname)
-                    await websocket.send_json({"type": "voice.transcript", "reqId": req_id, **stt_res})
-                except Exception as exc:
-                    await websocket.send_json({"type": "voice.transcript", "reqId": req_id, "ok": False, "error": str(exc)})
-
+                _spawn(_handle_transcribe(msg))
             elif mtype == "voice.speak":
-                req_id = str(msg.get("reqId") or uuid.uuid4().hex[:8])
-                text = str(msg.get("text") or "").strip()
-                voice_id = str(msg.get("voiceId") or "").strip() or None
-                try:
-                    tts_res = await asyncio.to_thread(_synthesize_mobile_tts_sync, text, voice_id)
-                    await websocket.send_json({"type": "tts.audio", "reqId": req_id, **tts_res})
-                except Exception as exc:
-                    await websocket.send_json({"type": "tts.audio", "reqId": req_id, "ok": False, "error": str(exc)})
-
+                _spawn(_handle_speak(msg))
             elif mtype == "desktop.chat.send":
-                req_id = str(msg.get("reqId") or uuid.uuid4().hex[:8])
-                prompt = str(msg.get("prompt") or "").strip()
-                if not prompt:
-                    continue
-                target_sid = str(msg.get("sessionId") or "").strip() or None
-                title_hint = str(msg.get("titleHint") or "").strip() or None
-                speak = bool(msg.get("speak", True))
-                voice_id = str(msg.get("voiceId") or "").strip() or None
-                await websocket.send_json({"type": "chat.thinking", "reqId": req_id, "mode": "desktop"})
-
-                def _push_progress(status_text: str) -> None:
-                    try:
-                        asyncio.run_coroutine_threadsafe(
-                            websocket.send_json({
-                                "type": "chat.progress",
-                                "reqId": req_id,
-                                "mode": "desktop",
-                                "status": status_text,
-                            }),
-                            loop,
-                        )
-                    except Exception:
-                        pass
-
-                try:
-                    dres = await asyncio.to_thread(
-                        _run_desktop_agent_turn_sync,
-                        prompt,
-                        session_id=target_sid,
-                        title_hint=title_hint,
-                        progress_cb=_push_progress,
-                    )
-                    reply = dres.get("reply") or ""
-                    await websocket.send_json({
-                        "type": "chat.done",
-                        "reqId": req_id,
-                        "mode": "desktop",
-                        "sessionId": dres.get("sessionId"),
-                        "sessionTitle": dres.get("sessionTitle"),
-                        "reply": reply,
-                        "model": dres.get("model"),
-                        "elapsedMs": dres.get("elapsedMs"),
-                    })
-                    # Refresh desktop sessions list so mobile immediately shows the new/updated desktop chat
-                    try:
-                        sessions = await asyncio.to_thread(_list_desktop_sessions_sync, 25)
-                        await websocket.send_json({"type": "desktop.sessions", "ok": True, "sessions": sessions})
-                    except Exception:
-                        pass
-                    if speak and reply:
-                        try:
-                            tts_res = await asyncio.to_thread(_synthesize_mobile_tts_sync, reply, voice_id)
-                            await websocket.send_json({"type": "tts.audio", "reqId": req_id, **tts_res})
-                        except Exception as tts_exc:
-                            _log.warning("Mobile Desktop WS TTS failed: %s", tts_exc)
-                except Exception as exc:
-                    await websocket.send_json({"type": "chat.error", "reqId": req_id, "error": str(exc)})
-
+                _spawn(_handle_desktop_chat(msg))
             elif mtype == "chat.send":
-                req_id = str(msg.get("reqId") or uuid.uuid4().hex[:8])
-                prompt = str(msg.get("prompt") or "").strip()
-                if not prompt:
-                    continue
-                speak = bool(msg.get("speak", True))
-                voice_id = str(msg.get("voiceId") or "").strip() or None
-                await websocket.send_json({"type": "chat.thinking", "reqId": req_id, "mode": "mobile"})
-                try:
-                    chat_res = await asyncio.to_thread(
-                        _run_pc_compute_chat_sync,
-                        prompt,
-                        history=msg.get("history") if isinstance(msg.get("history"), list) else [],
-                        phone_memories=msg.get("phoneMemories") if isinstance(msg.get("phoneMemories"), list) else [],
-                        screen_context=msg.get("screenContext"),
-                        device_telemetry=conn.telemetry,
-                        device_id=device_id,
-                    )
-                    reply = chat_res.get("reply") or ""
-                    await websocket.send_json({
-                        "type": "chat.done",
-                        "reqId": req_id,
-                        "mode": "mobile",
-                        "reply": reply,
-                        "model": chat_res.get("model"),
-                        "elapsedMs": chat_res.get("elapsedMs"),
-                        "usage": chat_res.get("usage"),
-                        "phoneAction": chat_res.get("phoneAction"),
-                    })
-                    if speak and reply:
-                        try:
-                            tts_res = await asyncio.to_thread(_synthesize_mobile_tts_sync, reply, voice_id)
-                            await websocket.send_json({"type": "tts.audio", "reqId": req_id, **tts_res})
-                        except Exception as tts_exc:
-                            _log.warning("Mobile WS TTS failed: %s", tts_exc)
-                except Exception as exc:
-                    await websocket.send_json({"type": "chat.error", "reqId": req_id, "error": str(exc)})
+                _spawn(_handle_chat(msg))
     except WebSocketDisconnect:
         pass
     finally:
         for fut in conn.pending_calls.values():
             if not fut.done():
                 fut.set_exception(RuntimeError("Android companion disconnected"))
+        for task in bg_tasks:
+            task.cancel()
         with _CONNECTED_LOCK:
             if _CONNECTED_DEVICES.get(device_id) is conn:
                 _CONNECTED_DEVICES.pop(device_id, None)

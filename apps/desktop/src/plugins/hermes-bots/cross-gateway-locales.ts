@@ -177,5 +177,22 @@ export const CROSS_GATEWAY_GROUP_LOCALES = {
     memberRollbackFailed: (connection, bot) =>
       `Miembros no guardados, y el cambio ya hecho para ${bot} en ${connection} no se pudo deshacer: puede que ${connection} todavía lo tenga. El chat de grupo muestra lo último que informó ${connection}; vuelve a conectarlo y revisa los miembros.`,
     selectionElsewhere: connection => `Todos estos bots están en ${connection}. Añade un bot de esta conexión o cambia a ${connection} para crear un grupo con sus bots.`
+  },
+  tr: {
+    gatewayPeer: (owner, local = false) => `Bu Masaüstü kapalıyken bile ${local ? 'bu cihazda' : `${owner} üzerinde`} çalışır. Diğer bilgisayarlardaki botlara yalnızca metin gönderilir.`,
+    pickBots: max => `2–${max} bot seç.`,
+    gatewayMembership: 'Üyelikler bu grup sohbetiyle birlikte kendi bilgisayarında saklanır.',
+    checkingPeers: 'Bu grup sohbetindeki her bilgisayarın hazır olup olmadığı denetleniyor…',
+    peerCheckFailed: (connection, local = false) => `${local ? 'Bu cihaz' : connection} denetlenemedi. Orada Hermes’in çalıştığından emin olup tekrar dene.`,
+    ownerUpdateRequired: place => `${place} üzerindeki Hermes grup sohbetlerini çalıştırmak için çok eski. Orada Hermes’i güncelleyip tekrar dene.`,
+    ownerCannotSeatPeers: place => `${place} üzerindeki Hermes henüz başka bilgisayarlardan bot alamıyor. Orada Hermes’i güncelle ve ağ geçidini çalıştır (hermes gateway run), ardından tekrar dene.`,
+    peerRouteMissing: 'Seçilen botun bilgisayarı bağlı değil. Yeniden bağlayıp tekrar dene.',
+    peerGatewayChanged: place => `${place} artık bu botun geldiği Hermes kurulumundan farklı bir kurulum çalıştırıyor. Yeniden bağlayıp tekrar dene.`,
+    groupsOffline: (connection, bot) => `${connection} çevrimdışı — ${bot} gruplarını değiştirmek için yeniden bağlan.`,
+    memberOffline: (connection, bot) => `${connection} çevrimdışı — ${bot} üyesini çıkarmak için yeniden bağlan.`,
+    memberSaveFailed: (connection, bot) => `Üyeler kaydedilmedi: ${connection}, ${bot} için yapılan değişikliği kabul etmedi. Hiçbir şey değiştirilmedi; erişilebilir olduğunda tekrar dene.`,
+    memberRollbackFailed: (connection, bot) =>
+      `Üyeler kaydedilmedi ve ${connection} üzerinde ${bot} için yapılan değişiklik geri alınamadı: ${connection} değişikliği hâlâ tutuyor olabilir. Grup sohbeti ${connection} tarafından son bildirilen durumu gösterir; yeniden bağlanıp üyeleri kontrol et.`,
+    selectionElsewhere: connection => `Bu botların tümü ${connection} üzerinde. Bu bağlantıdan bir bot ekle veya kendi botlarıyla bir grup başlatmak için ${connection} bağlantısına geç.`
   }
 } satisfies Record<string, CrossGatewayGroupMessages>

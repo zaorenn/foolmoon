@@ -48,10 +48,10 @@ export function ComposerArchitectBar({ onPickImages, target = 'main' }: Composer
     return (
       <div className="flex items-center justify-end pb-0.5 select-none" data-slot="composer-architect-bar">
         <button
+          aria-label="Open Studio Architect tools (themes, materials, voice studio)"
           aria-pressed={false}
           className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium text-muted-foreground/80 transition hover:bg-muted/60 hover:text-foreground"
           onClick={() => setComposerPersona('architect')}
-          title="Open Studio Architect tools (themes, materials, voice studio)"
           type="button"
         >
           <Compass className="h-3 w-3" />

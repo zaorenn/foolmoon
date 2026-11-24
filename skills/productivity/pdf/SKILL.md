@@ -14,6 +14,8 @@ metadata:
 
 # PDF Skill
 
+> **Fast Cross-Platform MCP Shortcut (Recommended):** Before dropping to shell scripts, prefer the direct `power_files` MCP tools: `mcp__power_files__inspect_document` (PyMuPDF + pdfplumber), `mcp__power_files__pdf_inspect_form` (AcroForm & flat labels), `mcp__power_files__pdf_fill_form` (Unicode fill + PNG preview), `mcp__power_files__pdf_edit_live` (live replace/insert/highlight/merge/reorder), and `mcp__power_files__create_rich_document` (publication-grade `.pdf`, `.docx`, `.xlsx`). Use the CLI helpers below only for advanced encryption (`pdf_secure.py`) or specialized workflows.
+
 Create PDFs from structured specs, build and fill AcroForm forms (with layout linting and visual overlays), extract text/tables/metadata, merge/split/rotate/watermark/stamp pages, export page images, manage metadata and attachments, and encrypt/decrypt — using pypdf, reportlab, and pdfplumber. Two absorbed capabilities live in references/ (read the matching file before those tasks):
 
 - **Scanned/image-only PDFs and OCR** (pymupdf fast path, marker-pdf quality path, scripts/extract_pymupdf.py + scripts/extract_marker.py): `references/ocr-extraction.md`

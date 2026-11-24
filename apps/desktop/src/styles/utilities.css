@@ -1,0 +1,502 @@
+@layer utilities {
+  /* Keep relational selectors on their owning row, not inside a universal
+     group-has descendant match: that invalidates unrelated chat panes. */
+  .row-hover:is(:hover, :has([data-session-actions]:is(:focus-visible, [data-state='open']))) .session-row-tail {
+    opacity: 0;
+  }
+
+  .row-hover:has([data-pr-link]:is(:hover, :focus-visible)):not(
+      :has([data-session-actions]:is(:focus-visible, [data-state='open']))
+    )
+    .session-row-tail {
+    opacity: 1;
+  }
+
+  .row-hover:has([data-pr-link]:is(:hover, :focus-visible)):not(
+      :has([data-session-actions]:is(:focus-visible, [data-state='open']))
+    )
+    .session-row-kebab {
+    pointer-events: none;
+    opacity: 0;
+  }
+
+  [data-sidebar='menu-item']:has(> [data-sidebar='menu-action']) > [data-sidebar='menu-button'] {
+    padding-right: calc(var(--spacing) * 8);
+  }
+
+  [data-tab-key-hint] + .tab-key-hint-icon {
+    visibility: hidden;
+  }
+
+  [class*='rounded-full'],
+  [class*=':rounded-full'] {
+    border-radius: calc(var(--radius-scalar) * 9999rem);
+  }
+}
+
+/* Interactive list-row hover — the sessions-list interaction, shared by every
+   row list (sessions, capabilities, messaging, file trees, timeline): the
+   highlight lands instantly on hover-in and fades out over 100ms on leave. */
+@utility row-hover {
+  cursor: pointer;
+  transition:
+    color 100ms ease-out,
+    background-color 100ms ease-out;
+
+  &:hover {
+    background-color: var(--ui-row-hover-background);
+    transition: none;
+  }
+}
+
+/* Pure-CSS edge fade for a scroller (FadeScroll). From each edge inward the
+   mask is `pad` of fully hidden content, then `size` of gradient up to fully
+   visible. The pad is for the scroller's own padding, so the gradient starts
+   at the content instead of spending itself on empty space. Both lengths are
+   scaled by a 0..1 progress that the scroller's own scroll position animates
+   (scroll-driven animations, Chromium 115+), so an edge only fades while
+   content is clipped behind it: progress rests at 0, so a list that fits
+   (inactive timeline, no animation) and a browser without support are never
+   dimmed. The progress is a registered <number> so the keyframes can
+   interpolate it, and an edge is fully faded in once `pad + size` px have
+   been scrolled. */
+@property --scroll-fade-top {
+  syntax: '<number>';
+  initial-value: 0;
+  inherits: false;
+}
+
+@property --scroll-fade-bottom {
+  syntax: '<number>';
+  initial-value: 0;
+  inherits: false;
+}
+
+@keyframes scroll-fade-top {
+  to {
+    --scroll-fade-top: 1;
+  }
+}
+
+@keyframes scroll-fade-bottom {
+  from {
+    --scroll-fade-bottom: 1;
+  }
+}
+
+@utility scroll-fade-y {
+  --scroll-fade-size: 1.25rem;
+  --scroll-fade-pad: 0px;
+
+  mask-image: linear-gradient(
+    to bottom,
+    transparent calc(var(--scroll-fade-pad) * var(--scroll-fade-top)),
+    #000 calc((var(--scroll-fade-pad) + var(--scroll-fade-size)) * var(--scroll-fade-top)),
+    #000 calc(100% - (var(--scroll-fade-pad) + var(--scroll-fade-size)) * var(--scroll-fade-bottom)),
+    transparent calc(100% - var(--scroll-fade-pad) * var(--scroll-fade-bottom))
+  );
+  animation:
+    scroll-fade-top linear both,
+    scroll-fade-bottom linear both;
+  /* After the shorthand: it resets the timeline. */
+  animation-timeline: scroll(self y), scroll(self y);
+  animation-range:
+    0 calc(var(--scroll-fade-pad) + var(--scroll-fade-size)),
+    calc(100% - var(--scroll-fade-pad) - var(--scroll-fade-size)) 100%;
+}
+
+/* The guided-onboarding thread is marked with [data-thread-type='onboarding']
+   — the hook for onboarding-only transcript styling. */
+
+/* Guided chat is a conversation, not a work surface: hide per-message action
+   chrome (branch/copy/read-aloud/regenerate bar, reaction slot) and the turn-
+   duration stamp — regenerate/branch would derail the scripted flow. */
+[data-thread-type='onboarding'] [data-slot='aui_msg-actions'],
+[data-thread-type='onboarding'] [data-slot='aui_msg-reactions'],
+[data-thread-type='onboarding'] [data-slot='aui_turn-duration'] {
+  display: none;
+}
+
+/* Hermes speaks first here: no user bubble sits above the opening assistant
+   turn, so the first painted row would press against the pane chrome. The
+   utility class on the row pulls the top pad 0.5rem ABOVE the titlebar; give
+   the air back, and only in this thread. */
+[data-slot='aui_thread-content'][data-thread-type='onboarding'] {
+  padding-top: calc(var(--titlebar-height) + 1rem);
+}
+
+/* The setup chat is a first conversation read at arm's length in a small
+   window, so its transcript, cards and composer run a size up. It sets the
+   base tokens: the thread and composer scopes derive the final ones from
+   these times the chat text scale. */
+[data-setup-chat] {
+  --conversation-text-base-size: 0.9375rem;
+  --conversation-tool-base-size: 0.75rem;
+  --conversation-caption-base-size: 0.8125rem;
+  --conversation-base-line-height: 1.375rem;
+}
+
+@keyframes arc-border {
+  /* Transform travel (compositor-only), never background-position: the old
+     background-position version cost ~3,600 main-thread style recalcs per
+     minute per arc (#53902, #73082).
+
+     One cycle moves the ::before layer by 1.2 of the host (50% of the 240%
+     layer), which advances the gradient by exactly one period, so the loop
+     is seamless. */
+  0% {
+    transform: translate(0, 0);
+  }
+  100% {
+    transform: translate(-50%, -50%);
+  }
+}
+
+.arc-border {
+  --arc-c0: color-mix(in srgb, var(--dt-foreground) 0%, transparent);
+  --arc-c1: var(--dt-midground);
+  --arc-c2: var(--dt-background);
+  --arc-angle: 160deg;
+  --arc-width: 0.078125rem;
+  /* How far the ring stands off its host, per side. */
+  --arc-standoff: 0.125rem;
+  /* An outset ring is only concentric when its radius grows by the standoff
+     (r = r_host + gap); `border-radius: inherit` leaves the corner pinched.
+     Defaults to the shared `rounded-md`; a host on another radius sets it. */
+  --arc-radius: var(--radius-md);
+  --arc-duration: 2.23s;
+
+  pointer-events: none;
+  position: absolute;
+  overflow: hidden;
+  border-radius: calc(var(--arc-radius) + var(--arc-standoff));
+  inset: calc(var(--arc-standoff) * -1);
+  padding: var(--arc-width);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+:root.dark .arc-border {
+  --arc-c1: var(--dt-foreground);
+}
+
+/* Landed `memory` tool row — gold → purple on the brain glyph + title.
+   Pair with `text-transparent` so the scaffold label color can't win. */
+.tool-memory-legendary-title {
+  background-image: linear-gradient(
+    105deg,
+    var(--tool-memory-legendary-from) 0%,
+    var(--tool-memory-legendary-mid) 48%,
+    var(--tool-memory-legendary-to) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent !important;
+  font-weight: 600;
+}
+
+.tool-memory-legendary-glyph {
+  filter: drop-shadow(0 0 0.28rem var(--tool-memory-legendary-glow));
+}
+
+.tool-memory-legendary-meta {
+  color: var(--tool-memory-legendary-meta);
+}
+
+/* Command-palette deep-link: briefly flash the targeted settings row. */
+@keyframes setting-field-flash {
+  0% {
+    background-color: color-mix(in srgb, var(--dt-primary, #f59e0b) 22%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.setting-field-highlight {
+  animation: setting-field-flash 1.6s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .setting-field-highlight {
+    animation: none;
+  }
+}
+
+.arc-border::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  /* One period of the gradient, repeated, on a layer the host's mask and
+     overflow clip to the ring. Invariants: the period (50% of the layer's
+     gradient line) equals one cycle of travel; the layer still covers the
+     host at the end of the cycle (0.2 of the host to spare); the stops are
+     fractions of that period. Holds for --arc-angle in 90deg..180deg. */
+  width: 240%;
+  height: 240%;
+  background: repeating-linear-gradient(
+    var(--arc-angle),
+    transparent 0%,
+    var(--arc-c0) 18.75%,
+    var(--arc-c1) 25%,
+    var(--arc-c2) 31.25%,
+    transparent 43.75%,
+    transparent 50%
+  );
+  will-change: transform;
+  animation: arc-border var(--arc-duration) linear infinite;
+}
+
+/* Flip the arc's travel direction (e.g. the Nous Portal hero row). */
+.arc-border.arc-reverse::before {
+  animation-direction: reverse;
+}
+
+/* Nous Portal hero: slower, blue → orange arc. */
+.arc-border.arc-nous,
+:root.dark .arc-border.arc-nous {
+  --arc-c1: #4f8cff;
+  --arc-c2: #ff8c42;
+  --arc-duration: 3.27s;
+}
+
+/* Sidebar session row — a thin, clipped, single-line host, so it differs twice
+   from the default ring:
+
+   1. Flush, not outset. The sidebar scroller is `overflow-x-hidden` and rows sit
+      `gap-px` apart, so an outset ring loses its left/right runs to the clip.
+
+   2. A visible tail. `--arc-c2` defaults to `--dt-background` — invisible
+      against the sidebar. With c0 a transparent sentinel and c2 invisible, only
+      the bright c1 stop survives each pass, and it repeats along the ring:
+      moving dots instead of an arc. Tying c2 to c1 gives each spike a
+      falloff. (`arc-nous` already overrides c2, so the hero is unaffected.) */
+.arc-border.arc-row,
+:root.dark .arc-border.arc-row {
+  --arc-standoff: 0rem;
+  --arc-c2: color-mix(in srgb, var(--arc-c1) 45%, transparent);
+}
+
+/* HUD composer — same travelling arc as a working sidebar row, 2px and pill-
+   rounded to match the bar. */
+.arc-border.arc-composer,
+:root.dark .arc-border.arc-composer {
+  --arc-width: 2px;
+  --arc-standoff: 0rem;
+  --arc-radius: 0.75rem;
+  --arc-c2: color-mix(in srgb, var(--arc-c1) 45%, transparent);
+  z-index: 6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arc-border::before {
+    animation: none;
+  }
+}
+
+/* Keyframes live here, not in per-instance <style> tags: inserting or removing an
+   @keyframes rule invalidates every animating element in the document (#99889). */
+@keyframes decode-cursor {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+.decode-cursor-blink {
+  animation: decode-cursor 1s step-end infinite;
+}
+/* 0.001 start mirrors ZonesOverlay::GetAnimationAlpha's clamp(t / 200ms, 0.001, 1). */
+@keyframes hermes-zone-fade {
+  from {
+    opacity: 0.001;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes starmap-twinkle {
+  0%,
+  100% {
+    opacity: var(--o, 1);
+  }
+  50% {
+    opacity: calc(var(--o, 1) * 0.35);
+  }
+}
+
+button {
+  -webkit-app-region: no-drag;
+}
+
+/* Button variant styling lives entirely in the cva in components/ui/button.tsx
+   (the single source of truth). Don't re-add [data-slot='button'] rules here —
+   attribute selectors out-specify the Tailwind utilities and silently override
+   the variants. */
+
+[data-slot='dropdown-menu-content'],
+[data-slot='select-content'],
+[data-slot='dialog-content'],
+[data-slot='thread-timeline-popover'] {
+  border-color: var(--ui-stroke-secondary);
+  background: color-mix(in srgb, var(--ui-bg-elevated) 96%, transparent);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(0.75rem) saturate(1.08);
+  -webkit-backdrop-filter: blur(0.75rem) saturate(1.08);
+}
+
+/* Invisible dialog shells (the image lightbox). The rule above paints the
+   shell so a zoomed/panned image that moves inside it exposes a stray box of
+   shell paint; the variant opts out entirely — no background, no shadow, no
+   backdrop blur. */
+[data-slot='dialog-content'][data-variant='media-lightbox'] {
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+[data-slot='dropdown-menu-item']:focus,
+[data-slot='dropdown-menu-checkbox-item']:focus,
+[data-slot='dropdown-menu-radio-item']:focus {
+  background: var(--ui-bg-tertiary);
+  color: var(--ui-text-primary);
+}
+
+input,
+textarea,
+[contenteditable]:not([contenteditable='false']),
+[data-slot='aui_user-message-root'],
+[data-slot='aui_assistant-message-content'],
+[data-slot='aui_system-message-root'],
+[data-selectable-text='true'],
+[data-selectable-text='true'] * {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* The browser host makes paragraphs and code in an assistant message
+   selectable even inside a clickable row, so a touch long-press selects them.
+   Native Desktop keeps text inside a clickable row part of the control. */
+html[data-hermes-desktop-host='browser'] [data-slot='aui_assistant-message-content'] :is(p, pre, code) {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+button,
+[role='button'] {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* User bubbles are <button>s (click → edit), so the rule above would kill
+   drag-to-select and leave ⌘C with nothing to grab. Message text stays
+   selectable; chrome controls outside the bubble keep user-select: none. */
+[data-slot='aui_user-message-root'] button,
+[data-slot='aui_user-message-root'] [role='button'] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+[data-slot='aui_user-message-root'] [data-slot='aui_user-touch-edit'],
+[data-slot='aui_user-message-root'] [data-slot='aui_user-touch-expand'] {
+  -webkit-user-select: none;
+  user-select: none;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+img,
+picture,
+video,
+canvas,
+svg {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+img,
+video,
+canvas {
+  -webkit-user-drag: none;
+}
+
+/* Tabs render 2-wide on every HTML code surface — the source preview, inline
+   diffs, markdown code blocks, tool output — so indentation matches the editor
+   and the terminal instead of the browser default (8). */
+pre,
+code {
+  tab-size: 2;
+  -moz-tab-size: 2;
+}
+
+/* Arc-style multicolor action surface (static, not animated). Reusable on any
+   Button via className. Unlayered so it beats Tailwind's bg- and text- variant
+   utilities. */
+.btn-arc {
+  background-image: linear-gradient(110deg, #5b6cff 0%, #8b5cf6 28%, #d946ef 58%, #fb7185 82%, #fb923c 100%);
+  color: #fff;
+  border-color: transparent;
+}
+
+.btn-arc:hover:not(:disabled) {
+  filter: brightness(1.08) saturate(1.06);
+}
+
+/* Shared input chrome — mirrors composer hover/focus FX. Unlayered to beat Tailwind utilities. */
+/* Border strength is driven by the single --dt-input-border alpha knob (× the
+   theme's tuned ring color); hover doubles it and focus triples it. Only the
+   border-color animates — animating the translucent background over the window's
+   backdrop-blur flickers (badly on textareas), so the bg fill snaps instead.
+   (:focus is declared after :hover so a focused+hovered field shows focus.) */
+.desktop-input-chrome {
+  background: color-mix(in srgb, var(--dt-card) var(--dt-input-bg), transparent);
+  border-color: color-mix(in srgb, var(--dt-composer-ring) var(--dt-input-border), transparent);
+  box-shadow: var(--dt-input-inset);
+  transition: border-color 200ms ease-out;
+}
+
+.desktop-input-chrome:hover {
+  border-color: color-mix(in srgb, var(--dt-composer-ring) calc(var(--dt-input-border) * 2), transparent);
+}
+
+/* `[data-state='open']` keeps the trigger looking focused while its dropdown is
+   open — Radix moves focus into the list, so the trigger itself loses :focus. */
+.desktop-input-chrome:focus,
+.desktop-input-chrome:focus-within,
+.desktop-input-chrome[data-state='open'] {
+  border-color: var(--dt-composer-ring);
+  box-shadow: none;
+  outline: none;
+}
+
+/* Forced colors flattens focus border tints and removes shadow rings. The
+   field's chrome owns this fallback, including adorned inputs; independent
+   trailing buttons keep their own focus indicator. */
+@media (forced-colors: active) {
+  .desktop-input-chrome:focus-visible,
+  .desktop-input-chrome:has(> input:focus-visible),
+  [data-slot='composer-surface']:has([data-slot='composer-rich-input']:focus-visible),
+  .ui-prompt-input__container:has(> .ui-prompt-input-editor__input:focus-visible) {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+}
+
+.desktop-input-chrome[aria-invalid='true'] {
+  border-color: var(--dt-destructive);
+}
+
+/* Drag in progress (sash resize, console resize, tab drag): webview/iframe
+   guests hit-test in their own process and swallow the gesture the moment the
+   pointer crosses them — see lib/guest-pointer-guard.ts. */
+body.guest-pointer-lock :is(webview, iframe) {
+  pointer-events: none;
+}

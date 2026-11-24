@@ -1,11 +1,12 @@
 // @vitest-environment node
-import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
 
-const STYLES = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'styles.css'), 'utf8').replace(
+import { readStylesheetWithImports } from '@/test/read-styles'
+
+const STYLES = readStylesheetWithImports(join(dirname(fileURLToPath(import.meta.url)), 'styles.css')).replace(
   /\/\*[\s\S]*?\*\//g,
   ''
 )

@@ -1,14 +1,15 @@
-import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import { afterEach, describe, expect, it } from 'vitest'
+
+import { readStylesheetWithImports } from '@/test/read-styles'
 
 import { PANE_HIDDEN_ATTR, queryAllVisible, queryVisible } from './pane-visibility'
 
 // The live stylesheet, read directly: the painting-contract test below must
 // validate the shipped rule, not a copy of it. Tests run with cwd =
 // apps/desktop (vitest projects root).
-const cssText = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8')
+const cssText = readStylesheetWithImports(resolve(process.cwd(), 'src/styles.css'))
 
 /**
  * Inactive tabs stay mounted with their layout box intact, so they answer

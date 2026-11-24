@@ -27,7 +27,12 @@ from mcp.server import MCPServer
 from mcp.types import ToolAnnotations
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from mcp_servers._common import (  # noqa: E402
+from mcp_servers._browser_discovery import (
+    discover_installed_browsers,
+    launch_url_in_browser,
+    read_browser_context,
+)
+from mcp_servers._common import (
     configure_mcp_logging,
     expand_path,
     find_executable,
@@ -42,10 +47,12 @@ logger = configure_mcp_logging("mcp.browser_pilot")
 mcp = MCPServer(
     name="browser_pilot",
     instructions=(
-        "Real browser automation via Chrome/Edge DevTools Protocol (CDP): open websites, "
-        "inspect numbered interactive elements (browser_snapshot), click, type, press keys, "
-        "scroll, manage tabs, take screenshots, run JavaScript, and play any specific or "
-        "random YouTube video with one call (youtube_play)."
+        "Universal browser discovery, user-consented profile context reader (Zen Browser, "
+        "Firefox, Floorp, LibreWolf, Chrome, Edge, Brave, Vivaldi, Opera, Arc), launcher "
+        "into the user's preferred/default browser (open_in_user_browser), and persistent "
+        "Chromium DevTools Protocol (CDP) interactive automation (browser_open, "
+        "browser_snapshot, browser_click, browser_type, browser_press_key, browser_scroll, "
+        "browser_tabs, browser_screenshot, browser_eval_js)."
     ),
     log_level="WARNING",
 )
@@ -88,13 +95,16 @@ def _find_browser_exe() -> str:
         os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
         r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
         r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
+        os.path.expandvars(r"%LOCALAPPDATA%\BraveSoftware\Brave-Browser\Application\brave.exe"),
+        os.path.expandvars(r"%LOCALAPPDATA%\Vivaldi\Application\vivaldi.exe"),
     ]
     if pw_glob:
         candidates.append(pw_glob)
-    exe = find_executable(["chrome", "msedge", "chromium"], candidates)
+    exe = find_executable(["chrome", "msedge", "brave", "vivaldi", "chromium"], candidates)
     if not exe:
         raise FileNotFoundError(
-            "No Chromium-based browser (Chrome, Edge, or Playwright Chromium) was found on this system."
+            "No Chromium-based browser (Chrome, Edge, Brave, Vivaldi, or Playwright Chromium) was found on this system."
         )
     return exe
 
@@ -164,7 +174,8 @@ async def _ensure_browser(headless: bool | None = None) -> dict[str, Any]:
     existing = _STATE.sessions.get(mode)
     if existing:
         proc = existing.get("proc")
-        if proc is not None and proc.poll() is None:
+        attached = existing.get("attached", False)
+        if attached or (proc is not None and proc.poll() is None):
             try:
                 targets = await _fetch_targets(existing["port"])
                 if targets:
@@ -174,6 +185,32 @@ async def _ensure_browser(headless: bool | None = None) -> dict[str, Any]:
                 pass
         # Dead/stale session — clean up
         _STATE.sessions.pop(mode, None)
+
+    # Optionally reuse an explicit/running local Chromium CDP debug session for visible mode
+    if mode == "visible":
+        cdp_env = os.environ.get("HERMES_BROWSER_CDP_URL", "").strip()
+        candidate_ports: list[int] = []
+        if cdp_env:
+            parsed_cdp = urllib.parse.urlsplit(cdp_env)
+            if parsed_cdp.hostname in ("127.0.0.1", "localhost") and parsed_cdp.port:
+                candidate_ports.append(int(parsed_cdp.port))
+        for ext_port in candidate_ports:
+            try:
+                targets = await _fetch_targets(ext_port)
+                if targets:
+                    session = {
+                        "proc": None,
+                        "attached": True,
+                        "port": ext_port,
+                        "target_id": targets[0]["id"],
+                        "mode": mode,
+                        "exe": "external_cdp",
+                    }
+                    _STATE.sessions[mode] = session
+                    _STATE.active_mode = mode
+                    return session
+            except Exception:
+                pass
 
     exe = _find_browser_exe()
     port = _free_port()
@@ -196,11 +233,13 @@ async def _ensure_browser(headless: bool | None = None) -> dict[str, Any]:
         cmd.extend(["--headless=new", "--disable-gpu", "--mute-audio"])
     cmd.append("about:blank")
 
-    proc = subprocess.Popen(
-        cmd,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        **no_window_kwargs(),
+    proc = await asyncio.to_thread(
+        lambda: subprocess.Popen(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            **no_window_kwargs(),
+        )
     )
     targets = await _wait_cdp_ready(port, timeout=14.0)
     session = {"proc": proc, "port": port, "target_id": targets[0]["id"], "mode": mode, "exe": exe}
@@ -819,6 +858,48 @@ async def browser_eval_js(script: str) -> str:
         return json_ok({"value": value})
     except Exception as exc:
         return json_err(f"browser_eval_js failed: {exc}")
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
+)
+def list_installed_browsers() -> str:
+    """Discover the OS default browser and all installed browsers (Zen Browser, Firefox, Chrome, Edge, Brave, Vivaldi, Opera, Arc) with profile paths and readable data types."""
+    try:
+        return json_ok(discover_installed_browsers())
+    except Exception as exc:
+        return json_err(f"list_installed_browsers failed: {exc}")
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
+)
+def read_browser_data(
+    data_type: str = "summary",
+    browser: str = "default",
+    query: str = "",
+    limit: int = 30,
+) -> str:
+    """Read non-secret user browser context (tabs, bookmarks, history, workspaces, downloads, or summary) from Zen, Firefox, Chrome, Edge, Brave, etc. Never accesses passwords or cookies."""
+    try:
+        return json_ok(read_browser_context(data_type=data_type, browser=browser, query=query, limit=limit))
+    except Exception as exc:
+        return json_err(f"read_browser_data failed: {exc}")
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=True)
+)
+def open_in_user_browser(
+    url: str,
+    browser: str = "default",
+    new_window: bool = False,
+) -> str:
+    """Open any URL (song, playlist, article, portal, product page) in the user's real OS default or named browser (e.g. Zen Browser, Firefox, Chrome, Brave)."""
+    try:
+        return json_ok(launch_url_in_browser(url=url, browser=browser, new_window=new_window))
+    except Exception as exc:
+        return json_err(f"open_in_user_browser failed: {exc}")
 
 
 if __name__ == "__main__":

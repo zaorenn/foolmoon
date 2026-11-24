@@ -774,7 +774,47 @@ export const en: Translations = {
       billing: 'Billing',
       notifications: 'Notifications',
       vault: 'Passwords & Logins',
-      plugins: 'Plugins'
+      plugins: 'Plugins',
+      mobile: 'Phones'
+    },
+    mobile: {
+      title: 'Paired phones',
+      refresh: 'Refresh',
+      online: 'Online',
+      offline: 'Offline',
+      paired: 'Paired',
+      pairedUnknown: 'Pairing date not recorded',
+      lastSeen: 'Last seen',
+      unknownName: 'Android phone',
+      capabilities: count => (count === 1 ? '1 phone tool' : `${count} phone tools`),
+      revoke: 'Revoke',
+      revokeDevice: name => `Revoke ${name}`,
+      revokeTitle: name => `Revoke ${name}?`,
+      revokeDescription: name =>
+        `${name} loses access to this computer immediately. It can pair again from Foolmoon Mobile with a new pair code.`,
+      revokeFailed: 'Could not revoke the phone',
+      emptyTitle: 'No paired phones',
+      emptyDescription:
+        'Open Foolmoon Mobile on your Android phone and connect it to this computer. The phone appears here once it pairs.',
+      errorTitle: 'Could not load paired phones',
+      errorDescription: 'This gateway did not answer the pairing registry. Try Refresh, or update the backend.',
+      footnote:
+        'Paired phones can run chats and voice on this computer, read synced memory, and act on the phone. Revoke one here when you stop using it.',
+      pairTitle: 'Pair a new phone',
+      pairAction: 'Generate pairing QR',
+      pairGenerating: 'Generating…',
+      pairRefresh: 'New code',
+      pairDescription: 'Scan this QR code in Foolmoon Mobile or enter the 6-digit pairing code.',
+      pairCodeLabel: '6-digit pairing code',
+      pairQrAlt: 'Foolmoon Mobile pairing QR code',
+      pairExpires: (minutes: number) => `Expires in ${minutes} min`,
+      pairFailed: 'Could not start mobile pairing',
+      copyCode: 'Copy code',
+      bridgeTitle: 'Computer bridge status',
+      bridgeModel: 'Active model',
+      bridgeVoice: 'PC voice clone',
+      bridgeAddress: 'LAN endpoint',
+      bridgeGpuReady: 'GPU acceleration ready'
     },
     plugins: {
       title: 'Desktop plugins',

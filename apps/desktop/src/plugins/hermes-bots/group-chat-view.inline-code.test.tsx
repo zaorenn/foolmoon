@@ -1,10 +1,11 @@
-import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { cleanup, render, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeAll, expect, it, vi } from 'vitest'
+
+import { readStylesheetWithImports } from '@/test/read-styles'
 
 import { translateBots } from './i18n-test-helper'
 
@@ -63,7 +64,7 @@ const STYLES = resolve(dirname(fileURLToPath(import.meta.url)), '../../styles.cs
 beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn()
   const sheet = document.createElement('style')
-  sheet.textContent = readFileSync(STYLES, 'utf8')
+  sheet.textContent = readStylesheetWithImports(STYLES)
   document.head.appendChild(sheet)
 })
 afterEach(cleanup)

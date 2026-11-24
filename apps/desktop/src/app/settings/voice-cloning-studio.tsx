@@ -844,7 +844,6 @@ export function VoiceCloningStudio({ scopeProfile }: { scopeProfile?: string }) 
                           disabled={busyAction !== null}
                           onClick={() => void handleUninstallEngine('tts', eng.id, eng.label ?? eng.id)}
                           size="xs"
-                          title={`Uninstall ${eng.label ?? eng.id}`}
                           variant="ghost"
                         >
                           <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
@@ -971,7 +970,6 @@ export function VoiceCloningStudio({ scopeProfile }: { scopeProfile?: string }) 
                         disabled={busyAction !== null}
                         onClick={() => void handleUninstallEngine('stt', model.id, model.label ?? model.id)}
                         size="xs"
-                        title={`Uninstall ${model.label ?? model.id}`}
                         variant="ghost"
                       >
                         <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />

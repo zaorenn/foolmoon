@@ -1,0 +1,111 @@
+/* Titlebar clusters: 24×24 hit targets, 13.9px glyphs. codicon.css is
+   unlayered (`font: 16px/1`); Tailwind utilities in @layer lose that fight. */
+.titlebar-icon-button .codicon[class*='codicon-'] {
+  font-size: var(--titlebar-icon-size);
+}
+
+
+/* Blanket reduced-motion override: kill ALL CSS animations and transitions
+   when the user (or the E2E test harness via prefers-reduced-motion) requests
+   it. Per-component @media rules below handle specific cases; this catches
+   everything else so overlays and loading bars resolve instantly instead of
+   being caught mid-fade by a screenshot. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Blanket reduced-transparency gate: turn the CSS backdrop-filter frost OFF
+   everywhere when the OS accessibility signal asks for it (macOS: System
+   Settings → Accessibility → Display → Reduce transparency; Windows 11
+   respects the same query through contrast/transparency settings).
+
+   Why a media gate and not per-surface surgery: backdrop-filter is only cheap
+   on surfaces whose content AND geometry are static (what #69130 established
+   for the typing surface). The status-stack cards (composerDockCard →
+   composerSurfaceGlass) sit over a live braille spinner and a 1 Hz activity
+   timer, and menu/popover surfaces animate their own geometry while open —
+   each animation frame changes the filtered region and forces a full
+   backdrop re-sample. On a transparent window (plugin wallpaper themes) that
+   re-sample re-reads the wallpaper layer; when the filter pass is late for a
+   frame, the surfaces paint unblurred and the whole docked area strobes
+   (#121910). Dropping the filter on the OS signal removes the re-sample from
+   the frame budget entirely, for every frosted surface at once — present and
+   future. Legibility does not regress: every frosted surface already carries
+   its own alpha-mixed fill (--composer-fill at 88%, color-mix panels) that
+   stands alone; the frost is a texture, not the legibility layer.
+
+   Mirrors the blanket reduced-motion rule above; also mirrors what HUD mode
+   already does for its own reasons ([data-hud-shell] drops backdrop-filter
+   app-wide). */
+@media (prefers-reduced-transparency: reduce) {
+  *,
+  *::before,
+  *::after {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
+
+/* Pause continuous animations only when the window is hidden/minimized, not
+   merely unfocused. main.tsx owns this attribute for the primary window;
+   wake/pet overlays retain their purpose-built visibility behavior. */
+:root[data-renderer-animations-paused]
+  :is(
+    .shimmer,
+    .quest-glow,
+    .pet-egg,
+    .pet-egg__glow,
+    .pet-egg-shadow,
+    .pet-wobble,
+    .progress-slide,
+    .kanban-arc,
+    .glyph-spinner__strip,
+    .decode-cursor-blink
+  ),
+:root[data-renderer-animations-paused] .arc-border::before,
+:root[data-renderer-animations-paused]
+  [data-slot='aui_assistant-message-content']
+  .aui-md
+  [data-slot='code-card'][data-streaming='true'] {
+  animation-play-state: paused !important;
+}
+
+
+@font-face {
+  font-family: 'Collapse';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('@nous-research/ui/fonts/Collapse-Bold.woff2') format('woff2');
+}
+
+/* JetBrains Mono — bundled terminal font (Apache-2.0) so bold/italic share the
+   regular face's metrics instead of squeezing against a system fallback. */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/JetBrainsMono-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./fonts/JetBrainsMono-Bold.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/JetBrainsMono-Italic.woff2') format('woff2');
+}

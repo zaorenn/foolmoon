@@ -14,13 +14,12 @@ metadata:
 
 # Browser Media DJ
 
-Play YouTube videos, ambient study music, podcasts, or Spotify tracks immediately with sound in the user's real desktop browser/apps.
+Play YouTube videos, YouTube Music, Spotify, SoundCloud, ambient study mixes, podcasts, or any media URL immediately in the user's real preferred desktop browser (dynamically discovered via `mcp__browser_pilot__list_installed_browsers` and opened via `mcp__browser_pilot__open_in_user_browser`). Use `personal_vault` / `memory` first to recall favorite songs/services, ask briefly if confirmation helps, and use `browser_open` + `browser_snapshot` + `browser_click` when interactive playlist building in an authenticated browser session is needed.
 
-## Play a Random or Requested YouTube Video Immediately
-1. Run `web_search` for `site:youtube.com/watch <topic or mood>` (for a random/surprise video, pick trending music, lo-fi radio, science documentary, or guitar session).
-2. Extract a real `https://www.youtube.com/watch?v=<ID>` URL from the search results.
-3. Launch it directly in the user's default browser with `open_on_computer(target="https://www.youtube.com/watch?v=<ID>", mode="system")` (or `Start-Process` via `terminal`).
-4. Alternatively, if the user wants interactive in-page browsing, use `browser_navigate` to `https://www.youtube.com`, inspect with `browser_snapshot`, and `browser_click` a video card.
+## Play a Requested or Favorite Track Immediately
+1. Check `memory` / `personal_vault` for saved favorite tracks/playlists and check `mcp__browser_pilot__list_installed_browsers` to know the user's real default browser.
+2. When you already have a URL or search query, launch directly in their preferred browser using `mcp__browser_pilot__open_in_user_browser(url="https://...", browser="default")` — or search with `web_search` if you need a direct watch/track URL first.
+3. For interactive playlist curation or web-app control, use `browser_open` (persistent `browser_pilot_profile`), `browser_snapshot`, `browser_type`, and `browser_click`.
 
 ## Spotify & Web Media Shortcuts
 - Launch Spotify URI: `open_on_computer(target="spotify:search:<artist or song>", mode="system")`

@@ -1,0 +1,1434 @@
+@layer components {
+  /* Chromium 121+ (Electron) prefers standard scrollbar-* over
+     ::-webkit-scrollbar and ignores the latter when both are set — platform
+     thin on mac still looks chunky. Use webkit for real thin thumbs; gate the
+     standard props so only non-webkit engines (Firefox) take that path.
+     https://developer.chrome.com/docs/css-ui/scrollbar-styling
+     https://syntackle.com/blog/changes-to-scrollbar-styling-in-chrome-121/
+
+     Every native scroller, including portaled menus and code regions, uses
+     the same hover-only thumb. Keep its geometry fixed across hover so
+     revealing the scrollbar never changes the content width. */
+
+  *::-webkit-scrollbar {
+    width: 0.5rem;
+    height: 0.5rem;
+  }
+
+  *::-webkit-scrollbar-track,
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 9999rem;
+    background-clip: padding-box;
+    transition: none;
+  }
+
+  *:hover::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--dt-scrollbar-thumb) 18%, transparent);
+  }
+
+  *:hover::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--dt-scrollbar-thumb) 40%, transparent);
+    background-clip: padding-box;
+  }
+
+  *::-webkit-scrollbar-button {
+    display: none;
+  }
+
+  /* Retain the existing opt-in class as an alias for the global behavior. */
+  .scrollbar-fade::-webkit-scrollbar-thumb,
+  .scrollbar-dt .scrollbar-fade::-webkit-scrollbar-thumb {
+    background-color: transparent;
+    transition: none;
+  }
+
+  .scrollbar-fade:hover::-webkit-scrollbar-thumb,
+  .scrollbar-dt .scrollbar-fade:hover::-webkit-scrollbar-thumb {
+    background-color: color-mix(in srgb, var(--dt-scrollbar-thumb) 18%, transparent);
+  }
+
+  .scrollbar-fade:hover::-webkit-scrollbar-thumb:hover,
+  .scrollbar-dt .scrollbar-fade:hover::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, var(--dt-scrollbar-thumb) 40%, transparent);
+  }
+
+  /* Hover marquee: a truncated line that scrolls its overflow into view while
+     hovered. Opt-in via .hover-marquee + an inner .hover-marquee-inner; the
+     JS side measures the overflow on pointerenter and sets --marquee-d (and
+     data-marquee) only when the text actually overflows, so short titles
+     keep their plain ellipsis and never wiggle. Alternate direction reads
+     back to the start; the 300ms delay keeps casual pointer passes still. */
+  .hover-marquee[data-marquee='true'] {
+    text-overflow: clip;
+  }
+
+  .hover-marquee[data-marquee='true'] > .hover-marquee-inner {
+    display: inline-block;
+    animation: hover-marquee var(--marquee-t, 3s) linear infinite;
+  }
+
+  /* One direction, Spotify-style: scroll the tail in, hold, snap back, hold.
+     The percentages pin the two holds; the travel occupies the middle. */
+  @keyframes hover-marquee {
+    0%,
+    10% {
+      transform: translateX(0);
+    }
+
+    75%,
+    100% {
+      transform: translateX(calc(-1 * var(--marquee-d, 0px)));
+    }
+  }
+
+  /* Variant for portaled overlays (Radix DropdownMenu, Popover, etc.) that
+     render under document.body, outside the `.scrollbar-dt` scope on
+     #root. Same visual treatment, applied directly to the overlay
+     container so its (and only its) internal scrollbar is themed. */
+  .dt-portal-scrollbar::-webkit-scrollbar {
+    width: 0.5rem;
+    height: 0.5rem;
+  }
+
+  .dt-portal-scrollbar::-webkit-scrollbar-track,
+  .dt-portal-scrollbar::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  .dt-portal-scrollbar::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 9999rem;
+    background-clip: padding-box;
+  }
+
+  .dt-portal-scrollbar:hover::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--dt-scrollbar-thumb) 28%, transparent);
+  }
+
+  .dt-portal-scrollbar:hover::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--dt-scrollbar-thumb) 50%, transparent);
+    background-clip: padding-box;
+  }
+
+  .dt-portal-scrollbar::-webkit-scrollbar-button {
+    display: none;
+  }
+
+  @supports not selector(::-webkit-scrollbar) {
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: transparent transparent;
+    }
+
+    *:hover {
+      scrollbar-color: color-mix(in srgb, var(--dt-scrollbar-thumb) 18%, transparent) transparent;
+    }
+
+    .dt-portal-scrollbar {
+      scrollbar-width: thin;
+      scrollbar-color: transparent transparent;
+    }
+
+    /* Firefox has no real overlay mode; thin + transparent track is the closest
+       match to the Chromium overlay opt-out above. */
+    .scrollbar-overlay {
+      scrollbar-width: thin;
+      scrollbar-color: transparent transparent;
+    }
+
+    .dt-portal-scrollbar:hover,
+    .scrollbar-overlay:hover {
+      scrollbar-color: color-mix(in srgb, var(--dt-scrollbar-thumb) 28%, transparent) transparent;
+    }
+
+    /* No transition — Firefox doesn't animate scrollbar-color. */
+    .scrollbar-fade {
+      scrollbar-color: transparent transparent;
+    }
+
+    .scrollbar-fade:hover {
+      scrollbar-color: color-mix(in srgb, var(--dt-scrollbar-thumb) 18%, transparent) transparent;
+    }
+  }
+}
+
+/* Custom scrollbars follow their own region, not hover anywhere in the app. */
+[data-slot='scroll-area-scrollbar'],
+[data-slot='scroll-area-thumb'],
+.xterm .xterm-scrollable-element > .scrollbar,
+.xterm .xterm-scrollable-element > .scrollbar.invisible.fade {
+  transition: none;
+}
+
+[data-slot='scroll-area']:not(:hover) > [data-slot='scroll-area-scrollbar'],
+.xterm:not(:hover) .xterm-scrollable-element > .scrollbar {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Hidden DOM terminals still parse output, but their rows need no layout.
+   Keep the host and xterm helpers measurable for fitting and live font changes;
+   hiding the whole xterm would cache zero-width glyph measurements. WebGL
+   surfaces are deliberately unchanged. */
+[data-terminal].invisible .xterm-rows,
+[data-persistent-terminal][aria-hidden='true'] .xterm-rows {
+  display: none;
+}
+
+/* Bottom clearance lives on [data-slot='aui_composer-clearance'] —
+   virtualized items unmount, so :nth-last-child can't fire reliably. */
+
+/* Scope typography, not zoom: pane geometry and surrounding chrome stay put.
+   The editor owns its scope too, including inline edits and floating composers. */
+[data-slot='aui_thread-content'],
+[data-slot='composer-rich-input'] {
+  --conversation-text-scale: var(--chat-text-scale, 1);
+  --conversation-text-font-size: calc(var(--conversation-text-base-size) * var(--chat-text-scale, 1));
+  --conversation-tool-font-size: calc(var(--conversation-tool-base-size) * var(--chat-text-scale, 1));
+  --conversation-caption-font-size: calc(var(--conversation-caption-base-size) * var(--chat-text-scale, 1));
+  --conversation-line-height: calc(var(--conversation-base-line-height) * var(--chat-text-scale, 1));
+  --conversation-caption-line-height: calc(var(--conversation-caption-base-line-height) * var(--chat-text-scale, 1));
+}
+
+[data-slot='aui_assistant-message-content'] {
+  padding-left: var(--message-text-indent);
+  font-size: var(--conversation-text-font-size);
+  line-height: 1.5;
+}
+
+[data-slot='aui_assistant-message-root'] {
+  width: 100%;
+}
+
+/* Remove label pixels under the hover close button; translucent paint would
+   stack the glass tint and still let the label bleed through. */
+[data-slot='pane-tab'][data-closeable] {
+  --pane-tab-close-width: 1.5rem;
+}
+
+[data-slot='pane-tab'][data-closeable]:hover > .pane-tab-content {
+  mask-image: linear-gradient(
+    to right,
+    #000 calc(100% - var(--pane-tab-close-width) - 1rem),
+    transparent calc(100% - var(--pane-tab-close-width))
+  );
+}
+
+[data-slot='aui_assistant-message-content'] .aui-md,
+[data-slot='aui_assistant-message-content'] .aui-md :where(p, li, blockquote, table, pre) {
+  font-size: inherit;
+}
+
+/* Tailwind Typography sets `.prose :where(p) { margin: 1.25em }` (~16px). That
+   selector ties our `my-*` utility on specificity and wins on source order, so
+   paragraph spacing must be reclaimed here at higher specificity. One tight
+   top-margin (bottom zeroed to avoid doubling), first child reset to flush. */
+[data-slot='aui_assistant-message-content'] .aui-md :where(p, [data-tool-media-paragraph]) {
+  margin-block: var(--paragraph-gap) 0;
+}
+
+/* Same Typography trap for images: `.prose :where(img) { margin: 2em }` ties
+   `m-0` on specificity (0,1,0) and wins on source order. Inside the framed
+   markdown image the <img> sits in an absolutely-positioned `h-full` wrapper,
+   so a 2em top margin slides the whole image down and its bottom overhangs the
+   frame's reserved height — the image then paints over the first line of
+   whatever follows it (#122100, #122982). Zero it at higher specificity. */
+[data-slot='aui_assistant-message-content'] .aui-md [data-slot='aui_markdown-image'] :where(img) {
+  margin: 0;
+}
+
+/* Headings are section breaks, so they own a larger top gap than prose — a
+   leading `# title` (common in re-entered/delegated turns) no longer butts
+   against the block above. Top-owned + bottom snug; the first-child reset
+   below still flushes a leading heading. */
+[data-slot='aui_assistant-message-content'] .aui-md :where(h1, h2, h3, h4) {
+  margin-block: 1rem 0.25rem;
+}
+
+/* First rendered element of a prose block is flush — the block-level gap above
+   (tool / paragraph) already provides the separation. Reach one level deep too:
+   Streamdown wraps blocks in a `div.space-y-*`, so the real first line is the
+   first child's first child. */
+[data-slot='aui_assistant-message-content'] .aui-md > :first-child,
+[data-slot='aui_assistant-message-content'] .aui-md > :first-child > :first-child {
+  margin-top: 0;
+}
+
+/* Prose, tools, todos, and thinking all share one left edge (the message
+   content's --message-text-indent). No extra prose indent — a single gutter
+   reads cleaner than a ragged tool-vs-reply column. */
+
+/* RTL/bidi chat text (#44150): each block resolves its own base direction from
+   its first strong char (UAX#9 plaintext). text-align:start makes that resolved
+   direction drive alignment too — load-bearing, since the user bubble pins
+   text-left. direction is never set, so chrome/layout/list-indent stay LTR (the
+   issue asks not to flip the whole UI). Covers assistant prose, user lines, and
+   both composers (main + edit share composer-rich-input). */
+[data-slot='aui_assistant-message-content']
+  .aui-md
+  :where(p, [data-tool-media-paragraph], h1, h2, h3, h4, h5, h6, li, blockquote),
+[data-slot='aui_user-inline-text'],
+[data-slot='composer-rich-input'] {
+  unicode-bidi: plaintext;
+  text-align: start;
+}
+
+/* Keyed on the UI language, not installed fonts: PingFang/YaHei ship on every
+   Mac/Windows box and would restyle Latin text for everyone. CJK-first is what
+   makes shared codepoints (…—“”) render full-width. */
+[data-slot='composer-rich-input']:lang(zh) {
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', var(--dt-font-sans);
+}
+
+[data-slot='composer-rich-input']:lang(zh-hant) {
+  font-family: 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans CJK TC', var(--dt-font-sans);
+}
+
+[data-slot='composer-rich-input']:lang(ja) {
+  font-family: 'Hiragino Sans', 'Yu Gothic UI', 'Noto Sans CJK JP', var(--dt-font-sans);
+}
+
+/* Appearance → Text direction. An explicit RTL/LTR choice stamps dir on the
+   markdown root, each user line block and both composers; the first-strong
+   plaintext vote is exactly what the reader overrode, so it steps aside and
+   every block takes the chosen direction (every line of a multi-line draft
+   included). Auto stamps no dir, so nothing here matches. Code and KaTeX keep
+   their isolated-LTR rules below. */
+[data-slot='aui_assistant-message-content']
+  .aui-md[dir]
+  :where(p, [data-tool-media-paragraph], h1, h2, h3, h4, h5, h6, li, blockquote),
+[data-slot='aui_user-inline-text'][dir],
+[data-slot='composer-rich-input'][dir] {
+  unicode-bidi: normal;
+}
+
+/* Header cells pin text-left for the Auto (LTR-box) table; a chosen direction
+   aligns headers and cells to its own start edge instead. */
+[data-slot='aui_assistant-message-content'] .aui-md[dir] :where(th, td) {
+  text-align: start;
+}
+
+/* Inline code/KaTeX don't vote on direction and keep their own order: isolate
+   makes bidi treat each as one neutral, so a block that *starts* with `./run.sh`
+   then Arabic still resolves RTL, and the command's neutrals (dots/slashes)
+   aren't reordered by the surrounding RTL run. */
+[data-slot='aui_assistant-message-content'] .aui-md :where(:not(pre) > code),
+[data-slot='aui_user-inline-code'],
+[data-slot='aui_assistant-message-content'] .aui-md .katex {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* Fenced code stays LTR even inside an RTL list item/blockquote — never mirrors. */
+[data-slot='aui_assistant-message-content'] .aui-md [data-slot='code-card'],
+[data-slot='aui_user-fence'] {
+  direction: ltr;
+  text-align: left;
+}
+
+[data-slot='aui_user-message-root'] {
+  --sticky-human-offset: calc(var(--sticky-human-top) + 1px);
+  top: var(--sticky-human-offset);
+}
+
+/* useStickyPromptClip writes this value on each frame during a scroll. It is
+   not inherited. A write recalculates the style of only this element. */
+@property --sticky-prompt-clip {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+/* The sticky prompt owns no field paint. Clip only the scrolling siblings
+   behind it, including the top gap, so bubble transparency still works. */
+[data-sticky-prompt-clip] {
+  clip-path: inset(var(--sticky-prompt-clip) 0 0);
+}
+
+[data-slot='aui_user-message-root'],
+[data-slot='aui_edit-composer-root'] {
+  --human-msg-line-height: 1.3;
+  font-size: var(--conversation-text-font-size);
+}
+
+[data-slot='aui_user-inline-text'] {
+  line-height: var(--human-msg-line-height);
+}
+
+[data-slot='aui_edit-composer-root'] [data-slot='composer-rich-input'] {
+  line-height: var(--human-msg-line-height);
+}
+
+/* Sticky human bubbles clamp to ~2 lines with a soft bottom fade so a long
+   prompt doesn't dominate the viewport. The clamp lifts only in the edit
+   composer; expanding on read-only :focus-within ran on mousedown (before the
+   swap) and fought stick-to-bottom when parked at the bottom. */
+.sticky-human-clamp {
+  cursor: pointer;
+  max-height: calc(4 * var(--human-msg-line-height) * var(--conversation-text-font-size) + 0.15rem);
+  overflow: hidden;
+}
+
+.sticky-human-clamp[data-clamped='true'] {
+  -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent);
+  mask-image: linear-gradient(to bottom, #000 55%, transparent);
+}
+
+/* Stick-to-bottom owns scrollTop while following. Once escaped, native anchoring
+   is safe and keeps sticky human edits from shoving the viewport; data-editing
+   enables that path before React swaps in the inline editor. */
+[data-slot='aui_thread-viewport'] {
+  overflow-anchor: none;
+}
+
+[data-slot='aui_thread-viewport'][data-following='false'],
+[data-slot='aui_thread-viewport'][data-editing='true'] {
+  overflow-anchor: auto;
+}
+
+[data-slot='aui_thread-content'] {
+  max-width: var(--composer-width);
+  padding-inline: 1.5rem;
+}
+
+[data-slot='aui_intro'] {
+  align-items: center;
+  justify-content: center;
+  padding-bottom: var(--composer-measured-height);
+  text-align: center;
+}
+
+[data-slot='aui_intro'] > div {
+  max-width: var(--composer-width);
+}
+
+[data-slot='aui_intro'] p:last-child {
+  max-width: 34rem;
+  margin-inline: auto;
+  color: var(--ui-text-tertiary);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.fit-text {
+  --fit-captured-length: initial;
+  --fit-support-sentinel: var(--fit-captured-length, 9999px);
+
+  display: flex;
+  container-type: inline-size;
+}
+
+/* The display lettering an empty chat is titled with. Kept here beside
+   `.fit-text` rather than as utilities on the element: the two always travel
+   together, and the face is the whole point of the treatment — it must not be
+   something a class-merge or a missed scan can quietly drop, leaving the
+   wordmark rendered in body text. */
+.wordmark {
+  font-family: 'Collapse', var(--font-sans);
+  font-weight: 700;
+  line-height: 0.9;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.fit-text > [aria-hidden] {
+  visibility: hidden;
+}
+
+.fit-text > :not([aria-hidden]) {
+  flex-grow: 1;
+  container-type: inline-size;
+
+  --fit-captured-length: 100cqi;
+  --fit-available-space: var(--fit-captured-length);
+}
+
+.fit-text > :not([aria-hidden]) > * {
+  --fit-support-sentinel: inherit;
+  --fit-captured-length: 100cqi;
+  --fit-ratio: tan(atan2(var(--fit-available-space), var(--fit-available-space) - var(--fit-captured-length)));
+
+  display: block;
+  inline-size: var(--fit-available-space);
+  font-size: clamp(
+    var(--fit-min, 1em),
+    1em * var(--fit-ratio),
+    var(--fit-max, infinity * 1px) - var(--fit-support-sentinel)
+  );
+}
+
+@container (inline-size > 0) {
+  .fit-text > :not([aria-hidden]) > * {
+    white-space: nowrap;
+  }
+}
+
+@property --fit-captured-length {
+  syntax: '<length>';
+  initial-value: 0px;
+  inherits: true;
+}
+
+/* The dock column owns the composer's width; the composer keeps the 5px
+   transparent grab margin that the peel-out drag needs. +10px width compensates
+   that padding so the visible surface keeps its exact width/position. */
+[data-slot='composer-dock'] {
+  width: calc(min(var(--composer-width), calc(100% - 2rem)) + 10px);
+  padding-bottom: var(--composer-shell-pad-block-end);
+}
+
+[data-slot='composer-root'] {
+  width: 100%;
+  padding-inline: 5px;
+}
+
+/* Popped-out (floating) composer: compact width + an even 5px transparent grab
+   platform. The higher-specificity selector resets the base rule's padding-bottom
+   so the inset is equal on all four sides (not 5px sides / shell-pad bottom). */
+[data-slot='composer-dock'][data-popped-out] {
+  width: var(--composer-popout-width, 24rem);
+  max-width: calc(100vw - 1.5rem);
+  padding-bottom: 0;
+}
+
+[data-slot='composer-root'][data-popped-out] {
+  padding: 5px;
+}
+
+/* Dock glow intensity scale — dimmer in light mode (the primary glow reads
+   much stronger over a light backdrop), full strength in dark mode. */
+:root {
+  --dock-glow-scale: 0.55;
+  /* Unfocused chat surface (multi-pane): a pane the user isn't in recedes so
+     the focused conversation reads as the one being worked in. Light needs a
+     deeper cut — a dim over a bright surface loses contrast far more slowly
+     than the same dim over a dark one. Pairs with a grayscale pass on the same
+     element — one treatment for the whole pane, not per-part tuning. */
+  --chat-unfocused-opacity: 0.62;
+}
+
+.dark {
+  --dock-glow-scale: 1;
+  --chat-unfocused-opacity: 0.72;
+}
+
+/* The whole surface recedes as ONE layer — thread, timeline rail, composer,
+   header — fading and desaturating together rather than each part taking its
+   own treatment. Both properties on the surface root also composite the
+   already-painted layer instead of repainting descendants. */
+[data-chat-surface][data-chat-unfocused] {
+  opacity: var(--chat-unfocused-opacity);
+  filter: grayscale(0.2);
+}
+
+[data-chat-surface] {
+  transition:
+    opacity 75ms ease-out,
+    filter 75ms ease-out;
+}
+
+/* Drag-region hatch — a diagonal ///// pattern (Photoshop-style) that fades into
+   the transparent grab margin on hover (and stays while dragging) to signal the
+   composer is draggable. Inherits the root radius so it clips to the corners. */
+[data-slot='composer-drag-region'] {
+  /* Hatch frame radius (tuned by hand). */
+  border-radius: 0.4rem;
+  opacity: 0;
+  transition: opacity 150ms ease;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--ui-text-tertiary) 38%, transparent) 0,
+    color-mix(in srgb, var(--ui-text-tertiary) 38%, transparent) 1px,
+    transparent 1px,
+    transparent 3.5px
+  );
+}
+
+[data-slot='composer-drag-region']:hover,
+[data-slot='composer-drag-region'][data-dragging] {
+  opacity: 0.33;
+}
+
+[data-slot='composer-root'] > .pointer-events-none {
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    color-mix(in srgb, var(--ui-chat-surface-background) 88%, transparent)
+  );
+}
+
+[data-slot='composer-surface'] {
+  border-color: var(--ui-stroke-secondary);
+}
+
+/* The editor delegates focus chrome to its existing surface border. Restrict
+   this to editor focus so a focused toolbar button does not get two indicators. */
+[data-slot='composer-surface']:has([data-slot='composer-rich-input']:focus-visible),
+.ui-prompt-input__container:has(> .ui-prompt-input-editor__input:focus-visible) {
+  border-color: var(--dt-composer-ring);
+}
+
+[data-slot='composer-fade'] {
+  min-height: 2.375rem;
+}
+
+[data-slot='composer-rich-input'] {
+  color: var(--ui-text-primary);
+  font-size: var(--conversation-text-font-size);
+}
+
+[data-slot='composer-rich-input']:is(:empty, [data-empty])::before {
+  color: var(--ui-text-tertiary);
+}
+
+/* ── Composer fill — ONE var painted by the surface AND anything docked to it
+   (slash·@ popover, `?` help). State ladder sets the var; consumers just paint
+   `background: var(--composer-fill)`, so every state matches by construction. */
+:root {
+  /* Fallback for drawers outside the main composer (e.g. edit-message). */
+  --composer-fill: color-mix(in srgb, var(--dt-card) 90%, var(--dt-background));
+}
+
+[data-slot='composer-root'] {
+  --composer-fill: color-mix(in srgb, var(--dt-card) 88%, transparent);
+}
+
+[data-slot='composer-root'][data-thread-scrolled-up] {
+  --composer-fill: color-mix(in srgb, var(--dt-card) 80%, transparent);
+}
+
+[data-slot='composer-dock']:is(:hover, :focus-within) [data-slot='composer-root'][data-thread-scrolled-up] {
+  --composer-fill: color-mix(in srgb, var(--dt-card) 88%, transparent);
+}
+
+/* Tool/thinking blocks now live at message-text alignment (no leading
+   chevron column to escape into), so their headers and bodies share a
+   common left edge with the model's text. */
+[data-slot='aui_assistant-message-content'] > [data-slot='tool-block'],
+[data-slot='aui_assistant-message-content'] > [data-slot='aui_thinking-disclosure'] {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* A delegation is a list of short rows — goal, model, timer — not prose, so it
+   reads better narrow than stretched across the full reading column. Scoped
+   here rather than as a utility on the element: the rule above sets width on
+   every tool block and would win over it. */
+[data-slot='aui_assistant-message-content'] [data-slot='tool-block'][data-delegate-card] {
+  max-width: 75%;
+}
+
+[data-slot='aui_assistant-message-content'] .aui-md [data-streamdown='code-block'] code {
+  max-width: none;
+  font-family: inherit;
+  font-size: inherit;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  overflow-x: visible;
+  overflow-wrap: inherit;
+  vertical-align: baseline;
+  word-break: inherit;
+  white-space: inherit;
+}
+
+/* Streamdown's adapter wraps code fences in a `data-streamdown="code-block"`
+   container with its own card chrome. We render our own <CodeCard>, so this
+   strips the upstream chrome down to a layout-only passthrough. */
+[data-slot='aui_assistant-message-content'] .aui-md [data-streamdown='code-block'] {
+  contain: none;
+  overflow: visible;
+  margin-block: var(--paragraph-gap) 0;
+  padding: 0;
+  gap: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+}
+
+[data-slot='aui_assistant-message-content'] .aui-md [data-streamdown='code-block']:has(.aui-prose-fence) {
+  margin-block: 0;
+}
+
+[data-slot='aui_assistant-message-content'] .aui-md [data-slot='code-card'] {
+  /* Streamdown nests blocks, so the container's child-combinator rhythm can't
+     reach the card. Carry the paragraph gap on the card itself (top-owned);
+     collapses cleanly with the wrapper's margin when one is present, and the
+     first-child reset still flushes a leading code block. */
+  margin-block: var(--paragraph-gap) 0;
+  position: relative;
+  transition:
+    box-shadow 180ms ease-out,
+    background-color 180ms ease-out;
+}
+
+[data-slot='aui_assistant-message-content'] .aui-md [data-slot='code-card'][data-streaming='true'] {
+  animation:
+    code-card-stream-enter 180ms cubic-bezier(0.16, 1, 0.3, 1) both,
+    code-card-stream-glow 1.8s ease-in-out 180ms infinite alternate;
+  box-shadow:
+    0 0 0 0.0625rem color-mix(in srgb, var(--dt-ring) 10%, transparent),
+    0 0.625rem 1.75rem color-mix(in srgb, var(--dt-ring) 8%, transparent);
+}
+
+[data-slot='aui_assistant-message-content']
+  .aui-md
+  [data-slot='code-card'][data-streaming='true']
+  [data-slot='code-card-body'] {
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, black calc(100% - 1.5rem), rgb(0 0 0 / 64%) 100%);
+  mask-image: linear-gradient(to bottom, black 0%, black calc(100% - 1.5rem), rgb(0 0 0 / 64%) 100%);
+}
+
+/* Themed at the renderer root so every `aui-md` consumer (assistant turns,
+   system-message reports, session-import previews) inherits it; the room
+   selector covers the plugin's raw-Streamdown fallback, which has no `.aui-md`. */
+.aui-md :not(pre) > code,
+[data-slot='group-chat-message-content'] :not(pre) > code {
+  background: var(--ui-inline-code-background);
+  color: var(--ui-inline-code-foreground);
+}
+
+[data-slot='aui_assistant-message-content'] .aui-md :where(.aui-shiki, .aui-shiki > pre) {
+  margin: 0;
+}
+
+/* react-shiki nests its own `pre.shiki` inside our `.aui-shiki` Pre, so the
+   code card's `[&_pre]` padding lands on both and doubles the inset. The outer
+   Pre already carries the card's padding — zero the inner one. */
+[data-slot='aui_assistant-message-content'] .aui-md .aui-shiki .shiki {
+  padding: 0;
+}
+
+[data-slot='aui_assistant-message-content'] .aui-md .aui-md-table {
+  border-spacing: 0;
+}
+
+[data-slot='aui_assistant-message-content'] .aui-md .aui-md-table > table,
+[data-slot='aui_assistant-message-content'] .aui-md .aui-md-table thead,
+[data-slot='aui_assistant-message-content'] .aui-md .aui-md-table tbody,
+[data-slot='aui_assistant-message-content'] .aui-md .aui-md-table tr,
+[data-slot='aui_assistant-message-content'] .aui-md .aui-md-table th,
+[data-slot='aui_assistant-message-content'] .aui-md .aui-md-table td {
+  margin: 0;
+  margin-block-start: 0;
+  margin-block-end: 0;
+}
+
+[data-slot='aui_assistant-message-content'] .aui-md .aui-md-table thead {
+  border-bottom-color: var(--ui-stroke-tertiary);
+}
+
+/* Tool / thinking blocks are scaffolding around the model's reply, so we
+   keep them transparent and fade them slightly. The reading column (prose)
+   stays at full strength; scaffolding lifts back to full opacity on
+   hover/focus so it stays legible when the user actually wants to read it. */
+[data-slot='tool-block'],
+[data-slot='aui_thinking-disclosure'] {
+  background: transparent;
+}
+
+/* Fade scaffolding so the prose reading column stays primary. Each surface
+   opts in with `data-conversation-scaffold` — thinking header, tool row, run
+   summary, live status line — instead of being named by its own selector here.
+   Spelling them out individually is how the status line came to sit a shade
+   brighter than the rows either side of it.
+
+   Marked per surface and never on a container: opacity opens a stacking
+   context, so nothing inside a faded parent can be more opaque than it, and
+   one row (an open diff) could not stay lit while its siblings dimmed. Hence
+   the tool group wrapper carries no mark and each row inside it carries its
+   own — no two marked elements nest, so the fade never compounds. */
+[data-slot='aui_assistant-message-content'] [data-conversation-scaffold],
+[data-slot='aui_background-result'] [data-conversation-scaffold],
+[data-slot='aui_background-resume'] {
+  opacity: 0.67;
+  transition: opacity 120ms ease-out;
+}
+
+/* Lift on hover or *keyboard* focus only. `:focus-within` also matches the
+   focus a mouse click leaves on the disclosure toggle, which kept a row lit
+   after you clicked to collapse it; `:has(:focus-visible)` excludes that. */
+[data-slot='aui_assistant-message-content'] [data-conversation-scaffold]:is(:hover, :has(:focus-visible)),
+[data-slot='aui_background-result'] [data-conversation-scaffold]:is(:hover, :has(:focus-visible)),
+[data-slot='aui_background-resume']:is(:hover, :has(:focus-visible)) {
+  opacity: 1;
+}
+
+/* Shiki surfaces in the inline file diff + source preview: strip the theme's
+   own background/margins, and lay each `.line` on its own grid row so the
+   inter-line `\n` text nodes can't double-space full-width rows. Empty lines
+   carry a non-breaking space so blank rows keep their height. */
+[data-slot='file-diff-panel'] .shiki,
+[data-slot='file-diff-panel'] .shiki code,
+.preview-source-code .shiki,
+.preview-source-code .shiki code {
+  margin: 0;
+  background: transparent !important;
+}
+
+[data-slot='file-diff-panel'] .shiki code,
+.preview-source-code .shiki code {
+  display: grid;
+}
+
+[data-slot='file-diff-panel'] .shiki code .line:empty::before,
+.preview-source-code .shiki code .line:empty::before {
+  content: '\00a0';
+}
+
+/* Inline diff rows keep their utility-class padding; just floor the height. */
+[data-slot='file-diff-panel'] .shiki code .line {
+  min-height: 1.25rem;
+  white-space: pre;
+}
+
+/* Source rows are a fixed editor-height box so source⇄diff toggling never
+   shifts and the gutter stays aligned. */
+.preview-source-code .shiki code {
+  min-width: max-content;
+}
+
+.preview-source-code .shiki code .line {
+  display: block;
+  height: 1.25rem;
+  padding: 0 0.625rem;
+  line-height: 1.25rem;
+  white-space: pre;
+}
+
+/* The github-dark token palette reads candy-bright at our small code size.
+   `github-dark-dimmed` only dims the *background* (which we strip), so soften
+   the token *foregrounds* directly — a small saturation + brightness pullback,
+   hues preserved — for both code blocks and inline diffs. Dark mode only. */
+.dark .shiki {
+  filter: saturate(0.82) brightness(0.92);
+}
+
+/* File edits (write_file / edit_file / patch) are the deliverable, not
+   scaffolding — the diff is what the user reviews, like a PR. An *expanded*
+   edit stays at full strength; collapsed it fades like any other row. The
+   `data-file-edit` marker sits on the same row element and is only present
+   while the row is open. */
+[data-slot='aui_assistant-message-content'] [data-slot='tool-block'][data-tool-row][data-file-edit] {
+  opacity: 1;
+}
+
+/* Tool-only continuation bubbles have no independent line while the approval
+   activity row represents them. An explicitly opened result remains in place. */
+[data-approval-activity-only]:not(:has([data-tool-open])) {
+  display: none;
+}
+
+/* Conversation block rhythm. assistant-ui renders each range as a direct child
+   of the message content with no per-part wrapper, so adjacency rules cover
+   every pairing — first block needs no reset, nested tool rows are untouched.
+
+   One gap between top-level blocks, whatever they are. Spelling out which
+   *pairs* qualified meant the live status line (not tool, thinking or prose)
+   fell through every branch and carried its own half-size margin instead. */
+[data-slot='aui_assistant-message-content']
+  > :is([data-slot='tool-block'], [data-slot='aui_thinking-disclosure'], [data-slot='aui_turn-activity'], .aui-md)
+  + :is([data-slot='tool-block'], [data-slot='aui_thinking-disclosure'], [data-slot='aui_turn-activity'], .aui-md) {
+  margin-top: var(--turn-block-gap);
+}
+
+/* Except prose ↔ prose: one reading column that happens to arrive as several
+   parts, so it keeps the in-block paragraph rhythm. Same specificity as the
+   rule above and deliberately after it. */
+[data-slot='aui_assistant-message-content'] > .aui-md + .aui-md {
+  margin-top: var(--paragraph-gap);
+}
+
+/* And except scaffolding ↔ scaffolding: the full gap is the space between the
+   reply and the work around it, so a back-to-back run of thinking headers,
+   tool rows and status lines spent it between every line and read as stacked
+   cards. Same list as the rule above minus prose — `data-conversation-scaffold`
+   is the wrong hook here: it's absent on a multi-call tool GROUP, which is most
+   of a real run, and present on rows nested inside one. */
+[data-slot='aui_assistant-message-content']
+  > :is([data-slot='tool-block'], [data-slot='aui_thinking-disclosure'], [data-slot='aui_turn-activity'])
+  + :is([data-slot='tool-block'], [data-slot='aui_thinking-disclosure'], [data-slot='aui_turn-activity']) {
+  margin-top: var(--scaffold-block-gap);
+}
+
+/* Except a file edit, which is the deliverable rather than another line in the
+   run — a diff you read like a PR, so it keeps the full block gap on both
+   sides while the scaffolding around it stays tight. `data-file-edit` is only
+   on the row while it's open, so a collapsed edit rejoins the run. Margins on
+   the block itself, not adjacency pairs: it needs the clearance whatever sits
+   next to it, and adjacent margins collapse rather than stacking. */
+[data-slot='aui_assistant-message-content'] > [data-tool-row][data-file-edit] {
+  margin-block: var(--turn-block-gap);
+}
+
+/* Thinking headers carry a faint resting caret. A run of them is the one place
+   the affordance isn't otherwise discoverable — every other disclosure sits in
+   a row you're already reaching for. The scaffold fade multiplies this, so the
+   painted value lands well under the number here. */
+[data-slot='aui_thinking-disclosure'] {
+  --disclosure-caret-rest: 0.4;
+}
+
+/* A streaming turn is sealed into several assistant bubbles as it goes
+   (`message.interim`) and rehydrates into fewer, so the same two blocks are
+   sometimes siblings inside one bubble and sometimes split across two. The
+   flex gap between bubbles is the turn gap — half the block gap — which made
+   the rhythm visibly tighten and then relax as a turn settled. Top it up so
+   the column ticks at one interval either way. */
+[data-slot='aui_turn-pair'] > [data-slot='aui_assistant-message-root'] + [data-slot='aui_assistant-message-root'] {
+  margin-top: calc(var(--turn-block-gap) - var(--conversation-turn-gap));
+}
+
+/* Unless the blocks either side of that seal are both scaffolding, in which
+   case the scaffold gap is the target and the flex gap already overshoots it.
+   Topping up to the full block gap here is what made a live run relax between
+   rows and then tighten once it rehydrated into one bubble. A bubble carrying
+   an open diff is excluded — it keeps the full gap, same as in-flow. */
+[data-slot='aui_turn-pair']
+  > [data-slot='aui_assistant-message-root']:has(
+    > [data-slot='aui_assistant-message-content']
+      > :is([data-slot='tool-block'], [data-slot='aui_thinking-disclosure'], [data-slot='aui_turn-activity']):last-child
+  ):not(:has([data-file-edit]))
+  + [data-slot='aui_assistant-message-root']:has(
+    > [data-slot='aui_assistant-message-content']
+      > :is(
+        [data-slot='tool-block'],
+        [data-slot='aui_thinking-disclosure'],
+        [data-slot='aui_turn-activity']
+      ):first-child
+  ):not(:has([data-file-edit])) {
+  margin-top: calc(var(--scaffold-block-gap) - var(--conversation-turn-gap));
+}
+
+/* Message action bars — flat icon hits with default dim; only the hovered/focused control is full-strength.
+   The reaction slot lives OUTSIDE the bar (a landed emoji must not ride the
+   bar's hover fade) but is still one of these controls visually. */
+[data-slot='aui_msg-actions'] button,
+button[data-slot='aui_msg-reactions'] {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  gap: 0;
+  height: auto;
+  width: auto;
+  min-height: 0;
+  min-width: 0;
+  flex-shrink: 0;
+  cursor: pointer;
+  color: var(--color-muted-foreground);
+  opacity: 0.5;
+}
+
+[data-slot='aui_msg-actions'] button:not(:focus-visible),
+button[data-slot='aui_msg-reactions']:not(:focus-visible) {
+  box-shadow: none;
+}
+
+/* A landed reaction is content, not a dimmed affordance — emoji render at
+   full strength everywhere, always (color dim would gray them anyway; they're
+   glyphs, not icons). */
+button[data-slot='aui_msg-reactions'][data-reacted] {
+  opacity: 1;
+  color: inherit;
+}
+
+/* The EMPTY slot is an affordance and follows its action-bar neighbors
+   exactly: hidden until the message is hovered, then the same 0.5 dim, full
+   strength under the pointer. Stylesheet-owned because the base rule above
+   outweighs Tailwind's opacity utilities (0,1,1 vs 0,1,0). */
+button[data-slot='aui_msg-reactions']:not([data-reacted]) {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.group:hover button[data-slot='aui_msg-reactions']:not([data-reacted]),
+button[data-slot='aui_msg-reactions']:not([data-reacted]):focus-visible,
+button[data-slot='aui_msg-reactions']:not([data-reacted])[data-state='open'] {
+  opacity: 0.5;
+  pointer-events: auto;
+}
+
+.group:hover button[data-slot='aui_msg-reactions']:not([data-reacted]):hover,
+button[data-slot='aui_msg-reactions']:not([data-reacted])[data-state='open'] {
+  opacity: 1;
+}
+
+/* Emoji in ANY reaction surface (badge under a user bubble, footer slot,
+   picker rows) never inherit a translucent treatment from their container. */
+[data-slot='aui_msg-reactions'] .reaction-pop,
+span[data-slot='aui_msg-reactions'] {
+  opacity: 1;
+}
+
+[data-slot='aui_msg-actions'] button:disabled {
+  cursor: default;
+}
+
+[data-slot='aui_msg-actions'] button:hover,
+button[data-slot='aui_msg-reactions']:hover {
+  background: transparent;
+  color: var(--color-foreground);
+  opacity: 1;
+}
+
+[data-slot='aui_msg-actions'] button:active,
+button[data-slot='aui_msg-reactions']:active {
+  background: transparent;
+}
+
+[data-slot='aui_msg-actions'] button:focus-visible,
+button[data-slot='aui_msg-reactions']:focus-visible {
+  opacity: 1;
+}
+
+[data-slot='aui_msg-actions'] button svg,
+button[data-slot='aui_msg-reactions'] svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+/* Hover reveals are useful on desktop, but a coarse pointer needs a stable
+   action lane. Keep the rich desktop row intact and expose a compact Copy +
+   More pair on touch surfaces; the buttons themselves get the 44px hit box
+   while the glyphs retain the existing quiet 14px scale. Only the
+   browser-hosted Desktop has the touch layout. */
+.aui-message-actions-touch {
+  display: none;
+}
+
+@media (hover: none), (pointer: coarse) {
+  html[data-hermes-desktop-host='browser'] [data-slot='aui_msg-actions'] {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  html[data-hermes-desktop-host='browser'] [data-slot='aui_msg-actions'] .aui-message-actions-desktop {
+    display: none;
+  }
+
+  html[data-hermes-desktop-host='browser'] [data-slot='aui_msg-actions'] .aui-message-actions-touch {
+    display: flex;
+  }
+
+  html[data-hermes-desktop-host='browser'] [data-slot='aui_msg-actions'] .aui-message-actions-touch button {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+
+  html[data-hermes-desktop-host='browser'] button[data-slot='aui_msg-reactions'] {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    opacity: 0.5;
+    pointer-events: auto;
+  }
+
+  html[data-hermes-desktop-host='browser'] button[data-slot='aui_msg-reactions'][data-reacted] {
+    opacity: 1;
+  }
+}
+
+/* Re-declare the clearance calc on every chat surface. `:root` computes it
+   once against the ROOT measurement, so scoping only the input would leave
+   every thread reading the same substituted value. Redeclaring here makes each
+   surface resolve the calc against its own dock height, falling back to the
+   root default until this surface publishes its first measurement. See
+   surface-vars.ts. */
+[data-chat-surface] {
+  --thread-last-message-clearance: calc(var(--composer-measured-height) + 2rem);
+}
+
+/* A live tool run, shown as one line. `ToolRunTicker` stacks the run's rows
+   into a reel and offsets it by the newest row's index, so each new action
+   slides the one before it up and out of a single-line window — the run reads
+   as one line ticking over in place rather than a list growing down the page.
+   Rows are clipped to a uniform line box so the offset stays exact whatever a
+   row contains. */
+.tool-ticker {
+  height: var(--conversation-line-height);
+  overflow: hidden;
+  /* clip beats hidden when an ancestor opacity stacking context would
+     otherwise let the transformed reel paint old rows through the window. */
+  overflow: clip;
+  isolation: isolate;
+}
+
+.tool-ticker__reel {
+  transform: translateY(calc(var(--tool-ticker-index, 0) * var(--conversation-line-height) * -1));
+  transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.tool-ticker__row {
+  display: flex;
+  height: var(--conversation-line-height);
+  align-items: center;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tool-ticker__reel {
+    transition: none;
+  }
+}
+
+@keyframes code-card-stream-enter {
+  from {
+    opacity: 0.74;
+    transform: translateY(0.375rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Floating "jump to bottom" control (see scroll-to-bottom-button.tsx).
+   Directional scale: it contracts toward 1 as it arrives (from 1.1) and keeps
+   contracting to 0.9 as it leaves — always shrinking in the direction of
+   travel, so the motion reads as a soft settle / recede rather than a pop. The
+   X half-offset stays baked into every transform so `left-1/2` centering holds
+   through the animation. */
+.thread-jump-button {
+  opacity: 0;
+  transform: translateX(-50%) translateY(0.3rem) scale(0.9);
+}
+
+.thread-jump-button[data-state='in'] {
+  animation: thread-jump-in 200ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.thread-jump-button[data-state='out'] {
+  animation: thread-jump-out 180ms ease-in forwards;
+}
+
+@keyframes thread-jump-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(0.3rem) scale(1.1);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+@keyframes thread-jump-out {
+  from {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(0.3rem) scale(0.9);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thread-jump-button[data-state='in'],
+  .thread-jump-button[data-state='out'] {
+    animation: none;
+    transition: opacity 120ms linear;
+  }
+
+  .thread-jump-button[data-state='in'] {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+@keyframes code-card-stream-glow {
+  from {
+    box-shadow:
+      0 0 0 0.0625rem color-mix(in srgb, var(--dt-ring) 6%, transparent),
+      0 0.5rem 1.5rem color-mix(in srgb, var(--dt-ring) 5%, transparent);
+  }
+
+  to {
+    box-shadow:
+      0 0 0 0.0625rem color-mix(in srgb, var(--dt-ring) 12%, transparent),
+      0 0.75rem 2rem color-mix(in srgb, var(--dt-ring) 10%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot='aui_assistant-message-content'] .aui-md [data-slot='code-card'][data-streaming='true'] {
+    animation: none;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Pet egg hatch (Cmd-K → Pets → Generate)                                    */
+/* The incubation wobble + reveal flash/pop give the draft→pet step a         */
+/* Pokémon-style "egg is hatching" beat instead of a bare spinner.            */
+/* -------------------------------------------------------------------------- */
+
+.pet-egg {
+  position: relative;
+  width: 5.5rem;
+  height: 7rem;
+  border-radius: 50% 50% 50% 50% / 62% 62% 38% 38%;
+  background: radial-gradient(
+    120% 90% at 32% 26%,
+    color-mix(in srgb, var(--ui-accent) 14%, #fff) 0%,
+    #f4ecd8 46%,
+    #e4d3ad 100%
+  );
+  box-shadow:
+    inset -0.45rem -0.6rem 1.1rem color-mix(in srgb, #000 16%, transparent),
+    inset 0.35rem 0.4rem 0.7rem color-mix(in srgb, #fff 70%, transparent),
+    0 0.4rem 0.9rem color-mix(in srgb, #000 22%, transparent);
+  transform-origin: 50% 88%;
+  animation: pet-egg-wobble 2.4s ease-in-out infinite;
+}
+
+/* Compact egg (empty-state hero). Children are %-based so they track the size;
+   only the rem box-shadow needs scaling down to stay crisp. */
+.pet-egg--sm {
+  width: 3.25rem;
+  height: 4.1rem;
+  box-shadow:
+    inset -0.28rem -0.38rem 0.7rem color-mix(in srgb, #000 16%, transparent),
+    inset 0.22rem 0.26rem 0.45rem color-mix(in srgb, #fff 70%, transparent),
+    0 0.25rem 0.55rem color-mix(in srgb, #000 22%, transparent);
+}
+
+.pet-egg__shine {
+  position: absolute;
+  top: 14%;
+  left: 22%;
+  width: 28%;
+  height: 22%;
+  border-radius: 50%;
+  background: color-mix(in srgb, #fff 85%, transparent);
+  filter: blur(2px);
+  opacity: 0.85;
+}
+
+.pet-egg__spot {
+  position: absolute;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ui-accent) 70%, #b89b63);
+  opacity: 0.55;
+}
+
+.pet-egg__glow {
+  position: absolute;
+  inset: -35%;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--ui-accent) 55%, transparent) 0%, transparent 62%);
+  animation: pet-egg-glow 2.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.pet-egg-shadow {
+  width: 4.5rem;
+  height: 0.8rem;
+  border-radius: 50%;
+  /* Lighter on light backgrounds (~20% less ink); dark mode keeps it grounded. */
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, #000 var(--pet-egg-shadow-ink, 26%), transparent) 0%,
+    transparent 72%
+  );
+  animation: pet-egg-shadow 2.4s ease-in-out infinite;
+}
+
+.dark .pet-egg-shadow {
+  --pet-egg-shadow-ink: 32%;
+}
+
+/* Contact shadow sized for the compact incubator egg (roughly its footprint). */
+.pet-egg-shadow--sm {
+  width: 3rem;
+  height: 0.6rem;
+}
+
+/* Contact shadow under the revealed pet — mirrors the floating mascot's in-app
+   shadow: an ellipse at the feet, ~55% of the sprite width, sitting behind it. */
+.pet-contact-shadow {
+  position: absolute;
+  bottom: -0.15rem;
+  left: 50%;
+  width: 55%;
+  aspect-ratio: 100 / 28;
+  transform: translateX(-50%);
+  background: radial-gradient(ellipse at center, color-mix(in srgb, #000 42%, transparent) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Hatch wiggle for the pixel egg (rocks around its base). */
+.pet-wobble {
+  transform-origin: 50% 85%;
+  animation: pet-egg-wobble 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pet-wobble {
+    animation: none;
+  }
+}
+
+@keyframes pet-egg-wobble {
+  0%,
+  62%,
+  100% {
+    transform: rotate(0deg);
+  }
+  8% {
+    transform: rotate(-7deg);
+  }
+  16% {
+    transform: rotate(6deg);
+  }
+  24% {
+    transform: rotate(-5deg);
+  }
+  32% {
+    transform: rotate(4deg);
+  }
+  40% {
+    transform: rotate(0deg);
+  }
+  /* the "almost out" burst */
+  70% {
+    transform: rotate(-12deg);
+  }
+  76% {
+    transform: rotate(12deg);
+  }
+  82% {
+    transform: rotate(-9deg);
+  }
+  88% {
+    transform: rotate(7deg);
+  }
+  94% {
+    transform: rotate(-3deg);
+  }
+}
+
+@keyframes pet-egg-glow {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.92);
+  }
+  70% {
+    opacity: 0.4;
+  }
+  84% {
+    opacity: 0.85;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes pet-egg-shadow {
+  0%,
+  62%,
+  100% {
+    transform: scaleX(1);
+    opacity: 0.6;
+  }
+  76% {
+    transform: scaleX(0.8);
+    opacity: 0.45;
+  }
+}
+
+.pet-reveal {
+  animation: pet-reveal-pop 620ms cubic-bezier(0.22, 1.4, 0.4, 1) both;
+}
+
+@keyframes pet-reveal-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.35) translateY(0.4rem);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.12) translateY(0);
+  }
+  100% {
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes reaction-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.18);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Landing a reaction should feel like something — same pop shape as
+   pet-reveal-pop, scaled down for an inline glyph. */
+.reaction-pop {
+  animation: reaction-pop 260ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pet-egg,
+  .pet-egg__glow,
+  .pet-egg-shadow,
+  .pet-reveal {
+    animation: none;
+  }
+  .reaction-pop {
+    animation: none;
+  }
+  .pet-reveal {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Pet generation progress bar — determinate (hatch rows: done/total) or         */
+/* indeterminate (drafts, which return together so a % would just snap).         */
+/* Sliding indeterminate block for the `accent` Progress variant (pet hatch
+   flow). Color/positioning come from the primitive; this owns the animation. */
+.progress-slide {
+  width: 40%;
+  /* left is pinned; travel is compositor-only (see arc-border note). */
+  left: 0;
+  will-change: transform;
+  animation: progress-slide 1.15s ease-in-out infinite;
+}
+
+@keyframes progress-slide {
+  /* Old version animated `left: -42% → 100%`, forcing main-thread layout
+     every frame for the whole hatch flow. The block is 40% of its track, so
+     the same travel in units of its own width is -105% → 250%. */
+  0% {
+    transform: translateX(-105%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-slide {
+    animation: none;
+    left: 0;
+    width: 100%;
+    opacity: 0.4;
+  }
+}

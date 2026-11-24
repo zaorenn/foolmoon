@@ -29,6 +29,7 @@ import { useI18n } from '@/i18n'
 import { comboTokens } from '@/lib/keybinds/combo'
 import { sessionMatchesSearch } from '@/lib/session-search'
 import { normalizeSessionSource, sessionSourceLabel } from '@/lib/session-source'
+import { useStoreSelector } from '@/lib/use-session-slice'
 import { cn } from '@/lib/utils'
 import { $connectionsRegistry } from '@/store/connection-registry-state'
 import { $activeConnectionId } from '@/store/connections'
@@ -397,6 +398,10 @@ interface ChatSidebarProps extends React.ComponentProps<typeof Sidebar> {
   onTriggerCronJob: (jobId: string) => Promise<void>
 }
 
+const EMPTY_DOT_STATES: ReturnType<typeof $sessionDotStateById.get> = {}
+const EMPTY_PULL_REQUESTS: ReturnType<typeof $pullRequestsByBranch.get> = {}
+const EMPTY_PR_BRANCH_OVERRIDES: ReturnType<typeof $prBranchBySession.get> = {}
+
 export function ChatSidebar({
   currentView: routeView,
   onNavigate,
@@ -465,13 +470,24 @@ export function ChatSidebar({
   const profileFilter = useStore($sidebarProfileFilter)
   const prFilter = useStore($sidebarPrFilter)
   const prDataWanted = useStore($sidebarPrDataWanted)
-  const prBranchOverrides = useStore($prBranchBySession)
-  const pullRequests = useStore($pullRequestsByBranch)
+
+  const prBranchOverrides = useStoreSelector($prBranchBySession, map =>
+    prFilter.length > 0 || prDataWanted ? map : EMPTY_PR_BRANCH_OVERRIDES
+  )
+
+  const pullRequests = useStoreSelector($pullRequestsByBranch, prs =>
+    prFilter.length > 0 ? prs : EMPTY_PULL_REQUESTS
+  )
+
   const filtersActive = useStore($sidebarFiltersActive)
   const showArchived = useStore($sidebarShowArchived)
   const cardRows = useStore($sidebarCardRows)
   const archivedSessions = useStore($archivedSessions)
-  const dotStates = useStore($sessionDotStateById)
+
+  const dotStates = useStoreSelector($sessionDotStateById, states =>
+    statusFilter.length > 0 ? states : EMPTY_DOT_STATES
+  )
+
   // The active sort key as an id order. The flat list applies it within its
   // dividers; groups apply it to their own lanes.
   const sortOrderIds = useStore($sidebarSessionRankIds)

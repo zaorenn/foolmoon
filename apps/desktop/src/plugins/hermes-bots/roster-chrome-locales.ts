@@ -112,4 +112,15 @@ export const ROSTER_CHROME = {
     currentGateway: "البوابة الحالية",
     hidden: "مخفي"
   },
+  'tr': {
+    title: "Botlar",
+    toastsOn: "Etkinlik bildirimleri açık — susturmak için tıkla",
+    toastsOff: "Etkinlik bildirimleri kapalı — açmak için tıkla",
+    newMenu: "Yeni…",
+    filter: "Listeyi filtrele",
+    filtersActive: count => `Listeyi filtrele, ${count} etkin`,
+    allGateways: "Tüm ağ geçitleri",
+    currentGateway: "Geçerli ağ geçidi",
+    hidden: "Gizli"
+  },
 } satisfies Record<keyof typeof CANONICAL_GROUP_LOCALES, RosterChromeMessages>

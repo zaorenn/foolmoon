@@ -12,7 +12,9 @@
 //   --dev-port <n>         vite dev-server port to match / spawn (default 5174)
 //   --runs <n>             repeat each scenario n times, report the median (default 1)
 //   --cpuprofile [dir]     also record a V8 CPU profile per scenario (top-30 self time)
-//   --update-baseline      overwrite baseline.json with this run's numbers
+//   --update-baseline      overwrite the resolved baseline with this run's numbers
+//   --baseline <path>      read/write a specific baseline JSON file
+//   --platform-baseline    write to baseline.<platform>-<arch>.json when updating
 //   --json <path>          write the full results JSON here
 //   --tier <ci|backend>    run all scenarios of a tier
 //   ...scenario opts       e.g. --tokens 600, --turns 400, --real, --a <sid> --b <sid>, --profile <name>
@@ -28,13 +30,12 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { withCpuProfile } from './lib/cdp.mjs'
-import { compareScenario, loadBaseline, updateBaseline } from './lib/baseline.mjs'
+import { compareScenario, loadBaseline, resolveBaselinePath, updateBaseline } from './lib/baseline.mjs'
 import { attach, buildProdRenderer, coldStartSamples, startIsolatedInstance } from './lib/launch.mjs'
 import { cpuProfileTopSelf, median } from './lib/stats.mjs'
 import { CI_SCENARIOS, SCENARIOS } from './scenarios/index.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
-const BASELINE_PATH = join(HERE, 'baseline.json')
 
 function parseArgs(argv) {
   const positional = []
@@ -121,7 +122,19 @@ async function main() {
   // ci + cold metrics are stable enough to gate against the baseline; backend
   // scenarios vary too much with the live environment, so they're report-only.
   const GATED = new Set(['ci', 'cold'])
-  const baseline = loadBaseline(BASELINE_PATH)
+  const explicitBaseline = typeof flags.baseline === 'string' ? resolve(flags.baseline) : undefined
+  const baselinePath = resolveBaselinePath(HERE, {
+    explicitPath: explicitBaseline,
+    preferPlatformFile: Boolean(flags['update-baseline'] && flags['platform-baseline'])
+  })
+  const baseline = loadBaseline(baselinePath)
+  const currentPlatform = `${process.platform}-${process.arch}`
+
+  if (baseline._meta?.platform && baseline._meta.platform !== currentPlatform) {
+    console.log(
+      `[perf] baseline platform is ${baseline._meta.platform}; current host is ${currentPlatform} (pass --update-baseline --platform-baseline to record a host baseline)`
+    )
+  }
   const results = []
   let regressed = false
 
@@ -202,8 +215,8 @@ async function main() {
   }
 
   if (flags['update-baseline']) {
-    updateBaseline(BASELINE_PATH, results.filter(r => GATED.has(r.tier)))
-    console.log(`\nupdated ${BASELINE_PATH}`)
+    updateBaseline(baselinePath, results.filter(r => GATED.has(r.tier)))
+    console.log(`\nupdated ${baselinePath}`)
     return
   }
 

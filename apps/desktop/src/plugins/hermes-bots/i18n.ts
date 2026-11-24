@@ -40,6 +40,7 @@ import { GROUP_SURFACE_DE } from './group-surface-de'
 import { GROUP_SURFACE_ES } from './group-surface-es'
 import { GROUP_SURFACE_FR } from './group-surface-fr'
 import { GROUP_SURFACE_RU } from './group-surface-ru'
+import { GROUP_SURFACE_TR } from './group-surface-tr'
 import { bind, type Bound } from './i18n-bind'
 import { type BotsMessages } from './i18n-messages'
 import { ROSTER_CHROME } from './roster-chrome-locales'
@@ -1766,7 +1767,8 @@ export const BOTS_LOCALES: PluginLocaleBundles = {
   ru: { canonical: CANONICAL_GROUP_LOCALES.ru, crossGateway: CROSS_GATEWAY_GROUP_LOCALES.ru, ...GROUP_SURFACE_RU },
   fr: { canonical: CANONICAL_GROUP_LOCALES.fr, crossGateway: CROSS_GATEWAY_GROUP_LOCALES.fr, ...GROUP_SURFACE_FR },
   de: { canonical: CANONICAL_GROUP_LOCALES.de, crossGateway: CROSS_GATEWAY_GROUP_LOCALES.de, ...GROUP_SURFACE_DE },
-  es: { canonical: CANONICAL_GROUP_LOCALES.es, crossGateway: CROSS_GATEWAY_GROUP_LOCALES.es, ...GROUP_SURFACE_ES }
+  es: { canonical: CANONICAL_GROUP_LOCALES.es, crossGateway: CROSS_GATEWAY_GROUP_LOCALES.es, ...GROUP_SURFACE_ES },
+  tr: { canonical: CANONICAL_GROUP_LOCALES.tr, crossGateway: CROSS_GATEWAY_GROUP_LOCALES.tr, ...GROUP_SURFACE_TR }
 }
 
 export type BotsText = Bound<BotsMessages>

@@ -25,6 +25,7 @@ import {
   Search,
   Settings2,
   ShieldLock,
+  Smartphone,
   Upload,
   Wrench,
   Zap
@@ -57,6 +58,7 @@ import { GatewaySettings } from './gateway-settings'
 import { KeybindSettings } from './keybind-settings'
 import { KEYS_VIEWS, KeysSettings, type KeysView } from './keys-settings'
 import { movedSettingsTabRedirect } from './moved-tabs'
+import { MobileDevicesSettings } from './mobile-devices-settings'
 import { NotificationsSettings } from './notifications-settings'
 import {
   PAGE_SCOPED_PARAMS,
@@ -84,6 +86,7 @@ const SETTINGS_VIEWS: readonly SettingsViewId[] = [
   'connections',
   'keybinds',
   'keys',
+  'mobile',
   'vault',
   'notifications',
   'billing',
@@ -102,6 +105,7 @@ const SUBPAGE_VIEWS: Partial<Record<SettingsViewId, ComponentType<{ subpage?: st
   connections: GatewaySettings,
   gateway: GatewaySettings,
   keybinds: KeybindSettings,
+  mobile: MobileDevicesSettings,
   notifications: NotificationsSettings
 }
 
@@ -388,6 +392,13 @@ export function SettingsView({ onClose, onConfigSaved, onMainModelChanged }: Set
                 }
               ]
             : []),
+          {
+            active: activeView === 'mobile',
+            icon: Smartphone,
+            id: 'mobile',
+            label: t.settings.nav.mobile,
+            onSelect: () => setActiveView('mobile')
+          },
           {
             active: activeView === 'keybinds',
             icon: Keyboard,

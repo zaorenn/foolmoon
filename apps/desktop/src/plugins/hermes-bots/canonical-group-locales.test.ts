@@ -24,7 +24,8 @@ const advice = [
   ['ru', 'компьютере, на котором работает групповой чат', 'спящем режиме или не в сети', 'снова', 'этом устройстве', 'это устройство'],
   ['fr', 'l’ordinateur qui exécute la discussion de groupe', 'veille ou hors ligne', 'de nouveau', 'cet appareil', 'cet appareil'],
   ['de', 'Computer, auf dem der Gruppenchat läuft', 'Ruhezustand oder offline', 'wieder', 'diesem Gerät', 'Dieses Gerät'],
-  ['es', 'equipo que ejecuta el chat de grupo', 'suspendido o sin conexión', 'vuelva', 'este dispositivo', 'este dispositivo']
+  ['es', 'equipo que ejecuta el chat de grupo', 'suspendido o sin conexión', 'vuelva', 'este dispositivo', 'este dispositivo'],
+  ['tr', 'grup sohbetini çalıştıran bilgisayarda', 'uykuda veya çevrimdışı', 'Döndüğünde', 'bu cihazda', 'Bu cihaz']
 ] as const
 
 it.each(advice)('directs missing-profile recovery to the group owner (%s)', (locale, owner) => {
@@ -63,7 +64,8 @@ const bannedTerms = {
   ru: /комнат|групп[а-яё]* шлюза|исполнител[а-яё]* групп|драйвер[а-яё]*\s+групп[а-яё]*|каноническ/iu,
   fr: /chats? de groupe|\bsalons?\b|groupes? de (?:la )?passerelle|pilote de groupe|canonique/iu,
   de: /\b(?:gruppen|chat)?(?:raum|räume)|Gateway-Gruppe|Gruppentreiber|kanonisch/iu,
-  es: /chats? grupal(?:es)?|(?<![\p{L}\p{M}])salas?(?![\p{L}\p{M}])|grupos? de (?:la )?pasarela|controlador de grupo|canónic/iu
+  es: /chats? grupal(?:es)?|(?<![\p{L}\p{M}])salas?(?![\p{L}\p{M}])|grupos? de (?:la )?pasarela|controlador de grupo|canónic/iu,
+  tr: /ağ geçidi grubu|grup sürücüsü|kanonik|barındırılan oda/iu
 } satisfies Record<keyof typeof BOTS_LOCALES, RegExp>
 
 function visibleStrings(value: unknown): string[] {
@@ -103,7 +105,8 @@ it.each([
   ['de', 'Chaträume öffnen'],
   ['es', 'Abrir chat grupal'],
   ['es', 'Ajustes de la sala'],
-  ['es', 'Ajustes de las salas']
+  ['es', 'Ajustes de las salas'],
+  ['tr', 'Ağ geçidi grubunu aç']
 ] as const)('rejects competing feature wording in %s: %s', (locale, text) => {
   expect(text).toMatch(bannedTerms[locale])
 })
@@ -117,7 +120,8 @@ it.each([
   ['ru', 'Обновите драйвер видеокарты.'],
   ['fr', 'Ouvrir la discussion de groupe'],
   ['de', 'Zeitraum auswählen'],
-  ['es', 'Úsalas para adjuntar archivos.']
+  ['es', 'Úsalas para adjuntar archivos.'],
+  ['tr', 'Bu ağ geçidinde barındırılan bir grup sohbeti']
 ] as const)('allows ordinary wording in %s: %s', (locale, text) => {
   expect(text).not.toMatch(bannedTerms[locale])
 })
@@ -131,7 +135,8 @@ it.each([
   ['ru', /размещённ[а-яё]+ на этом шлюзе/],
   ['fr', /hébergée sur cette passerelle/],
   ['de', /auf diesem Gateway gehostete[ rn]/],
-  ['es', /alojado en esta pasarela/]
+  ['es', /alojado en esta pasarela/],
+  ['tr', /bu ağ geçidinde barındırılan/i]
 ] as const)('limits gateway hosting restrictions to that gateway in %s', (locale, qualifier) => {
   for (const key of ['createGroupSize', 'createOtherConnection', 'createDuplicateMember', 'legacyRoomElsewhere', 'legacyRoomBlocked'] as const) {
     expect(CANONICAL_GROUP_LOCALES[locale][key], key).toMatch(qualifier)

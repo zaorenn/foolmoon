@@ -92,4 +92,13 @@ export const GROUP_CHAT_ERRORS = {
     attachmentFallback: "مرفق",
     pastedImage: "صورة ملصقة"
   },
+  'tr': {
+    sendRouteRequired: "Bu grup sohbetine göndermek için bağlantısı, profili ve grup sohbeti kimliği gerekir",
+    savedMessagesUnreadable: "Kayıtlı grup sohbeti mesajları okunamadı",
+    savedMessageUnreadable: "Kayıtlı bir grup sohbeti mesajı okunamadı",
+    sendNeedsUpdate: "Bu grup sohbetine göndermek için güncel Masaüstü gerekir; Hermes Masaüstü’nü yeniden başlat",
+    attachmentTooLarge: name => `${name}: çok büyük (en fazla 15 MB).`,
+    attachmentFallback: "ek",
+    pastedImage: "yapıştırılan görsel"
+  },
 } satisfies Record<keyof typeof CANONICAL_GROUP_LOCALES, GroupChatErrorMessages>

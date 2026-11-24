@@ -17,7 +17,14 @@ from mcp.server import MCPServer
 from mcp.types import ToolAnnotations
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from mcp_servers._common import (  # noqa: E402
+from mcp_servers._assistant_workbench import (
+    analyze_codebase_data,
+    check_tracked_items_data,
+    list_manage_data,
+    search_code_symbols_data,
+    track_web_item_data,
+)
+from mcp_servers._common import (
     configure_mcp_logging,
     expand_path,
     find_executable,
@@ -32,9 +39,10 @@ logger = configure_mcp_logging("mcp.local_workbench")
 mcp = MCPServer(
     name="local_workbench",
     instructions=(
-        "Local data & productivity workbench: SQLite queries/schemas/CSV import, "
-        "persistent personal vault (notes, bookmarks, contacts, reminders, snippets), "
-        "read-only Git repository inspection, and exact AST math + unit conversions."
+        "Local data, lists, web tracking & engineering workbench: SQLite queries/CSV import, "
+        "personal vault, structured user lists (list_manage), generic web product/item/price "
+        "tracking (track_web_item, check_tracked_items), large codebase health analyzer "
+        "(analyze_codebase, search_code_symbols), Git inspection, and AST math + unit conversions."
     ),
     log_level="WARNING",
 )
@@ -315,6 +323,7 @@ def git_inspect(repo_path: str = ".", action: str = "status", limit: int = 15) -
             encoding="utf-8",
             errors="replace",
             timeout=15,
+            check=False,
             **no_window_kwargs(),
         )
         if res.returncode != 0:
@@ -446,6 +455,132 @@ def calculator_units(
         return json_ok(out)
     except Exception as exc:
         return json_err(f"calculator_units failed: {exc}")
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False)
+)
+def list_manage(
+    action: str,
+    list_name: str = "",
+    category: str = "general",
+    description: str = "",
+    item_id: int | None = None,
+    title: str = "",
+    url: str = "",
+    status: str = "active",
+    price: float | None = None,
+    currency: str = "",
+    target_price: float | None = None,
+    notes: str = "",
+    metadata: dict[str, Any] | str | None = None,
+    export_format: str = "markdown",
+    db_path: str = "",
+) -> str:
+    """Create, inspect, update, and export structured personal lists (wishlists, playlists, reading lists, coursework, tasks): create_list | list_all | get_list | add_item | update_item | remove_item | delete_list | export."""
+    try:
+        return json_ok(
+            list_manage_data(
+                action=action,
+                list_name=list_name,
+                category=category,
+                description=description,
+                item_id=item_id,
+                title=title,
+                url=url,
+                status=status,
+                price=price,
+                currency=currency,
+                target_price=target_price,
+                notes=notes,
+                metadata=metadata,
+                export_format=export_format,
+                db_path=db_path,
+            )
+        )
+    except Exception as exc:
+        return json_err(f"list_manage failed: {exc}")
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=True)
+)
+def track_web_item(
+    url: str = "",
+    list_name: str = "Takip Listesi",
+    name: str = "",
+    target_price: float | None = None,
+    notes: str = "",
+    html_snapshot: str = "",
+    db_path: str = "",
+) -> str:
+    """Fetch any product, media, or article URL, extract title/price/currency/availability generically (JSON-LD/OpenGraph/HTML), and store it in a tracked list with price history."""
+    try:
+        return json_ok(
+            track_web_item_data(
+                url=url,
+                list_name=list_name,
+                name=name,
+                target_price=target_price,
+                notes=notes,
+                html_snapshot=html_snapshot,
+                db_path=db_path,
+            )
+        )
+    except Exception as exc:
+        return json_err(f"track_web_item failed: {exc}")
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=True)
+)
+def check_tracked_items(
+    list_name: str = "",
+    item_id: int | None = None,
+    db_path: str = "",
+) -> str:
+    """Re-check tracked URLs in a list, record historical snapshots, calculate price deltas, and report triggered target-price alerts."""
+    try:
+        return json_ok(check_tracked_items_data(list_name=list_name, item_id=item_id, db_path=db_path))
+    except Exception as exc:
+        return json_err(f"check_tracked_items failed: {exc}")
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
+)
+def analyze_codebase(
+    root_path: str = ".",
+    max_files: int = 3500,
+    hotspot_line_threshold: int = 1200,
+) -> str:
+    """Analyze a repository architecture: language line breakdown, largest hotspot files, test-vs-source ratio, untested source candidates, TODO markers, and manifests."""
+    try:
+        return json_ok(
+            analyze_codebase_data(
+                root_path=root_path,
+                max_files=max_files,
+                hotspot_line_threshold=hotspot_line_threshold,
+            )
+        )
+    except Exception as exc:
+        return json_err(f"analyze_codebase failed: {exc}")
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
+)
+def search_code_symbols(
+    root_path: str,
+    query: str,
+    extensions: str = "",
+    limit: int = 60,
+) -> str:
+    """Search symbol definitions and usages across a codebase (functions, classes, types, components), ranking definitions first."""
+    try:
+        return json_ok(search_code_symbols_data(root_path=root_path, query=query, extensions=extensions, limit=limit))
+    except Exception as exc:
+        return json_err(f"search_code_symbols failed: {exc}")
 
 
 if __name__ == "__main__":

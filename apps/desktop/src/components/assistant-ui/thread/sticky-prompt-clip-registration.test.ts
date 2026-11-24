@@ -1,7 +1,8 @@
-import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
+
+import { readStylesheetWithImports } from '@/test/read-styles'
 
 // `use-sticky-prompt-clip.ts` writes this value once per scroll frame onto
 // elements that are whole turns (markdown, code, tool output). If the property
@@ -10,7 +11,7 @@ import { describe, expect, it } from 'vitest'
 // frame on a long thread that also charges to whichever geometry read forces the
 // flush. Measured on a real scroll before the fix: 195 UpdateLayoutTree events,
 // 4,646ms total, 189ms worst.
-const STYLES = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8')
+const STYLES = readStylesheetWithImports(resolve(process.cwd(), 'src/styles.css'))
 
 const block = STYLES.match(/@property\s+--sticky-prompt-clip\s*\{[^}]*\}/)?.[0] ?? ''
 

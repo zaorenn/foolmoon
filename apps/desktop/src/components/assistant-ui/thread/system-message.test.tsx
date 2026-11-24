@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -7,6 +6,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { $displayTimestamps } from '@/store/display-timestamps'
+import { readStylesheetWithImports } from '@/test/read-styles'
 
 import { stubThreadEnvironment } from '../test-utils'
 
@@ -55,7 +55,7 @@ describe('background report inline code', () => {
   // assistant turn uses, rendered with no assistant/room slot ancestor. The
   // real stylesheet's cascade must still reach its `<code>`, or Tailwind
   // Typography's fixed near-black ink wins on every dark theme (#107486).
-  const stylesheet = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../../../styles.css'), 'utf8')
+  const stylesheet = readStylesheetWithImports(resolve(dirname(fileURLToPath(import.meta.url)), '../../../styles.css'))
 
   it('themes inline code in an opened report with the chat inline-code tokens', () => {
     const { container, getByRole } = render(

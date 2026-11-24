@@ -1,0 +1,494 @@
+/* ── Error card (Error System Overhaul · Figma "Error handling", node 222:7762) ──
+ * One layout for every severity; severity only changes the tint and the icon colour.
+ * blocking: rust tint + rust icon. degraded: white card + muted icon + dismiss. */
+.aui-error-card {
+  /* Theme tokens, so light, dark and custom skins all follow. Blocking tints with the
+     app's destructive colour. */
+  --err-ink: var(--ui-text-primary);
+  --err-ink-muted: var(--ui-text-tertiary);
+  --err-action: var(--ui-accent-secondary);
+  --err-alert: var(--dt-destructive);
+  position: relative;
+  margin-top: 0.375rem;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 640px;
+  overflow: clip;
+  border: 1px solid var(--ui-stroke-tertiary);
+  border-radius: 8px;
+  background: var(--ui-bg-card);
+  padding: 16px;
+  color: var(--err-ink);
+  font-size: 13px;
+  line-height: normal;
+}
+
+.aui-error-card[data-severity='blocking'] {
+  border-color: color-mix(in srgb, var(--err-alert) 18%, transparent);
+  background: color-mix(in srgb, var(--err-alert) 5%, transparent);
+}
+
+.aui-error-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.aui-error-card-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  color: var(--err-ink-muted);
+}
+
+.aui-error-card[data-severity='blocking'] .aui-error-card-icon {
+  color: var(--err-alert);
+}
+
+.aui-error-card-text {
+  display: flex;
+  min-width: 0;
+  flex: 1 0 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding-top: 1px;
+}
+
+.aui-error-card[data-severity='degraded'] .aui-error-card-text {
+  padding-right: 20px;
+}
+
+.aui-error-card-title {
+  font-weight: 700;
+}
+
+.aui-error-card-body {
+  font-weight: 400;
+}
+
+/* Wraps so a narrow split pane drops the details toggle under the actions instead of clipping it. */
+.aui-error-card-row {
+  display: flex;
+  min-height: 30px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+.aui-error-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.aui-error-card-toggle {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--err-ink-muted);
+  text-align: right;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.aui-error-card-toggle:hover {
+  color: var(--err-ink);
+}
+
+.aui-error-card-close {
+  position: absolute;
+  top: 9px;
+  right: 10px;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+/* Action row and details hang under the title, not the icon (icon 20 + gap 6). */
+.aui-error-card-row {
+  margin-left: 26px;
+}
+
+.aui-error-card-toggle:focus-visible,
+.aui-error-card-close:focus-visible,
+.aui-error-details-link:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--err-ink) 30%, transparent);
+}
+
+/* Nous DS Button (portal /ds/components/button, controls.css geometry, size s):
+ * 32px box, 3px corners, 5px/12px padding, 500 weight. `secondary` is the quiet
+ * slab (currentColor 5% → 10% on hover); `ghost` has no slab and brings up the
+ * 0.5px brand hairline under the cursor. Both take the card's ink. */
+.aui-error-btn {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 3px;
+  padding: 5px 12px;
+  background: transparent;
+  color: var(--err-ink);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease-out,
+    box-shadow 150ms ease-out,
+    transform 150ms ease-out;
+}
+
+.aui-error-btn:hover {
+  transition-duration: 0ms;
+}
+
+.aui-error-btn:active {
+  transform: scale(0.98);
+}
+
+.aui-error-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--err-ink) 30%, transparent);
+}
+
+.aui-error-btn-secondary {
+  background: color-mix(in srgb, currentColor 5%, transparent);
+}
+
+.aui-error-btn-secondary:hover {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.aui-error-btn-ghost:hover {
+  box-shadow: inset 0 0 0 0.5px var(--err-action);
+}
+
+.aui-error-btn-ghost:active {
+  box-shadow:
+    inset 0 0 0 0.5px var(--err-action),
+    inset 0 1px 4px 0 color-mix(in srgb, var(--err-ink) 8%, transparent);
+}
+
+.aui-error-btn:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* Details: Nous DS Copy (CommandBlock) slab, then the diagnostics links under it. */
+.aui-error-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-left: 26px;
+}
+
+.aui-error-details[hidden] {
+  display: none;
+}
+
+.aui-error-details-slab {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 12px;
+  border-radius: 3px;
+  /* Nous DS Copy (CommandBlock): a code slab that stays dark in every theme, like a terminal. */
+  box-shadow: inset 0 0 0 1px var(--ui-stroke-tertiary);
+  background: color-mix(in srgb, black 88%, var(--ui-accent-secondary));
+  padding: 12px 12px 12px 14px;
+  color: white;
+}
+
+.aui-error-details-raw {
+  min-width: 0;
+  max-height: 10.5rem;
+  flex: 1;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.aui-error-copy-glyph {
+  display: inline-flex;
+  height: 20px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+  transition: opacity 150ms ease-out;
+}
+
+.aui-error-copy-glyph:hover,
+.aui-error-copy-glyph:focus-visible {
+  opacity: 1;
+  transition-duration: 0ms;
+}
+
+.aui-error-details-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+}
+
+.aui-error-details-link,
+.aui-error-details .aui-error-details-link {
+  height: auto;
+  gap: 0;
+  border-radius: 0;
+  padding: 0;
+  background: none;
+  font-size: 12px;
+  color: var(--err-ink-muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.aui-error-details-link:hover,
+.aui-error-details .aui-error-details-link:hover {
+  background: none;
+  color: var(--err-ink);
+}
+
+/* ── Foolmoon Studio Craft: Materials, Squircles, Floating Panes & Motion ────────────────── */
+:root {
+  interpolate-size: allow-keywords;
+}
+
+@supports (corner-shape: squircle) {
+  [data-slot='composer-root'],
+  [data-tree-group],
+  [data-slot='card'],
+  [data-fm-surface] {
+    corner-shape: squircle;
+  }
+}
+
+/* Plump floating card layout inside main workspace shell */
+:root[data-fm-floating='true'] .flex:has(> [data-tree-group]) {
+  background: color-mix(in srgb, var(--ui-bg-chrome, var(--background)) 90%, var(--dt-foreground, #000000) 4%);
+}
+
+:root[data-fm-floating='true'] [data-tree-group]:not([data-pane-host]) {
+  margin: 5px;
+  border-radius: calc(var(--fm-radius-px, 18px) * 1.05);
+  border: 1px solid color-mix(in srgb, var(--dt-border, currentColor) 68%, var(--dt-primary, transparent) 12%);
+  overflow: hidden;
+  box-shadow:
+    0 1px 0 color-mix(in srgb, var(--dt-foreground, currentColor) 9%, transparent) inset,
+    0 12px 32px -14px rgb(15 12 10 / 16%),
+    0 2px 8px -4px rgb(15 12 10 / 9%);
+}
+
+/* Tactile Paper & Craft Surface Materials — applied across split panes, sidebars, composer, bubbles & cards */
+:root[data-fm-material='warm-matte'] {
+  --fm-paper-grain-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='0.075'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23p)'/%3E%3C/svg%3E");
+}
+
+:root[data-fm-material='warm-matte'] body,
+:root[data-fm-material='warm-matte'] [data-chat-surface=''] {
+  background-image:
+    var(--fm-paper-grain-svg),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--dt-foreground, #ffffff) 2.5%, transparent) 0%,
+      transparent 48%,
+      color-mix(in srgb, black 6%, transparent) 100%
+    );
+  background-repeat: repeat, no-repeat;
+  background-size: 180px 180px, 100% 100%;
+}
+
+:root[data-fm-material='warm-matte'] [data-slot='sidebar'],
+:root[data-fm-material='warm-matte'] .bg-sidebar,
+:root[data-fm-material='warm-matte'] [data-tree-group]:not([data-pane-host]),
+:root[data-fm-material='warm-matte'] [data-slot='card'],
+:root[data-fm-material='warm-matte'] .aui-user-message-content,
+:root[data-fm-material='warm-matte'] [data-slot='composer-root'],
+:root[data-fm-material='warm-matte'] [data-fm-surface] {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background-image:
+    var(--fm-paper-grain-svg),
+    linear-gradient(
+      175deg,
+      color-mix(in srgb, var(--dt-foreground, currentColor) 3.5%, transparent) 0%,
+      color-mix(in srgb, var(--dt-background, transparent) 4%, transparent) 100%
+    );
+  background-repeat: repeat, no-repeat;
+  background-size: 180px 180px, 100% 100%;
+  border-color: color-mix(in srgb, var(--dt-border, currentColor) 72%, var(--dt-primary, transparent) 14%);
+  box-shadow:
+    0 1px 0 color-mix(in srgb, var(--dt-foreground, currentColor) 8%, transparent) inset,
+    0 10px 26px -14px rgb(0 0 0 / 26%),
+    0 2px 6px -2px rgb(0 0 0 / 12%);
+}
+
+:root[data-fm-material='warm-matte'] [data-slot='composer-root'],
+:root[data-fm-material='warm-matte'] [data-fm-surface] {
+  border-radius: var(--fm-radius-px, 18px);
+}
+
+:root[data-fm-material='liquid-glass'] [data-tree-group]:not([data-pane-host]),
+:root[data-fm-material='liquid-glass'] [data-slot='composer-root'],
+:root[data-fm-material='liquid-glass'] [data-fm-surface] {
+  border-radius: var(--fm-radius-px, 18px);
+  background: color-mix(in srgb, var(--dt-card, #ffffff) 76%, transparent);
+  backdrop-filter: blur(22px) saturate(1.45);
+  -webkit-backdrop-filter: blur(22px) saturate(1.45);
+  box-shadow:
+    0 1px 0 color-mix(in srgb, white 72%, transparent) inset,
+    0 0 0 1px color-mix(in srgb, white 28%, transparent) inset,
+    0 18px 42px -18px rgb(10 20 42 / 22%);
+}
+
+:root[data-fm-material='brushed-metal'] [data-tree-group]:not([data-pane-host]),
+:root[data-fm-material='brushed-metal'] [data-slot='composer-root'],
+:root[data-fm-material='brushed-metal'] [data-fm-surface] {
+  border-radius: var(--fm-radius-px, 18px);
+  background-image: linear-gradient(
+    145deg,
+    color-mix(in srgb, white 9%, transparent) 0%,
+    transparent 42%,
+    color-mix(in srgb, black 9%, transparent) 100%
+  );
+  box-shadow:
+    0 1px 0 color-mix(in srgb, white 35%, transparent) inset,
+    0 -1px 0 color-mix(in srgb, black 25%, transparent) inset,
+    0 16px 38px -16px rgb(0 0 0 / 34%);
+}
+
+:root[data-fm-material='plush-pastel'] [data-tree-group]:not([data-pane-host]),
+:root[data-fm-material='plush-pastel'] [data-slot='composer-root'],
+:root[data-fm-material='plush-pastel'] [data-fm-surface] {
+  border-radius: calc(var(--fm-radius-px, 22px) * 1.1);
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, white 52%, transparent) 0%,
+    transparent 55%
+  );
+  box-shadow:
+    0 2px 0 color-mix(in srgb, white 88%, transparent) inset,
+    0 0 0 1.5px color-mix(in srgb, var(--dt-primary, #e11d62) 18%, transparent),
+    0 18px 36px -14px color-mix(in srgb, var(--dt-primary, #e11d62) 20%, transparent);
+}
+
+:root[data-fm-material='cyber-grid'] [data-tree-group]:not([data-pane-host]),
+:root[data-fm-material='cyber-grid'] [data-slot='composer-root'],
+:root[data-fm-material='cyber-grid'] [data-fm-surface] {
+  border-radius: var(--fm-radius-px, 16px);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--dt-primary, #22d3ee) 26%, transparent),
+    0 0 28px -8px color-mix(in srgb, var(--dt-primary, #22d3ee) 28%, transparent),
+    0 18px 40px -16px rgb(0 0 0 / 60%);
+}
+
+/* Gentle organic sticker bobbing + spring micro-interactions */
+@keyframes fm-sticker-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(-1deg);
+  }
+  50% {
+    transform: translate3d(0, -6px, 0) rotate(1.5deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-fm-motion='fluid'] .fm-sticker-float {
+    animation: fm-sticker-float 5.2s var(--fm-spring, cubic-bezier(0.22, 1, 0.36, 1)) infinite;
+    will-change: transform;
+  }
+
+  :root[data-fm-motion='gentle'] .fm-sticker-float {
+    animation: fm-sticker-float 8.5s ease-in-out infinite;
+    will-change: transform;
+  }
+
+  :root:not([data-fm-motion='reduced']) [data-slot='composer-root'],
+  :root:not([data-fm-motion='reduced']) [data-tree-group],
+  :root:not([data-fm-motion='reduced']) [data-fm-surface] {
+    transition:
+      border-radius 280ms var(--fm-spring, cubic-bezier(0.22, 1, 0.36, 1)),
+      box-shadow 260ms var(--fm-spring, cubic-bezier(0.22, 1, 0.36, 1)),
+      transform 240ms var(--fm-spring, cubic-bezier(0.22, 1, 0.36, 1)),
+      background-color 220ms ease-out;
+  }
+
+  :root[data-fm-motion='fluid'] [data-slot='composer-root']:focus-within {
+    transform: translateY(-1px);
+  }
+}
+
+/* Harmonize all range sliders (Voice Cloning prosody + Studio controls) with active Foolmoon primary */
+input[type='range'] {
+  accent-color: var(--dt-primary, #c94a38);
+  cursor: pointer;
+}
+
+/* Foolmoon Sci-Fi Notch Orbital & Waveform Keyframes */
+@keyframes fm-scifi-orbit {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes fm-scifi-orbit-rev {
+  0% {
+    transform: rotate(360deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes fm-scifi-pulse {
+  0%,
+  100% {
+    opacity: 0.65;
+    transform: scale(0.98);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .fm-scifi-orbit {
+    animation: fm-scifi-orbit 7.5s linear infinite;
+  }
+
+  .fm-scifi-orbit-rev {
+    animation: fm-scifi-orbit-rev 11s linear infinite;
+  }
+
+  .fm-scifi-pulse {
+    animation: fm-scifi-pulse 2.2s ease-in-out infinite;
+  }
+}
+
+/* Centered breathable reading column when enabled or in Simple Mode */
+:root[data-fm-chat-layout='editorial-centered'] [data-slot='thread'] [data-slot='message-group'],
+:root[data-fm-chat-layout='editorial-centered'] [data-slot='composer-root'] {
+  max-width: min(760px, 92vw);
+  margin-left: auto;
+  margin-right: auto;
+}

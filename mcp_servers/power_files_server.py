@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import ctypes
-import ctypes.wintypes as wintypes
+from ctypes import wintypes
 import fnmatch
 import hashlib
 import os
@@ -23,7 +23,7 @@ from mcp.server import MCPServer
 from mcp.types import ToolAnnotations
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from mcp_servers._common import (  # noqa: E402
+from mcp_servers._common import (
     configure_mcp_logging,
     expand_path,
     find_executable,
@@ -31,16 +31,27 @@ from mcp_servers._common import (  # noqa: E402
     json_ok,
     no_window_kwargs,
 )
+from mcp_servers._document_studio import (
+    create_rich_document_data,
+    extract_docx_rich,
+    extract_pdf_rich,
+    extract_xlsx_rich,
+    pdf_edit_live_data,
+    pdf_fill_form_data,
+    pdf_inspect_form_data,
+)
 
 logger = configure_mcp_logging("mcp.power_files")
 
 mcp = MCPServer(
     name="power_files",
     instructions=(
-        "High-power local filesystem tools: directory size breakdowns, fast file search, "
-        "safe Windows Recycle Bin deletion (recoverable), ZIP archive management with Zip Slip "
-        "protection, smart folder organization, SHA-256 duplicate finder, and Office/PDF/HTML/CSV "
-        "document text extraction."
+        "High-power local filesystem & Document/PDF Studio tools: directory size breakdowns, "
+        "fast file search, safe Recycle Bin deletion, ZIP archive management, smart organization, "
+        "duplicate finder, rich Office/PDF extraction (inspect_document), live PDF form inspection "
+        "(pdf_inspect_form), AcroForm & flat PDF filling with Unicode support (pdf_fill_form), "
+        "live PDF text/annotation/page editing (pdf_edit_live), and publication-grade academic/report "
+        "PDF, DOCX, and XLSX authoring (create_rich_document)."
     ),
     log_level="WARNING",
 )
@@ -544,6 +555,7 @@ def _extract_pdf_text(path: Path) -> tuple[str, str]:
             encoding="utf-8",
             errors="replace",
             timeout=15,
+            check=False,
             **no_window_kwargs(),
         )
         if res.returncode == 0 and res.stdout.strip():
@@ -579,16 +591,27 @@ def inspect_document(path: str, max_chars: int = 12000) -> str:
         ext = fp.suffix.lower()
         method = "text"
         if ext == ".docx":
-            text = _extract_docx(fp)
-            method = "docx_xml"
+            try:
+                text = extract_docx_rich(fp)
+                method = "python_docx"
+            except Exception:
+                text = _extract_docx(fp)
+                method = "docx_xml"
         elif ext == ".xlsx":
-            text = _extract_xlsx(fp)
-            method = "xlsx_xml"
+            try:
+                text = extract_xlsx_rich(fp)
+                method = "openpyxl"
+            except Exception:
+                text = _extract_xlsx(fp)
+                method = "xlsx_xml"
         elif ext == ".pptx":
             text = _extract_pptx(fp)
             method = "pptx_xml"
         elif ext == ".pdf":
-            text, method = _extract_pdf_text(fp)
+            try:
+                text, method = extract_pdf_rich(fp)
+            except Exception:
+                text, method = _extract_pdf_text(fp)
         elif ext in (".html", ".htm", ".xml"):
             from lxml import html as lxml_html
 
@@ -614,6 +637,96 @@ def inspect_document(path: str, max_chars: int = 12000) -> str:
         )
     except Exception as exc:
         return json_err(f"inspect_document failed: {exc}")
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
+)
+def pdf_inspect_form(path: str) -> str:
+    """Inspect a PDF's interactive AcroForm fields (name, label, type, options, value, rect) AND flat label/blank candidates with coordinates."""
+    try:
+        return json_ok(pdf_inspect_form_data(path))
+    except Exception as exc:
+        return json_err(f"pdf_inspect_form failed: {exc}")
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False)
+)
+def pdf_fill_form(
+    pdf_path: str,
+    values: dict[str, Any] | str = "",
+    output_path: str = "",
+    flatten: bool = False,
+    overlays: list[dict[str, Any]] | str | None = None,
+    render_preview: bool = True,
+) -> str:
+    """Fill AcroForm fields (exact or normalized label match) and/or flat PDF coordinate overlays with Turkish-safe Unicode typography; optionally flatten and render PNG preview."""
+    try:
+        return json_ok(
+            pdf_fill_form_data(
+                pdf_path=pdf_path,
+                values=values,
+                output_path=output_path,
+                flatten=flatten,
+                overlays=overlays,
+                render_preview=render_preview,
+            )
+        )
+    except Exception as exc:
+        return json_err(f"pdf_fill_form failed: {exc}")
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False)
+)
+def pdf_edit_live(
+    pdf_path: str,
+    operations: list[dict[str, Any]] | str,
+    output_path: str = "",
+) -> str:
+    """Edit an existing PDF atomically: replace_text (clean redact + Unicode replace), insert_text, highlight, note, insert_image, delete_pages, reorder_pages, merge_pdfs, set_metadata, render_preview."""
+    try:
+        return json_ok(
+            pdf_edit_live_data(
+                pdf_path=pdf_path,
+                operations=operations,
+                output_path=output_path,
+            )
+        )
+    except Exception as exc:
+        return json_err(f"pdf_edit_live failed: {exc}")
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False)
+)
+def create_rich_document(
+    output_path: str,
+    title: str,
+    content_markdown: str,
+    style: str = "academic",
+    author: str = "",
+    subtitle: str = "",
+    metadata: dict[str, Any] | str | None = None,
+    render_preview: bool = True,
+) -> str:
+    """Create a publication-grade .pdf (styles: academic, report, clean), .docx, .xlsx, or .md document from Markdown with full Turkish typography, tables, page numbers, and PNG preview."""
+    try:
+        return json_ok(
+            create_rich_document_data(
+                output_path=output_path,
+                title=title,
+                content_markdown=content_markdown,
+                style=style,
+                author=author,
+                subtitle=subtitle,
+                metadata=metadata,
+                render_preview=render_preview,
+            )
+        )
+    except Exception as exc:
+        return json_err(f"create_rich_document failed: {exc}")
 
 
 if __name__ == "__main__":

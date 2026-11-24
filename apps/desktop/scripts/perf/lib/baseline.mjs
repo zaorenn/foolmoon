@@ -8,9 +8,35 @@
 // `baseline * (1 + tolFrac) + tolAbs`. tolAbs absorbs sub-millisecond jitter on
 // already-fast metrics so they don't false-positive.
 
-import { readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 const DEFAULT_TOLERANCE = { tolFrac: 0.25, tolAbs: 1 }
+
+/**
+ * Resolve which baseline JSON file to read or update.
+ * Priority:
+ *  1. `explicitPath` (`--baseline <path>`)
+ *  2. `preferPlatformFile` (`--platform-baseline` on `--update-baseline`) -> `baseline.<platform>-<arch>.json`
+ *  3. Existing `baseline.<platform>-<arch>.json` in `dir`
+ *  4. Shared `baseline.json` fallback
+ */
+export function resolveBaselinePath(
+  dir,
+  { platform = process.platform, arch = process.arch, explicitPath, preferPlatformFile = false } = {}
+) {
+  if (explicitPath) {
+    return explicitPath
+  }
+
+  const platformPath = join(dir, `baseline.${platform}-${arch}.json`)
+
+  if (preferPlatformFile || existsSync(platformPath)) {
+    return platformPath
+  }
+
+  return join(dir, 'baseline.json')
+}
 
 export function loadBaseline(path) {
   try {
